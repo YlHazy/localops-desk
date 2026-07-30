@@ -29,6 +29,15 @@ Allowed read-only families:
 - Logs: `journalctl --since ... -n ...`, `docker logs --since ... --tail ...`.
 - Services: `systemctl status`, `nginx -t`.
 
+Current implemented SSH allowlist:
+
+- `uptime`
+- `free -m`
+- `df -P /`
+- `docker ps --format '{{.Names}} {{.Status}}'`
+
+These run only when `LOCALOPS_ENABLE_SSH=1` is set. The default mode does not execute SSH.
+
 Allowed low-risk families in future releases:
 
 - `systemctl reload nginx`.
@@ -56,4 +65,3 @@ Before any output is shown, stored, exported, or sent to an agent:
 - L1: low-risk local recovery such as reload Nginx. Requires UI confirmation in future.
 - L2: rolling service restart or rollback switch. Requires two-step confirmation and verification.
 - L3: ECS restart, migration, DNS/TLS, object/data mutation, rollback deletion. MVP forbidden; show runbook only.
-

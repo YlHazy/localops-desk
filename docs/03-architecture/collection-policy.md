@@ -8,7 +8,7 @@ Default cadence: every 10 to 15 minutes when scheduling is enabled.
 
 Collect:
 
-- HTTP health URL status and latency.
+- HTTP health URL status and latency through real local `fetch` probes.
 - SSH reachability.
 - Load, CPU, memory, disk summary.
 - Docker/Compose service status.
@@ -19,6 +19,8 @@ Avoid:
 - Full logs.
 - Database statistics.
 - Restarts or mutations.
+
+Current implementation note: HTTP collection is real. SSH/resource collection remains simulated unless `LOCALOPS_ENABLE_SSH=1` is set, and then only allowlisted read-only commands may run.
 
 ### Deep Check
 
@@ -73,4 +75,3 @@ Runs immediately when the user clicks refresh, but still respects timeouts, conc
 - HTTP ok + SSH fail: service may be alive; management channel is impaired.
 - HTTP fail + SSH fail: likely host, network path, security group, cloud instance, or local egress issue.
 - SSH auth failure is credential/config, not proof of server downtime.
-

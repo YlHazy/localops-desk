@@ -12,9 +12,35 @@ async function call(path, init) {
 }
 
 await call("/api/status");
+const hostName = `smoke-local-${Date.now()}`;
+const created = await call("/api/hosts", {
+  method: "POST",
+  body: JSON.stringify({
+    name: hostName,
+    environment: "smoke",
+    role: "local api",
+    sshAlias: "",
+    healthUrl: `${base}/api/agent/manifest`,
+    composeProject: "",
+    tags: ["smoke"]
+  })
+});
+await call(`/api/hosts/${encodeURIComponent(created.host.id)}`, {
+  method: "PUT",
+  body: JSON.stringify({
+    ...created.host,
+    role: "local api edited",
+    tags: ["smoke", "edited"]
+  })
+});
 await call("/api/checks/light", { method: "POST", body: "{}" });
 await call("/api/reports/current");
 await call("/api/agent/manifest");
+await call("/api/agent/status");
+await call("/api/actions/dry-run", {
+  method: "POST",
+  body: JSON.stringify({ hostId: created.host.id, actionKey: "inspect-service" })
+});
+await call(`/api/hosts/${encodeURIComponent(created.host.id)}`, { method: "DELETE" });
 
 console.log("LocalOps API smoke passed.");
-

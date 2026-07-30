@@ -4,17 +4,22 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
-  Database,
+  Globe2,
   FileText,
   History,
+  Pencil,
   Play,
+  Plus,
   RefreshCcw,
+  Save,
   Server,
   ShieldCheck,
-  TerminalSquare
+  TerminalSquare,
+  Trash2,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CheckRun, DashboardStatus, DryRunAction, HostState, Status } from "./types";
+import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
@@ -24,6 +29,16 @@ const statusLabels: Record<Status, string> = {
 };
 
 const statusOrder: Status[] = ["healthy", "warning", "critical", "unknown"];
+
+const emptyHostForm: HostConfigInput = {
+  name: "",
+  environment: "personal",
+  role: "server",
+  sshAlias: "",
+  healthUrl: "",
+  composeProject: "",
+  tags: []
+};
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -80,11 +95,83 @@ function HostPanel({ host, selected, onSelect }: { host: HostState; selected: bo
       </div>
       <p>{host.summary}</p>
       <div className="host-mini-grid">
-        <span>HTTP {host.httpStatus}</span>
+        <span>HTTP {host.httpStatus}{host.httpLatencyMs == null ? "" : ` · ${host.httpLatencyMs}ms`}</span>
         <span>SSH {host.sshStatus}</span>
         <span>{host.dockerStatus}</span>
       </div>
     </button>
+  );
+}
+
+function EnvironmentRail({ hosts, selectedId, onSelect }: { hosts: HostState[]; selectedId: string; onSelect: (id: string) => void }) {
+  const groups = hosts.reduce<Record<string, HostState[]>>((acc, host) => {
+    acc[host.environment] = acc[host.environment] || [];
+    acc[host.environment].push(host);
+    return acc;
+  }, {});
+  return (
+    <section className="rail-panel">
+      <h3>环境状态轨</h3>
+      {Object.entries(groups).map(([env, items]) => {
+        const worst = items.some((item) => item.status === "critical")
+          ? "critical"
+          : items.some((item) => item.status === "warning")
+            ? "warning"
+            : items.some((item) => item.status === "unknown")
+              ? "unknown"
+              : "healthy";
+        return (
+          <div className="rail-row" key={env}>
+            <span className={`rail-dot ${worst}`} />
+            <strong>{env}</strong>
+            <span>{items.length} hosts</span>
+          </div>
+        );
+      })}
+      <div className="rail-hosts">
+        {hosts.map((host) => (
+          <button key={host.id} className={host.id === selectedId ? "selected" : ""} onClick={() => onSelect(host.id)}>
+            <span className={`rail-dot ${host.status}`} />
+            {host.name}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HostForm({
+  form,
+  setForm,
+  onSubmit,
+  onCancel,
+  editing
+}: {
+  form: HostConfigInput;
+  setForm: (form: HostConfigInput) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  editing: boolean;
+}) {
+  const update = (key: keyof HostConfigInput, value: string) => {
+    setForm({ ...form, [key]: key === "tags" ? value.split(",").map((item) => item.trim()).filter(Boolean) : value });
+  };
+  return (
+    <div className="host-form">
+      <div className="form-grid">
+        <label>名称<input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="my-server-01" /></label>
+        <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
+        <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
+        <label>SSH Alias<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="~/.ssh/config Host" /></label>
+        <label className="wide">Health URL<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /></label>
+        <label>Compose 项目<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="compose project" /></label>
+        <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
+      </div>
+      <div className="form-actions">
+        <button className="primary slim" onClick={onSubmit}><Save size={16} />{editing ? "保存配置" : "新增主机"}</button>
+        <button onClick={onCancel}><X size={16} />取消</button>
+      </div>
+    </div>
   );
 }
 
@@ -97,6 +184,9 @@ export function App() {
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [report, setReport] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
+  const [editingHostId, setEditingHostId] = useState<string | null>(null);
+  const [showHostForm, setShowHostForm] = useState(false);
 
   async function load() {
     const [status, recent, currentReport] = await Promise.all([
@@ -118,6 +208,8 @@ export function App() {
     () => dashboard?.hosts.find((host) => host.id === selectedHostId) ?? dashboard?.hosts[0] ?? null,
     [dashboard, selectedHostId]
   );
+
+  const incidentHosts = useMemo(() => dashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [dashboard]);
 
   async function runLightCheck() {
     setLoading(true);
@@ -144,6 +236,60 @@ export function App() {
       setSelectedTab("actions");
     } catch (err) {
       setError(err instanceof Error ? err.message : "dry-run 失败");
+    }
+  }
+
+  function startCreateHost() {
+    setEditingHostId(null);
+    setHostForm(emptyHostForm);
+    setShowHostForm(true);
+    setSelectedTab("hosts");
+  }
+
+  function startEditHost(host: HostState) {
+    setEditingHostId(host.id);
+    setHostForm({
+      name: host.name,
+      environment: host.environment,
+      role: host.role,
+      sshAlias: host.sshAlias,
+      healthUrl: host.healthUrl,
+      composeProject: host.composeProject,
+      tags: []
+    });
+    setShowHostForm(true);
+    setSelectedTab("hosts");
+  }
+
+  async function saveHost() {
+    setLoading(true);
+    setError("");
+    try {
+      await api(editingHostId ? `/api/hosts/${encodeURIComponent(editingHostId)}` : "/api/hosts", {
+        method: editingHostId ? "PUT" : "POST",
+        body: JSON.stringify(hostForm)
+      });
+      setShowHostForm(false);
+      setEditingHostId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存主机失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function removeHost(hostId: string) {
+    setLoading(true);
+    setError("");
+    try {
+      await api(`/api/hosts/${encodeURIComponent(hostId)}`, { method: "DELETE" });
+      setSelectedHostId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除主机失败");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -198,6 +344,10 @@ export function App() {
             {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
             <span>{loading ? "检查中" : "运行轻量检查"}</span>
           </button>
+          <button className="secondary" onClick={startCreateHost}>
+            <Plus size={18} />
+            <span>添加主机</span>
+          </button>
         </header>
 
         {error ? <div className="error-line"><AlertTriangle size={16} />{error}</div> : null}
@@ -212,16 +362,21 @@ export function App() {
         </section>
 
         {selectedTab === "overview" && (
-          <section className="workspace">
-            <div className="host-list">
-              {dashboard.hosts.map((host) => (
-                <HostPanel
-                  key={host.id}
-                  host={host}
-                  selected={host.id === selectedHost.id}
-                  onSelect={() => setSelectedHostId(host.id)}
-                />
-              ))}
+          <section className="dashboard-grid">
+            <EnvironmentRail hosts={dashboard.hosts} selectedId={selectedHost.id} onSelect={setSelectedHostId} />
+            <div className="incident-panel">
+              <h3>当前事件</h3>
+              {incidentHosts.length ? (
+                incidentHosts.map((host) => (
+                  <button key={host.id} onClick={() => setSelectedHostId(host.id)}>
+                    <StatusPill status={host.status} />
+                    <span>{host.name}</span>
+                    <small>{host.summary}</small>
+                  </button>
+                ))
+              ) : (
+                <p>暂无需要处理的事件。</p>
+              )}
             </div>
             <div className="detail-panel">
               <div className="detail-head">
@@ -232,6 +387,10 @@ export function App() {
                 <StatusPill status={selectedHost.status} />
               </div>
               <div className="metrics-grid">
+                <div className="metric">
+                  <div className="metric-head"><span>HTTP</span><strong>{selectedHost.httpLatencyMs == null ? "N/A" : `${selectedHost.httpLatencyMs}ms`}</strong></div>
+                  <p className="metric-note">{selectedHost.httpStatus}</p>
+                </div>
                 <MetricBar label="CPU" value={selectedHost.cpuPercent} />
                 <MetricBar label="内存" value={selectedHost.memoryPercent} />
                 <MetricBar label="磁盘" value={selectedHost.diskPercent} />
@@ -246,14 +405,44 @@ export function App() {
                 <button onClick={() => runDryAction("restart-compose-service")}>滚动重启 dry-run</button>
               </div>
             </div>
+            <div className="host-list matrix-panel">
+              <h3>主机矩阵</h3>
+              {dashboard.hosts.map((host) => (
+                <HostPanel
+                  key={host.id}
+                  host={host}
+                  selected={host.id === selectedHost.id}
+                  onSelect={() => setSelectedHostId(host.id)}
+                />
+              ))}
+            </div>
+            <div className="report-preview">
+              <h3>诊断报告预览</h3>
+              <pre>{report}</pre>
+            </div>
           </section>
         )}
 
         {selectedTab === "hosts" && (
           <section className="table-panel">
-            <h2>服务器配置</h2>
+            <div className="section-head">
+              <div>
+                <h2>服务器配置</h2>
+                <p>只保存 SSH alias、健康检查 URL 和标签，不保存密钥。</p>
+              </div>
+              <button className="secondary" onClick={startCreateHost}><Plus size={16} />新增</button>
+            </div>
+            {showHostForm ? (
+              <HostForm
+                form={hostForm}
+                setForm={setHostForm}
+                onSubmit={saveHost}
+                onCancel={() => setShowHostForm(false)}
+                editing={Boolean(editingHostId)}
+              />
+            ) : null}
             <table>
-              <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th></tr></thead>
+              <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
                 {dashboard.hosts.map((host) => (
                   <tr key={host.id}>
@@ -263,6 +452,10 @@ export function App() {
                     <td>{host.healthUrl}</td>
                     <td>{host.composeProject}</td>
                     <td><StatusPill status={host.status} /></td>
+                    <td className="row-actions">
+                      <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
+                      <button onClick={() => removeHost(host.id)}><Trash2 size={15} />删除</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -340,7 +533,7 @@ export function App() {
               </div>
             </div>
             <div className="api-grid">
-              {["GET /api/status", "POST /api/checks/light", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest"].map((item) => (
+              {["GET /api/status", "POST /api/checks/light", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest", "GET /api/agent/status"].map((item) => (
                 <code key={item}>{item}</code>
               ))}
             </div>
@@ -350,4 +543,3 @@ export function App() {
     </div>
   );
 }
-

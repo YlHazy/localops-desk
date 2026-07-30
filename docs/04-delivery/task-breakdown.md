@@ -10,8 +10,13 @@
 
 ## Phase 2: Real SSH Read-Only
 
+- Add host configuration CRUD.
+- Add real HTTP health probes.
+- Enhance history and diagnostic report.
+- Upgrade first-screen information architecture.
 - Add SSH allowlist command runner.
-- Add timeouts, concurrency limits, and output sanitization.
+- Add timeouts and output sanitization.
+- Add agent-friendly status API.
 - Add host-level manual refresh.
 
 ## Phase 3: Recovery Actions
@@ -24,4 +29,3 @@
 
 - Wrap local Web app in Tauri or Electron.
 - Add local encrypted configuration if needed.
-

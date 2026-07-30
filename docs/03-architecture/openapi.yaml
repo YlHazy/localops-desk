@@ -17,6 +17,34 @@ paths:
       responses:
         "200":
           description: Host list
+    post:
+      summary: Create a local host configuration
+      responses:
+        "201":
+          description: Created host
+  /api/hosts/{id}:
+    put:
+      summary: Update a local host configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated host
+    delete:
+      summary: Delete a local host configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deletion result
   /api/checks:
     get:
       summary: List recent check runs
@@ -53,4 +81,9 @@ paths:
       responses:
         "200":
           description: Local agent API manifest
-
+  /api/agent/status:
+    get:
+      summary: Get agent-friendly status payload
+      responses:
+        "200":
+          description: Status, recent checks, and diagnostic report

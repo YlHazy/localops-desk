@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectHost, seedHosts } from "./runtime.mjs";
 
@@ -44,6 +45,7 @@ db.exec(`
     hostId TEXT NOT NULL,
     status TEXT NOT NULL,
     httpStatus TEXT NOT NULL,
+    httpLatencyMs INTEGER,
     sshStatus TEXT NOT NULL,
     cpuPercent INTEGER,
     memoryPercent INTEGER,
@@ -55,6 +57,15 @@ db.exec(`
     FOREIGN KEY(hostId) REFERENCES hosts(id)
   );
 `);
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((item) => item.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+ensureColumn("host_checks", "httpLatencyMs", "INTEGER");
 
 const existingHosts = db.prepare("SELECT COUNT(*) AS count FROM hosts").get();
 if (existingHosts.count === 0) {
@@ -137,6 +148,68 @@ function getHosts() {
   }));
 }
 
+function normalizeHostInput(input, existing = {}) {
+  const now = new Date().toISOString();
+  const name = String(input.name ?? existing.name ?? "").trim();
+  if (!name) {
+    throw new Error("Host name is required.");
+  }
+  const healthUrl = String(input.healthUrl ?? existing.healthUrl ?? "").trim();
+  if (healthUrl) {
+    const parsed = new URL(healthUrl);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("healthUrl must start with http:// or https://.");
+    }
+  }
+  const tags = Array.isArray(input.tags)
+    ? input.tags
+    : String(input.tags ?? existing.tags?.join?.(",") ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+  return {
+    id: existing.id || String(input.id || name.toLowerCase().replace(/[^a-z0-9]+/g, "-")).replace(/^-|-$/g, "") || randomUUID(),
+    name,
+    environment: String(input.environment ?? existing.environment ?? "personal").trim() || "personal",
+    role: String(input.role ?? existing.role ?? "server").trim() || "server",
+    sshAlias: String(input.sshAlias ?? existing.sshAlias ?? "").trim(),
+    healthUrl,
+    composeProject: String(input.composeProject ?? existing.composeProject ?? "").trim(),
+    tags,
+    createdAt: existing.createdAt || now,
+    updatedAt: now
+  };
+}
+
+function createHost(input) {
+  const hostItem = normalizeHostInput(input);
+  db.prepare(`
+    INSERT INTO hosts (id, name, environment, role, sshAlias, healthUrl, composeProject, tags, createdAt, updatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(hostItem.id, hostItem.name, hostItem.environment, hostItem.role, hostItem.sshAlias, hostItem.healthUrl, hostItem.composeProject, JSON.stringify(hostItem.tags), hostItem.createdAt, hostItem.updatedAt);
+  return hostItem;
+}
+
+function updateHost(id, input) {
+  const existing = getHosts().find((item) => item.id === id);
+  if (!existing) {
+    throw new Error(`Host not found: ${id}`);
+  }
+  const hostItem = normalizeHostInput(input, existing);
+  db.prepare(`
+    UPDATE hosts
+    SET name = ?, environment = ?, role = ?, sshAlias = ?, healthUrl = ?, composeProject = ?, tags = ?, updatedAt = ?
+    WHERE id = ?
+  `).run(hostItem.name, hostItem.environment, hostItem.role, hostItem.sshAlias, hostItem.healthUrl, hostItem.composeProject, JSON.stringify(hostItem.tags), hostItem.updatedAt, id);
+  return hostItem;
+}
+
+function deleteHost(id) {
+  db.prepare("DELETE FROM host_checks WHERE hostId = ?").run(id);
+  const result = db.prepare("DELETE FROM hosts WHERE id = ?").run(id);
+  return { deleted: result.changes > 0 };
+}
+
 function latestHostChecks() {
   const rows = db.prepare(`
     SELECT hc.*, h.name, h.environment, h.role, h.sshAlias, h.healthUrl, h.composeProject, cr.finishedAt AS lastCheckedAt, cr.durationMs
@@ -163,6 +236,7 @@ function latestHostChecks() {
     memoryPercent: row.memoryPercent ?? null,
     diskPercent: row.diskPercent ?? null,
     httpStatus: row.httpStatus || "not checked",
+    httpLatencyMs: row.httpLatencyMs ?? null,
     sshStatus: row.sshStatus || "not checked",
     dockerStatus: row.dockerStatus || "not checked",
     summary: row.sanitizedError || summarizeStatus(row.status || "unknown"),
@@ -196,7 +270,7 @@ async function runLightCheck() {
   const hosts = getHosts();
   const hostResults = [];
   for (const hostItem of hosts) {
-    hostResults.push(await collectHost(hostItem, { mode }));
+    hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
   }
   const finishedAt = new Date();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
@@ -209,8 +283,8 @@ async function runLightCheck() {
   `).run("light", startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
 
   const insertHostCheck = db.prepare(`
-    INSERT INTO host_checks (runId, hostId, status, httpStatus, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const result of hostResults) {
@@ -219,6 +293,7 @@ async function runLightCheck() {
       result.hostId,
       result.status,
       result.httpStatus,
+      result.httpLatencyMs,
       result.sshStatus,
       result.cpuPercent,
       result.memoryPercent,
@@ -243,19 +318,29 @@ function recentChecks() {
 
 function currentReport() {
   const hosts = latestHostChecks();
+  const counts = statusCounts(hosts);
+  const suspectHosts = hosts.filter((item) => item.status !== "healthy");
+  const configuredHttpHosts = hosts.filter((item) => item.healthUrl);
+  const allHttpFailed = configuredHttpHosts.length > 0 && configuredHttpHosts.every((item) => !/^2\d\d|3\d\d/.test(item.httpStatus));
   const lines = [];
   lines.push(`LocalOps Desk 诊断报告`);
   lines.push(`生成时间：${new Date().toISOString()}`);
   lines.push(`采集模式：${mode}`);
+  lines.push(`状态统计：正常 ${counts.healthy} / 关注 ${counts.warning} / 异常 ${counts.critical} / 未知 ${counts.unknown}`);
+  lines.push(`优先关注：${suspectHosts.length ? suspectHosts.map((item) => `${item.name}(${item.status})`).join(", ") : "暂无"}`);
+  if (allHttpFailed) {
+    lines.push("全局提示：所有已配置 HTTP 健康检查都失败，先排查本机网络、代理、DNS 或运行环境限制，再判断远端整体故障。");
+  }
   lines.push("");
   for (const hostItem of hosts) {
     lines.push(`- ${hostItem.name} [${hostItem.status}]`);
-    lines.push(`  HTTP: ${hostItem.httpStatus}; SSH: ${hostItem.sshStatus}; Docker: ${hostItem.dockerStatus}`);
+    lines.push(`  HTTP: ${hostItem.httpStatus}${hostItem.httpLatencyMs == null ? "" : `, ${hostItem.httpLatencyMs}ms`}; SSH: ${hostItem.sshStatus}; Docker: ${hostItem.dockerStatus}`);
     lines.push(`  资源: CPU ${hostItem.cpuPercent ?? "N/A"}%, 内存 ${hostItem.memoryPercent ?? "N/A"}%, 磁盘 ${hostItem.diskPercent ?? "N/A"}%`);
     lines.push(`  摘要: ${hostItem.summary}`);
   }
   lines.push("");
-  lines.push("建议：先确认 public HTTP 与 SSH 管理通道是否同时失败；如果只有 HTTP 失败，优先看应用/Nginx/ALB；如果只有 SSH 失败，优先看管理通道、安全组或本地网络。");
+  lines.push("判断矩阵：HTTP 失败且 SSH 可用时优先查应用/Nginx/Docker/ALB/依赖；HTTP 正常但 SSH 异常时优先查管理通道；两者都失败时再考虑实例、网络、安全组或本地出口。");
+  lines.push("建议：先处理 red/critical，再处理 yellow/warning；任何重启、迁移、DNS/TLS、对象或数据操作都必须走单独授权。");
   return lines.join("\n");
 }
 
@@ -315,9 +400,14 @@ function agentManifest() {
     },
     endpoints: [
       { method: "GET", path: "/api/status", description: "Read latest dashboard status." },
+      { method: "GET", path: "/api/hosts", description: "List local host configuration." },
+      { method: "POST", path: "/api/hosts", description: "Create a host configuration without secrets." },
+      { method: "PUT", path: "/api/hosts/:id", description: "Update a host configuration without secrets." },
+      { method: "DELETE", path: "/api/hosts/:id", description: "Delete a local host configuration." },
       { method: "POST", path: "/api/checks/light", description: "Run a bounded light check." },
       { method: "POST", path: "/api/actions/dry-run", description: "Generate a non-mutating action plan." },
-      { method: "GET", path: "/api/reports/current", description: "Read current diagnostic report." }
+      { method: "GET", path: "/api/reports/current", description: "Read current diagnostic report." },
+      { method: "GET", path: "/api/agent/status", description: "Read status, recent checks, and current report in one agent-friendly payload." }
     ]
   };
 }
@@ -337,6 +427,16 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/hosts") {
       return json(res, { hosts: getHosts() });
+    }
+    if (req.method === "POST" && url.pathname === "/api/hosts") {
+      return json(res, { host: createHost(await readBody(req)) }, 201);
+    }
+    const hostMatch = url.pathname.match(/^\/api\/hosts\/([^/]+)$/);
+    if (hostMatch && req.method === "PUT") {
+      return json(res, { host: updateHost(decodeURIComponent(hostMatch[1]), await readBody(req)) });
+    }
+    if (hostMatch && req.method === "DELETE") {
+      return json(res, deleteHost(decodeURIComponent(hostMatch[1])));
     }
     if (req.method === "GET" && url.pathname === "/api/checks") {
       return json(res, { checks: recentChecks() });
@@ -358,6 +458,17 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/agent/manifest") {
       return json(res, agentManifest());
+    }
+    if (req.method === "GET" && url.pathname === "/api/agent/status") {
+      const hosts = latestHostChecks();
+      return json(res, {
+        generatedAt: new Date().toISOString(),
+        mode,
+        counts: statusCounts(hosts),
+        hosts,
+        checks: recentChecks().slice(0, 5),
+        report: currentReport()
+      });
     }
 
     return json(res, { error: "Not found" }, 404);

@@ -15,10 +15,22 @@ export interface HostState {
   memoryPercent: number | null;
   diskPercent: number | null;
   httpStatus: string;
+  httpLatencyMs: number | null;
   sshStatus: string;
   dockerStatus: string;
   summary: string;
   evidence: string[];
+}
+
+export interface HostConfigInput {
+  id?: string;
+  name: string;
+  environment: string;
+  role: string;
+  sshAlias: string;
+  healthUrl: string;
+  composeProject: string;
+  tags: string[];
 }
 
 export interface DashboardStatus {
@@ -46,4 +58,3 @@ export interface DryRunAction {
   verification: string[];
   blockedReason?: string;
 }
-
