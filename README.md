@@ -28,3 +28,5 @@ For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:51
 ## Safety Defaults
 
 Real SSH collection is disabled unless `LOCALOPS_ENABLE_SSH=1` is set. Without that flag, checks use deterministic simulated collectors so UI and workflow development remain safe.
+
+When SSH is enabled, host entries must reference aliases that already work in the local user's `~/.ssh/config`. A quick preflight is `ssh -G <alias>`; if it does not resolve to the intended host, LocalOps will still run HTTP checks but SSH resource and Docker evidence will be reported as unavailable.

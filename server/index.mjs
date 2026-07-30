@@ -10,7 +10,8 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(root, "data");
 mkdirSync(dataDir, { recursive: true });
 
-const db = new DatabaseSync(join(dataDir, "localops.sqlite"));
+const dbPath = join(dataDir, "localops.sqlite");
+const db = new DatabaseSync(dbPath);
 const host = process.env.LOCALOPS_API_HOST || "127.0.0.1";
 const port = Number(process.env.LOCALOPS_API_PORT || "4317");
 const mode = process.env.LOCALOPS_ENABLE_SSH === "1" ? "ssh-enabled" : "safe-simulated";
@@ -32,6 +33,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS check_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
+    trigger TEXT NOT NULL DEFAULT 'manual',
+    hostScope TEXT,
     startedAt TEXT NOT NULL,
     finishedAt TEXT NOT NULL,
     durationMs INTEGER NOT NULL,
@@ -56,6 +59,12 @@ db.exec(`
     FOREIGN KEY(runId) REFERENCES check_runs(id),
     FOREIGN KEY(hostId) REFERENCES hosts(id)
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
 `);
 
 function ensureColumn(table, column, definition) {
@@ -66,6 +75,8 @@ function ensureColumn(table, column, definition) {
 }
 
 ensureColumn("host_checks", "httpLatencyMs", "INTEGER");
+ensureColumn("check_runs", "trigger", "TEXT NOT NULL DEFAULT 'manual'");
+ensureColumn("check_runs", "hostScope", "TEXT");
 
 const existingHosts = db.prepare("SELECT COUNT(*) AS count FROM hosts").get();
 if (existingHosts.count === 0) {
@@ -79,13 +90,47 @@ if (existingHosts.count === 0) {
   }
 }
 
+const defaultSettings = {
+  schedulerEnabled: "0",
+  lightIntervalMinutes: "15",
+  retentionDays: "7",
+  schedulerConsecutiveFailures: "0",
+  schedulerLastRunAt: "",
+  schedulerNextRunAt: ""
+};
+
+function getSetting(key, fallback = "") {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row?.value ?? fallback;
+}
+
+function setSetting(key, value) {
+  db.prepare(`
+    INSERT INTO settings (key, value, updatedAt)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt
+  `).run(key, String(value), new Date().toISOString());
+}
+
+for (const [key, value] of Object.entries(defaultSettings)) {
+  if (getSetting(key, null) == null) {
+    setSetting(key, value);
+  }
+}
+
+function settingNumber(key, fallback, { min = 1, max = 10080 } = {}) {
+  const value = Number(getSetting(key, String(fallback)));
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
 function json(res, body, status = 200) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     "access-control-allow-origin": "http://127.0.0.1:5177",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "content-type"
   });
   res.end(payload);
@@ -265,9 +310,15 @@ function overallStatus(hostResults) {
   return "healthy";
 }
 
-async function runLightCheck() {
+async function runLightCheck(options = {}) {
   const startedAt = new Date();
-  const hosts = getHosts();
+  const allHosts = getHosts();
+  const hosts = options.hostId
+    ? allHosts.filter((hostItem) => hostItem.id === options.hostId)
+    : allHosts;
+  if (options.hostId && hosts.length === 0) {
+    throw new Error(`Host not found: ${options.hostId}`);
+  }
   const hostResults = [];
   for (const hostItem of hosts) {
     hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
@@ -275,12 +326,14 @@ async function runLightCheck() {
   const finishedAt = new Date();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const status = overallStatus(hostResults);
-  const summary = `${hostResults.length} hosts checked, overall ${status}.`;
+  const trigger = String(options.trigger || (options.hostId ? "manual-host" : "manual"));
+  const hostScope = options.hostId || "all";
+  const summary = `${hostResults.length} host${hostResults.length === 1 ? "" : "s"} checked (${hostScope}), overall ${status}.`;
 
   const run = db.prepare(`
-    INSERT INTO check_runs (kind, startedAt, finishedAt, durationMs, overallStatus, summary)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run("light", startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
+    INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
 
   const insertHostCheck = db.prepare(`
     INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
@@ -309,11 +362,116 @@ async function runLightCheck() {
 
 function recentChecks() {
   return db.prepare(`
-    SELECT id, kind, startedAt, finishedAt, durationMs, overallStatus, summary
+    SELECT id, kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary
     FROM check_runs
     ORDER BY id DESC
     LIMIT 20
   `).all();
+}
+
+function runRetention(options = {}) {
+  const retentionDays = settingNumber("retentionDays", 7, { min: 1, max: 365 });
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const oldRuns = db.prepare("SELECT id FROM check_runs WHERE finishedAt < ?").all(cutoff).map((row) => row.id);
+  let deletedHostChecks = 0;
+  let deletedRuns = 0;
+  if (oldRuns.length) {
+    const deleteHostChecks = db.prepare("DELETE FROM host_checks WHERE runId = ?");
+    const deleteRun = db.prepare("DELETE FROM check_runs WHERE id = ?");
+    for (const runId of oldRuns) {
+      deletedHostChecks += deleteHostChecks.run(runId).changes;
+      deletedRuns += deleteRun.run(runId).changes;
+    }
+  }
+  const orphanChecks = db.prepare(`
+    DELETE FROM host_checks
+    WHERE hostId NOT IN (SELECT id FROM hosts)
+  `).run().changes;
+  if (options.vacuum) {
+    db.exec("VACUUM");
+  }
+  return {
+    retentionDays,
+    cutoff,
+    deletedRuns,
+    deletedHostChecks,
+    deletedOrphanHostChecks: orphanChecks,
+    vacuumed: Boolean(options.vacuum),
+    sizeBytes: statSync(dbPath).size
+  };
+}
+
+let schedulerTimer = null;
+
+function schedulerSnapshot() {
+  return {
+    enabled: getSetting("schedulerEnabled", "0") === "1",
+    lightIntervalMinutes: settingNumber("lightIntervalMinutes", 15, { min: 1, max: 1440 }),
+    retentionDays: settingNumber("retentionDays", 7, { min: 1, max: 365 }),
+    consecutiveFailures: settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }),
+    lastRunAt: getSetting("schedulerLastRunAt", "") || null,
+    nextRunAt: getSetting("schedulerNextRunAt", "") || null
+  };
+}
+
+function stopScheduler() {
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+    schedulerTimer = null;
+  }
+  setSetting("schedulerNextRunAt", "");
+}
+
+function scheduleNextLightCheck(delayMs) {
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+  }
+  const nextRunAt = new Date(Date.now() + delayMs).toISOString();
+  setSetting("schedulerNextRunAt", nextRunAt);
+  schedulerTimer = setTimeout(async () => {
+    schedulerTimer = null;
+    try {
+      await runLightCheck({ trigger: "scheduled" });
+      setSetting("schedulerConsecutiveFailures", "0");
+      setSetting("schedulerLastRunAt", new Date().toISOString());
+      runRetention();
+    } catch (error) {
+      const failures = settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }) + 1;
+      setSetting("schedulerConsecutiveFailures", String(failures));
+      setSetting("schedulerLastRunAt", new Date().toISOString());
+      console.error(`Scheduled light check failed: ${error?.message || error}`);
+    }
+    if (getSetting("schedulerEnabled", "0") === "1") {
+      const snapshot = schedulerSnapshot();
+      const backoff = Math.min(Math.max(snapshot.consecutiveFailures, 1), 3);
+      scheduleNextLightCheck(snapshot.lightIntervalMinutes * backoff * 60 * 1000);
+    }
+  }, Math.max(1000, delayMs));
+  return schedulerSnapshot();
+}
+
+function configureScheduler(input = {}) {
+  if (input.lightIntervalMinutes != null) {
+    setSetting("lightIntervalMinutes", settingNumberFromInput(input.lightIntervalMinutes, 15, 1, 1440));
+  }
+  if (input.retentionDays != null) {
+    setSetting("retentionDays", settingNumberFromInput(input.retentionDays, 7, 1, 365));
+  }
+  if (input.enabled != null) {
+    setSetting("schedulerEnabled", input.enabled ? "1" : "0");
+  }
+  const snapshot = schedulerSnapshot();
+  if (snapshot.enabled) {
+    return scheduleNextLightCheck(snapshot.lightIntervalMinutes * 60 * 1000);
+  }
+  stopScheduler();
+  return schedulerSnapshot();
+}
+
+function settingNumberFromInput(value, fallback, min, max) {
+  const parsed = Number(value);
+  const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+  return String(Math.min(Math.max(normalized, min), max));
 }
 
 function currentReport() {
@@ -405,6 +563,10 @@ function agentManifest() {
       { method: "PUT", path: "/api/hosts/:id", description: "Update a host configuration without secrets." },
       { method: "DELETE", path: "/api/hosts/:id", description: "Delete a local host configuration." },
       { method: "POST", path: "/api/checks/light", description: "Run a bounded light check." },
+      { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
+      { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
+      { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
+      { method: "POST", path: "/api/maintenance/retention", description: "Apply local SQLite retention cleanup." },
       { method: "POST", path: "/api/actions/dry-run", description: "Generate a non-mutating action plan." },
       { method: "GET", path: "/api/reports/current", description: "Read current diagnostic report." },
       { method: "GET", path: "/api/agent/status", description: "Read status, recent checks, and current report in one agent-friendly payload." }
@@ -442,13 +604,30 @@ const server = createServer(async (req, res) => {
       return json(res, { checks: recentChecks() });
     }
     if (req.method === "POST" && url.pathname === "/api/checks/light") {
-      return json(res, await runLightCheck());
+      return json(res, await runLightCheck(await readBody(req)));
+    }
+    const lightHostMatch = url.pathname.match(/^\/api\/checks\/light\/([^/]+)$/);
+    if (lightHostMatch && req.method === "POST") {
+      return json(res, await runLightCheck({
+        ...(await readBody(req)),
+        hostId: decodeURIComponent(lightHostMatch[1]),
+        trigger: "manual-host"
+      }));
     }
     if (req.method === "POST" && url.pathname === "/api/checks/deep") {
       return json(res, {
         mode: "dry-run",
         summary: "Deep checks are deferred in MVP. Planned checks: DB size summary, Docker resource summary, recent error digest, retention audit."
       });
+    }
+    if (req.method === "GET" && url.pathname === "/api/scheduler") {
+      return json(res, { scheduler: schedulerSnapshot() });
+    }
+    if (req.method === "PUT" && url.pathname === "/api/scheduler") {
+      return json(res, { scheduler: configureScheduler(await readBody(req)) });
+    }
+    if (req.method === "POST" && url.pathname === "/api/maintenance/retention") {
+      return json(res, { retention: runRetention(await readBody(req)) });
     }
     if (req.method === "POST" && url.pathname === "/api/actions/dry-run") {
       return json(res, dryRunAction(await readBody(req)));
@@ -466,6 +645,7 @@ const server = createServer(async (req, res) => {
         mode,
         counts: statusCounts(hosts),
         hosts,
+        scheduler: schedulerSnapshot(),
         checks: recentChecks().slice(0, 5),
         report: currentReport()
       });
@@ -478,5 +658,8 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
+  if (schedulerSnapshot().enabled) {
+    scheduleNextLightCheck(schedulerSnapshot().lightIntervalMinutes * 60 * 1000);
+  }
   console.log(`LocalOps API listening on http://${host}:${port} (${mode})`);
 });

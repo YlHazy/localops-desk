@@ -17,6 +17,8 @@
 
 - `id`
 - `kind`: `light`, `deep`, `manual`
+- `trigger`: `manual`, `manual-host`, `scheduled`
+- `hostScope`: `all` or a configured host id
 - `startedAt`
 - `finishedAt`
 - `durationMs`
@@ -30,6 +32,7 @@
 - `hostId`
 - `status`
 - `httpStatus`
+- `httpLatencyMs`
 - `sshStatus`
 - `cpuPercent`
 - `memoryPercent`
@@ -47,3 +50,10 @@
 - `dryRunOutput`
 - `createdAt`
 
+## Settings
+
+- `key`
+- `value`
+- `updatedAt`
+
+Current settings include scheduler enablement, light-check interval, retention days, scheduled failure count, last run time, and next run time.

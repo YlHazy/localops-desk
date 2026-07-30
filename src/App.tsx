@@ -19,7 +19,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, Status } from "./types";
+import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
@@ -187,16 +187,26 @@ export function App() {
   const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
   const [editingHostId, setEditingHostId] = useState<string | null>(null);
   const [showHostForm, setShowHostForm] = useState(false);
+  const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
+  const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
+  const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
 
   async function load() {
-    const [status, recent, currentReport] = await Promise.all([
+    const [status, recent, currentReport, schedulerState] = await Promise.all([
       api<DashboardStatus>("/api/status"),
       api<{ checks: CheckRun[] }>("/api/checks"),
-      api<{ report: string }>("/api/reports/current")
+      api<{ report: string }>("/api/reports/current"),
+      api<{ scheduler: SchedulerState }>("/api/scheduler")
     ]);
     setDashboard(status);
     setChecks(recent.checks);
     setReport(currentReport.report);
+    setScheduler(schedulerState.scheduler);
+    setSchedulerForm({
+      enabled: schedulerState.scheduler.enabled,
+      lightIntervalMinutes: schedulerState.scheduler.lightIntervalMinutes,
+      retentionDays: schedulerState.scheduler.retentionDays
+    });
     setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
   }
 
@@ -211,15 +221,53 @@ export function App() {
 
   const incidentHosts = useMemo(() => dashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [dashboard]);
 
-  async function runLightCheck() {
+  async function runLightCheck(hostId?: string) {
     setLoading(true);
     setError("");
     try {
-      await api("/api/checks/light", { method: "POST", body: "{}" });
+      await api(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
       await load();
       setSelectedTab("overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "检查失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveScheduler(next = schedulerForm) {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api<{ scheduler: SchedulerState }>("/api/scheduler", {
+        method: "PUT",
+        body: JSON.stringify(next)
+      });
+      setScheduler(result.scheduler);
+      setSchedulerForm({
+        enabled: result.scheduler.enabled,
+        lightIntervalMinutes: result.scheduler.lightIntervalMinutes,
+        retentionDays: result.scheduler.retentionDays
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存巡检配置失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runRetention(vacuum = false) {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api<{ retention: RetentionResult }>("/api/maintenance/retention", {
+        method: "POST",
+        body: JSON.stringify({ vacuum })
+      });
+      setRetentionResult(result.retention);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保留期清理失败");
     } finally {
       setLoading(false);
     }
@@ -317,6 +365,7 @@ export function App() {
             ["overview", Activity, "总览"],
             ["hosts", Server, "服务器"],
             ["checks", History, "检查历史"],
+            ["scheduler", Clock3, "巡检"],
             ["actions", TerminalSquare, "动作面板"],
             ["reports", FileText, "诊断报告"],
             ["agent", Bot, "Agent API"]
@@ -340,7 +389,7 @@ export function App() {
             <h1>服务器运行状态</h1>
             <p>上次刷新：{formatTime(dashboard.generatedAt)}，所有动作默认先 dry-run。</p>
           </div>
-          <button className="primary" onClick={runLightCheck} disabled={loading}>
+          <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
             {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
             <span>{loading ? "检查中" : "运行轻量检查"}</span>
           </button>
@@ -400,6 +449,7 @@ export function App() {
                 {selectedHost.evidence.map((item) => <p key={item}>{item}</p>)}
               </div>
               <div className="quick-actions">
+                <button onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw size={16} />刷新此主机</button>
                 <button onClick={() => runDryAction("inspect-service")}>只读诊断 dry-run</button>
                 <button onClick={() => runDryAction("reload-nginx")}>Reload Nginx dry-run</button>
                 <button onClick={() => runDryAction("restart-compose-service")}>滚动重启 dry-run</button>
@@ -467,12 +517,14 @@ export function App() {
           <section className="table-panel">
             <h2>检查历史</h2>
             <table>
-              <thead><tr><th>ID</th><th>类型</th><th>开始</th><th>耗时</th><th>状态</th><th>摘要</th></tr></thead>
+              <thead><tr><th>ID</th><th>类型</th><th>触发</th><th>范围</th><th>开始</th><th>耗时</th><th>状态</th><th>摘要</th></tr></thead>
               <tbody>
                 {checks.map((check) => (
                   <tr key={check.id}>
                     <td>#{check.id}</td>
                     <td>{check.kind}</td>
+                    <td>{check.trigger}</td>
+                    <td>{check.hostScope ?? "all"}</td>
                     <td>{formatTime(check.startedAt)}</td>
                     <td>{check.durationMs}ms</td>
                     <td><StatusPill status={check.overallStatus} /></td>
@@ -481,6 +533,75 @@ export function App() {
                 ))}
               </tbody>
             </table>
+          </section>
+        )}
+
+        {selectedTab === "scheduler" && (
+          <section className="scheduler-layout">
+            <div className="detail-panel">
+              <div className="detail-head">
+                <div>
+                  <h2>本地定时巡检</h2>
+                  <p>只在 LocalOps Desk 进程运行时生效；关闭本地程序后不会继续轮询服务器。</p>
+                </div>
+                <StatusPill status={scheduler?.enabled ? "healthy" : "unknown"} />
+              </div>
+              <div className="scheduler-grid">
+                <label>
+                  <span>启用定时巡检</span>
+                  <button
+                    className={schedulerForm.enabled ? "toggle active" : "toggle"}
+                    onClick={() => setSchedulerForm({ ...schedulerForm, enabled: !schedulerForm.enabled })}
+                  >
+                    {schedulerForm.enabled ? "已启用" : "未启用"}
+                  </button>
+                </label>
+                <label>
+                  <span>轻量检查间隔（分钟）</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={schedulerForm.lightIntervalMinutes}
+                    onChange={(event) => setSchedulerForm({ ...schedulerForm, lightIntervalMinutes: Number(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  <span>本地历史保留（天）</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={schedulerForm.retentionDays}
+                    onChange={(event) => setSchedulerForm({ ...schedulerForm, retentionDays: Number(event.target.value) })}
+                  />
+                </label>
+              </div>
+              <div className="quick-actions">
+                <button className="primary slim" onClick={() => saveScheduler()} disabled={loading}><Save size={16} />保存巡检配置</button>
+                <button onClick={() => saveScheduler({ ...schedulerForm, enabled: false })}>停止定时巡检</button>
+                <button onClick={() => runRetention(false)}>执行保留期清理</button>
+                <button onClick={() => runRetention(true)}>清理并压缩 SQLite</button>
+              </div>
+            </div>
+            <div className="table-panel">
+              <h2>调度状态</h2>
+              <div className="state-grid">
+                <div><span>当前状态</span><strong>{scheduler?.enabled ? "运行中" : "已停止"}</strong></div>
+                <div><span>下次运行</span><strong>{formatTime(scheduler?.nextRunAt ?? null)}</strong></div>
+                <div><span>上次运行</span><strong>{formatTime(scheduler?.lastRunAt ?? null)}</strong></div>
+                <div><span>连续失败</span><strong>{scheduler?.consecutiveFailures ?? 0}</strong></div>
+              </div>
+              {retentionResult ? (
+                <div className="retention-result">
+                  <h3>最近清理结果</h3>
+                  <p>保留 {retentionResult.retentionDays} 天，删除检查 {retentionResult.deletedRuns} 次、明细 {retentionResult.deletedHostChecks} 条、孤儿明细 {retentionResult.deletedOrphanHostChecks} 条。</p>
+                  <p>SQLite 当前大小：{Math.round(retentionResult.sizeBytes / 1024)} KB；压缩：{retentionResult.vacuumed ? "已执行" : "未执行"}。</p>
+                </div>
+              ) : (
+                <p className="muted">尚未在本次界面会话执行清理。</p>
+              )}
+            </div>
           </section>
         )}
 
@@ -533,7 +654,18 @@ export function App() {
               </div>
             </div>
             <div className="api-grid">
-              {["GET /api/status", "POST /api/checks/light", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest", "GET /api/agent/status"].map((item) => (
+              {[
+                "GET /api/status",
+                "POST /api/checks/light",
+                "POST /api/checks/light/:hostId",
+                "GET /api/scheduler",
+                "PUT /api/scheduler",
+                "POST /api/maintenance/retention",
+                "POST /api/actions/dry-run",
+                "GET /api/reports/current",
+                "GET /api/agent/manifest",
+                "GET /api/agent/status"
+              ].map((item) => (
                 <code key={item}>{item}</code>
               ))}
             </div>

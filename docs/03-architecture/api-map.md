@@ -30,9 +30,29 @@ Deletes a local host configuration and its local check evidence.
 
 Runs a low-pressure collection pass. By default this uses safe simulated collectors unless real SSH is explicitly enabled.
 
+`POST /api/checks/light/:hostId`
+
+Runs the same bounded light check for one configured host and records the run as `manual-host`.
+
 `POST /api/checks/deep`
 
 MVP returns a dry-run deep-check plan.
+
+## Scheduler
+
+`GET /api/scheduler`
+
+Returns the in-process local scheduler state, including enabled flag, interval, retention days, last run, next run, and consecutive failures.
+
+`PUT /api/scheduler`
+
+Updates local scheduler settings. The scheduler only runs while the LocalOps Desk process is alive.
+
+## Maintenance
+
+`POST /api/maintenance/retention`
+
+Deletes expired local check history and orphan check rows according to the configured retention window. Optional `vacuum` compacts the local SQLite database.
 
 ## Actions
 

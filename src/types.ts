@@ -43,11 +43,32 @@ export interface DashboardStatus {
 export interface CheckRun {
   id: number;
   kind: string;
+  trigger: string;
+  hostScope: string | null;
   startedAt: string;
   finishedAt: string;
   durationMs: number;
   overallStatus: Status;
   summary: string;
+}
+
+export interface SchedulerState {
+  enabled: boolean;
+  lightIntervalMinutes: number;
+  retentionDays: number;
+  consecutiveFailures: number;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+}
+
+export interface RetentionResult {
+  retentionDays: number;
+  cutoff: string;
+  deletedRuns: number;
+  deletedHostChecks: number;
+  deletedOrphanHostChecks: number;
+  vacuumed: boolean;
+  sizeBytes: number;
 }
 
 export interface DryRunAction {

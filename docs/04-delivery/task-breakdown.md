@@ -18,6 +18,8 @@
 - Add timeouts and output sanitization.
 - Add agent-friendly status API.
 - Add host-level manual refresh.
+- Add in-process scheduler controls.
+- Add local SQLite retention cleanup.
 
 ## Phase 3: Recovery Actions
 

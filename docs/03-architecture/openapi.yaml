@@ -57,12 +57,41 @@ paths:
       responses:
         "200":
           description: Light check result
+  /api/checks/light/{hostId}:
+    post:
+      summary: Run a light check for one host
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Host-scoped light check result
   /api/checks/deep:
     post:
       summary: Preview or run deep checks
       responses:
         "200":
           description: Deep check result or dry-run plan
+  /api/scheduler:
+    get:
+      summary: Get local scheduler state
+      responses:
+        "200":
+          description: Scheduler state
+    put:
+      summary: Configure local scheduler state
+      responses:
+        "200":
+          description: Updated scheduler state
+  /api/maintenance/retention:
+    post:
+      summary: Apply local SQLite retention cleanup
+      responses:
+        "200":
+          description: Retention cleanup result
   /api/actions/dry-run:
     post:
       summary: Generate a safe action plan

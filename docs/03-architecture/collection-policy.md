@@ -4,7 +4,7 @@
 
 ### Light Check
 
-Default cadence: every 10 to 15 minutes when scheduling is enabled.
+Default cadence: configurable, 15 minutes by default when scheduling is enabled.
 
 Collect:
 
@@ -38,6 +38,17 @@ Collect:
 
 Runs immediately when the user clicks refresh, but still respects timeouts, concurrency, and log limits.
 
+Manual refresh may target all configured hosts or one specific host. Host-scoped runs are recorded with `trigger=manual-host` and `hostScope=<hostId>`.
+
+### Local Scheduler
+
+The scheduler is in-process and local-only. It starts only when the LocalOps Desk process is running and the user has enabled it through `PUT /api/scheduler`.
+
+- Default interval: 15 minutes.
+- Default retention: 7 days of raw check runs.
+- Each scheduled pass applies retention cleanup after collection.
+- Consecutive scheduled failures are counted and add bounded backoff before the next run.
+
 ## Failure Backoff
 
 - Two consecutive failures: mark the host as needs attention.
@@ -55,6 +66,8 @@ Runs immediately when the user clicks refresh, but still respects timeouts, conc
 ## Storage Retention
 
 - Raw light samples: 7 days.
+- Current MVP deletes expired `check_runs`, their `host_checks`, and orphan host checks for removed hosts.
+- Optional SQLite `VACUUM` is available through the maintenance endpoint.
 - Hourly aggregates: 30 days.
 - Daily aggregates: 180 days.
 - Log snippets: 7 days.

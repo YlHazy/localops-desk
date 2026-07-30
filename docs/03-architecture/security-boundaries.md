@@ -7,11 +7,13 @@
 - No password, private key, AccessKey Secret, database password, `.env`, or secret URL storage.
 - No arbitrary shell input in MVP.
 - Real SSH collection is disabled unless explicitly enabled.
+- The scheduler is local in-process only. It does not install a Windows service or remote cron job.
 
 ## SSH Rules
 
 - Store SSH Host aliases, not private keys.
 - Prefer the user's existing `~/.ssh/config`.
+- A configured host must be resolvable by `ssh -G <alias>` before LocalOps can collect SSH evidence.
 - No password-based SSH in MVP.
 - Per-host SSH concurrency limit: 1.
 - Global SSH concurrency limit: 3.
@@ -19,6 +21,7 @@
   - Light checks: 5 seconds per command.
   - Deep checks: 20 seconds per command.
   - Recovery action verification: 60 seconds.
+- Scheduled checks use the same read-only collectors and never expand the command allowlist.
 
 ## Command Allowlist
 

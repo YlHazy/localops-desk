@@ -34,6 +34,16 @@ await call(`/api/hosts/${encodeURIComponent(created.host.id)}`, {
   })
 });
 await call("/api/checks/light", { method: "POST", body: "{}" });
+await call(`/api/checks/light/${encodeURIComponent(created.host.id)}`, { method: "POST", body: "{}" });
+await call("/api/scheduler");
+await call("/api/scheduler", {
+  method: "PUT",
+  body: JSON.stringify({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 })
+});
+await call("/api/maintenance/retention", {
+  method: "POST",
+  body: JSON.stringify({ vacuum: false })
+});
 await call("/api/reports/current");
 await call("/api/agent/manifest");
 await call("/api/agent/status");

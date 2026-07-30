@@ -133,7 +133,8 @@ function sanitizeError(message) {
   return String(message)
     .replace(/(password|passwd|pwd|token|secret|access[_-]?key|key)=([^&\s]+)/gi, "$1=<redacted>")
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer <redacted>")
-    .replace(/:\/\/([^:\s/]+):([^@\s/]+)@/g, "://$1:<redacted>@");
+    .replace(/:\/\/([^:\s/]+):([^@\s/]+)@/g, "://$1:<redacted>@")
+    .replace(/Could not resolve hostname ([^:\s]+):[\s\S]*/i, "Could not resolve hostname $1 (SSH alias not found or DNS unresolved).");
 }
 
 function trimOutput(output, maxChars = 2000) {
