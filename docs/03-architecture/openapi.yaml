@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info:
+  title: LocalOps Desk Local API
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:4317
+paths:
+  /api/status:
+    get:
+      summary: Get latest dashboard status
+      responses:
+        "200":
+          description: Current status summary
+  /api/hosts:
+    get:
+      summary: List configured hosts
+      responses:
+        "200":
+          description: Host list
+  /api/checks:
+    get:
+      summary: List recent check runs
+      responses:
+        "200":
+          description: Recent check runs
+  /api/checks/light:
+    post:
+      summary: Run light checks
+      responses:
+        "200":
+          description: Light check result
+  /api/checks/deep:
+    post:
+      summary: Preview or run deep checks
+      responses:
+        "200":
+          description: Deep check result or dry-run plan
+  /api/actions/dry-run:
+    post:
+      summary: Generate a safe action plan
+      responses:
+        "200":
+          description: Dry-run action plan
+  /api/reports/current:
+    get:
+      summary: Get current diagnostic report
+      responses:
+        "200":
+          description: Diagnostic report
+  /api/agent/manifest:
+    get:
+      summary: Get local agent API manifest
+      responses:
+        "200":
+          description: Local agent API manifest
+
