@@ -162,8 +162,10 @@ body:has(.pet-window) {
 
 .pet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pet-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 39px; border-radius: 12px; font-weight: 700; cursor: pointer; }
-.pet-refresh { color: white; border: 1px solid var(--pet-teal); background: var(--pet-teal); }
+.pet-refresh { grid-column: 1 / -1; color: white; border: 1px solid var(--pet-teal); background: var(--pet-teal); }
 .pet-refresh:disabled { cursor: wait; opacity: 0.7; }
+.pet-discuss { color: #f7fffd; border: 1px solid var(--pet-ink); background: var(--pet-ink); }
+.pet-discuss:disabled { cursor: not-allowed; opacity: 0.48; }
 .pet-open { color: var(--pet-ink); border: 1px solid rgba(25, 51, 60, 0.15); background: white; }
 .pet-actions small { grid-column: 1 / -1; margin-top: 3px; color: var(--pet-muted); font: 10px/1.4 Consolas, monospace; text-align: center; }
 .pet-window button:focus-visible { outline: 3px solid color-mix(in srgb, var(--pet-mood) 35%, transparent); outline-offset: 2px; }

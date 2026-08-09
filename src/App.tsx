@@ -3,10 +3,13 @@ import {
   AlertTriangle,
   Bot,
   CheckCircle2,
+  ClipboardCheck,
   Clock3,
+  Copy,
   Globe2,
   FileText,
   History,
+  MessageCircle,
   Pencil,
   Play,
   Plus,
@@ -30,6 +33,13 @@ const statusLabels: Record<Status, string> = {
 };
 
 const statusOrder: Status[] = ["critical", "warning", "unknown", "healthy"];
+
+const signalLabels = {
+  http: "入口信号",
+  ssh: "管理通道",
+  runtime: "运行时",
+  advice: "安全下一步"
+};
 
 const emptyHostForm: HostConfigInput = {
   name: "",
@@ -117,6 +127,81 @@ function friendlyEvidence(value: string) {
   if (/SSH read-only collector failed/i.test(value)) return "SSH 只读检查失败：请先确认本机 SSH 配置。";
   if (/allowlist/i.test(value)) return "安全边界：只执行固定只读命令，输出会脱敏。";
   return shortSignal(value);
+}
+
+function httpSignalStatus(host: HostState): Status {
+  if (!host.httpStatus || /not checked|未检查/i.test(host.httpStatus)) return "unknown";
+  return /HTTP 2\d\d|\bok\b/i.test(host.httpStatus) ? "healthy" : "critical";
+}
+
+function sshSignalStatus(host: HostState): Status {
+  if (!host.sshStatus || host.sshStatus === "not checked") return "unknown";
+  return host.sshStatus === "ok" ? "healthy" : "warning";
+}
+
+function runtimeSignalStatus(host: HostState): Status {
+  if (!host.dockerStatus || host.dockerStatus === "not checked") return "unknown";
+  return host.dockerStatus === "docker checked" ? "healthy" : "warning";
+}
+
+function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
+  if (!dashboard.observedAt) return { state: "unknown", label: "没有观测证据" };
+  const ageMs = now - new Date(dashboard.observedAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs > dashboard.staleAfterMs) {
+    return { state: "unknown", label: "证据已过期" };
+  }
+  const minutes = Math.max(0, Math.floor(ageMs / 60_000));
+  return { state: "fresh", label: minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据` };
+}
+
+function nextStepFor(host: HostState) {
+  if (host.status === "critical") return { title: "先生成只读检查预案", detail: "不要直接重启。先确认失败层和验证命令。" };
+  if (host.status === "warning") return { title: "复核异常信号", detail: "刷新这台服务器，再比较 HTTP、SSH 与运行时证据。" };
+  if (host.status === "unknown") return { title: "取得一份新证据", detail: "运行单机轻巡检；未知状态不按正常处理。" };
+  return { title: "保持值守", detail: "当前没有操作理由；等待下一次巡检即可。" };
+}
+
+function shareableJudgment(host: HostState) {
+  if (host.status === "critical") return "至少一类基础检查明确失败，需要先定位失败层。";
+  if (host.status === "warning") return "服务可能仍可用，但至少一类信号需要复核。";
+  if (host.status === "unknown") return "当前证据不足，不能把未知状态当作正常。";
+  return "最近一次有效观测没有发现基础检查异常。";
+}
+
+function shareableSignal(label: string, status: Status) {
+  const copy: Record<Status, string> = {
+    healthy: "有效证据显示正常",
+    warning: "存在需要复核的信号",
+    critical: "有效证据显示失败",
+    unknown: "没有足够的新鲜证据"
+  };
+  return `- ${label}：${copy[status]}`;
+}
+
+function discussionBrief(dashboard: DashboardStatus, host: HostState, now = Date.now()) {
+  const freshness = evidenceFreshness(dashboard, now);
+  const nextStep = nextStepFor(host);
+  const evidence = [
+    shareableSignal(signalLabels.http, httpSignalStatus(host)),
+    shareableSignal(signalLabels.ssh, sshSignalStatus(host)),
+    shareableSignal(signalLabels.runtime, runtimeSignalStatus(host))
+  ].join("\n");
+  return [
+    "LocalOps 值守讨论摘要",
+    `对象：${host.name}（${host.environment} / ${host.role}）`,
+    `状态：${statusLabels[host.status]}`,
+    `证据时效：${freshness.label}`,
+    `当前判断：${shareableJudgment(host)}`,
+    "证据：",
+    evidence,
+    `建议：${nextStep.title}。${nextStep.detail}`,
+    "边界：只讨论诊断与验证步骤，不执行重启、部署、删除或配置变更。"
+  ].join("\n");
+}
+
+function codexDiscussionLink(brief: string) {
+  const prompt = `[@LocalOps Guardian] 请基于下面的本地脱敏摘要解释最可能的故障层、缺失证据和下一条安全验证动作。不要执行任何变更。\n\n${brief}`;
+  return `codex://new?prompt=${encodeURIComponent(prompt)}`;
 }
 
 function StatusPill({ status }: { status: Status }) {
@@ -248,6 +333,8 @@ export function App() {
   const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
+  const [briefCopied, setBriefCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   async function load() {
     if (petMode) {
@@ -278,6 +365,12 @@ export function App() {
     load().catch((err: Error) => setError(err.message));
   }, []);
 
+  useEffect(() => {
+    if (petMode) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [petMode]);
+
   function retryLoad() {
     setError("");
     load().catch((err: Error) => setError(err.message));
@@ -294,6 +387,21 @@ export function App() {
     return [...(dashboard?.hosts ?? [])].sort((left, right) => rank[left.status] - rank[right.status] || left.name.localeCompare(right.name));
   }, [dashboard]);
   const currentMessage = useMemo(() => overallMessage(dashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 }), [dashboard]);
+  const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
+  const selectedNextStep = useMemo(() => selectedHost ? nextStepFor(selectedHost) : null, [selectedHost]);
+  const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
+  const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
+
+  async function copyBrief() {
+    if (!selectedBrief) return;
+    try {
+      await navigator.clipboard.writeText(selectedBrief);
+      setBriefCopied(true);
+      window.setTimeout(() => setBriefCopied(false), 2_000);
+    } catch {
+      setError("复制失败。请打开文本报告并手动复制。");
+    }
+  }
 
   async function runLightCheck(hostId?: string) {
     setLoading(true);
@@ -433,6 +541,10 @@ export function App() {
         error={error}
         onRefresh={(hostId) => runLightCheck(hostId)}
         onOpenDesk={() => window.location.assign("/")}
+        onDiscuss={(hostId) => {
+          const host = dashboard.hosts.find((item) => item.id === hostId);
+          if (host) window.location.assign(codexDiscussionLink(discussionBrief(dashboard, host)));
+        }}
       />
     );
   }
@@ -467,8 +579,8 @@ export function App() {
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={21} /></div>
           <div>
-            <strong>LocalOps Desk</strong>
-            <span>本地服务器检查工具</span>
+            <strong>LocalOps Guardian</strong>
+            <span>证据先于操作</span>
           </div>
         </div>
         <nav>
@@ -497,8 +609,9 @@ export function App() {
       <main className="main">
         <header className="topbar">
           <div>
-            <h1>服务器状态</h1>
-            <p>上次刷新：{formatTime(dashboard.generatedAt)}</p>
+            <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
+            <h1>先看结论，再决定要不要动</h1>
+            <p>页面刷新：{formatTime(dashboard.generatedAt)} · {freshness.label}</p>
           </div>
           <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
             {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
@@ -512,15 +625,27 @@ export function App() {
 
         {error ? <div className="error-line"><AlertTriangle size={16} />{error}</div> : null}
 
-        <section className={`plain-summary ${dashboard.counts.critical ? "critical" : dashboard.counts.warning ? "warning" : "healthy"}`}>
-          <div>
-            <span>当前结论</span>
+        <section className={`guardian-brief ${dashboard.counts.critical ? "critical" : dashboard.counts.warning ? "warning" : "healthy"}`}>
+          <div className="guardian-brief-copy">
+            <span className="brief-index">GUARDIAN BRIEF · {freshness.state === "fresh" ? "LIVE" : "STALE"}</span>
             <h2>{currentMessage.title}</h2>
             <p>{currentMessage.description}</p>
+            <div className="brief-focus">
+              <span>当前焦点</span>
+              <strong>{selectedHost.name}</strong>
+              <em>{selectedHost.summary}</em>
+            </div>
           </div>
-          <div className="summary-actions">
-            <button className="primary slim" onClick={() => runLightCheck()} disabled={loading}><RefreshCcw size={16} />重新检查</button>
-            <button className="secondary slim" onClick={() => setSelectedTab("hosts")}><Server size={16} />管理服务器</button>
+          <div className="guardian-decision">
+            <span>建议</span>
+            <strong>{selectedNextStep?.title}</strong>
+            <p>{selectedNextStep?.detail}</p>
+            <div className="guardian-actions">
+              <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={loading}><RefreshCcw size={16} />刷新证据</button>
+              <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制讨论摘要"}</button>
+              <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
+            </div>
+            <small>Codex 链接只预填摘要，不会自动发送或执行操作。</small>
           </div>
         </section>
 
@@ -585,6 +710,28 @@ export function App() {
                 <div className="metric">
                   <div className="metric-head"><span>Docker</span><strong>{selectedHost.dockerStatus === "docker checked" ? "已检查" : "未完成"}</strong></div>
                   <p className="metric-note">{friendlyDockerStatus(selectedHost.dockerStatus)}</p>
+                </div>
+              </div>
+              <div className="proof-path" aria-label="LocalOps 判断链">
+                <div className={`proof-node ${httpSignalStatus(selectedHost)}`}>
+                  <span>01</span>
+                  <small>{signalLabels.http}</small>
+                  <strong>{shortSignal(selectedHost.httpStatus)}</strong>
+                </div>
+                <div className={`proof-node ${sshSignalStatus(selectedHost)}`}>
+                  <span>02</span>
+                  <small>{signalLabels.ssh}</small>
+                  <strong>{friendlySshStatus(selectedHost.sshStatus)}</strong>
+                </div>
+                <div className={`proof-node ${runtimeSignalStatus(selectedHost)}`}>
+                  <span>03</span>
+                  <small>{signalLabels.runtime}</small>
+                  <strong>{friendlyDockerStatus(selectedHost.dockerStatus)}</strong>
+                </div>
+                <div className={`proof-node advice ${selectedHost.status}`}>
+                  <span>04</span>
+                  <small>{signalLabels.advice}</small>
+                  <strong>{selectedNextStep?.title}</strong>
                 </div>
               </div>
               <div className="metrics-grid compact-metrics">

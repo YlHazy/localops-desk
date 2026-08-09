@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpRight, Check, ChevronDown, RefreshCcw, Server } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { DashboardStatus, HostState, Status } from "./types";
 
@@ -36,13 +36,15 @@ export function PetMode({
   loading,
   error,
   onRefresh,
-  onOpenDesk
+  onOpenDesk,
+  onDiscuss
 }: {
   dashboard: DashboardStatus;
   loading: boolean;
   error: string;
   onRefresh: (hostId: string) => void;
   onOpenDesk: () => void;
+  onDiscuss: (hostId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -129,10 +131,13 @@ export function PetMode({
           <RefreshCcw className={loading ? "spin" : ""} size={17} />
           {loading ? "巡检中" : "立即巡检"}
         </button>
-        <button className="pet-open" onClick={onOpenDesk}>
-          查看控制台 <ArrowUpRight size={16} />
+        <button className="pet-discuss" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
+          <MessageCircle size={16} /> 和 Codex 讨论
         </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {dashboard.hosts.length === 0 ? "等待配置" : stale ? "证据已过期" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"}</small>
+        <button className="pet-open" onClick={onOpenDesk}>
+          控制台 <ArrowUpRight size={16} />
+        </button>
+        <small>{latestTime(dashboard.observedAt)} 观测 · {dashboard.hosts.length === 0 ? "等待配置" : stale ? "证据已过期" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 讨论只预填</small>
       </footer>
     </main>
   );

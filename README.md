@@ -10,6 +10,8 @@ It is intentionally not a SaaS product. The app runs on `127.0.0.1`, stores summ
 - Manual light checks and scheduled-check model.
 - Host configuration with SSH alias, environment, health URL, and Docker Compose project name.
 - Status overview, host detail, check history, dry-run action panel, and diagnostic report.
+- Evidence-first Guardian Brief with HTTP, SSH, runtime, and next-action reasoning stages.
+- A categorized discussion summary and Codex deep link that only prefill reviewable text; they never auto-send or execute an action.
 - Local API surface intended for future Codex operations agents.
 - Secret-safe defaults: no passwords, private keys, `.env` contents, or cloud AccessKey secrets are stored or printed.
 
@@ -24,6 +26,8 @@ npm run dev:api
 Open `http://127.0.0.1:4317` after the server starts. The local API serves both `/api/*` and the built Web UI from `dist/`.
 
 Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. This view is a future desktop-shell prototype, not the official Codex pet.
+
+The full desk and pet can prepare a Codex discussion task from categorized status only. Raw evidence, connection URLs, SSH aliases, and commands are deliberately excluded from that cross-app summary; detailed evidence stays in the local desk.
 
 For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:5177` and proxies API calls to `4317`.
 

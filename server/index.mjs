@@ -311,7 +311,7 @@ function deleteHost(id) {
 
 function latestHostChecks() {
   const rows = db.prepare(`
-    SELECT hc.*, h.name, h.environment, h.role, h.sshAlias, h.healthUrl, h.composeProject, cr.finishedAt AS lastCheckedAt, cr.durationMs
+    SELECT h.id AS configuredHostId, hc.*, h.name, h.environment, h.role, h.sshAlias, h.healthUrl, h.composeProject, cr.finishedAt AS lastCheckedAt, cr.durationMs
     FROM hosts h
     LEFT JOIN host_checks hc ON hc.id = (
       SELECT hc2.id FROM host_checks hc2 WHERE hc2.hostId = h.id ORDER BY hc2.id DESC LIMIT 1
@@ -321,7 +321,7 @@ function latestHostChecks() {
   `).all();
 
   return rows.map((row) => ({
-    id: row.hostId || row.id,
+    id: row.configuredHostId,
     name: row.name,
     environment: row.environment,
     role: row.role,

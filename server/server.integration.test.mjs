@@ -81,6 +81,15 @@ test("empty status exposes explicit freshness metadata", async (t) => {
   assert.deepEqual(status.hosts, []);
 });
 
+test("configured hosts keep their identity before the first check", async (t) => {
+  const api = await startApi(t, { LOCALOPS_SEED_HOSTS: "1" });
+  const response = await fetch(`${api.base}/api/status`);
+  assert.equal(response.status, 200);
+  const status = await response.json();
+  assert.deepEqual(status.hosts.map((host) => host.id), ["lexhub-demo-01", "lexhub-prod-01", "lexhub-prod-02"]);
+  assert.ok(status.hosts.every((host) => host.status === "unknown"));
+});
+
 test("host input rejects unsafe SSH aliases with a 400 response", async (t) => {
   const api = await startApi(t);
   const response = await fetch(`${api.base}/api/hosts`, {
