@@ -19,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { PetMode } from "./PetMode";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
@@ -232,6 +233,7 @@ function HostForm({
 }
 
 export function App() {
+  const petMode = new URLSearchParams(window.location.search).get("mode") === "pet";
   const [dashboard, setDashboard] = useState<DashboardStatus | null>(null);
   const [checks, setChecks] = useState<CheckRun[]>([]);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
@@ -248,6 +250,12 @@ export function App() {
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
 
   async function load() {
+    if (petMode) {
+      const status = await api<DashboardStatus>("/api/status");
+      setDashboard(status);
+      setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
+      return;
+    }
     const [status, recent, currentReport, schedulerState] = await Promise.all([
       api<DashboardStatus>("/api/status"),
       api<{ checks: CheckRun[] }>("/api/checks"),
@@ -269,6 +277,11 @@ export function App() {
   useEffect(() => {
     load().catch((err: Error) => setError(err.message));
   }, []);
+
+  function retryLoad() {
+    setError("");
+    load().catch((err: Error) => setError(err.message));
+  }
 
   const selectedHost = useMemo(
     () => dashboard?.hosts.find((host) => host.id === selectedHostId) ?? dashboard?.hosts[0] ?? null,
@@ -402,11 +415,48 @@ export function App() {
     }
   }
 
-  if (!dashboard || !selectedHost) {
+  if (!dashboard) {
     return (
-      <main className="boot">
-        <Activity className="spin" />
-        <span>正在连接本地 LocalOps API...</span>
+      <main className={`boot ${petMode ? "pet-boot" : ""}`}>
+        {error ? <AlertTriangle /> : <Activity className="spin" />}
+        <span>{error ? `无法连接本地 LocalOps API：${error}` : "正在连接本地 LocalOps API..."}</span>
+        {error ? <button onClick={retryLoad}>重试</button> : null}
+      </main>
+    );
+  }
+
+  if (petMode) {
+    return (
+      <PetMode
+        dashboard={dashboard}
+        loading={loading}
+        error={error}
+        onRefresh={(hostId) => runLightCheck(hostId)}
+        onOpenDesk={() => window.location.assign("/")}
+      />
+    );
+  }
+
+  if (!selectedHost) {
+    return (
+      <main className="empty-host-setup">
+        <section className="empty-host-card">
+          <Server size={28} />
+          <h1>尚未配置服务器</h1>
+          <p>先添加一台服务器。只需名称；SSH alias 和健康检查地址都可以稍后再填。</p>
+          {showHostForm ? (
+            <HostForm
+              form={hostForm}
+              setForm={setHostForm}
+              onSubmit={saveHost}
+              onCancel={() => setShowHostForm(false)}
+              editing={false}
+            />
+          ) : (
+            <button className="primary" onClick={startCreateHost}><Plus size={16} />添加服务器</button>
+          )}
+          {error ? <p className="error-banner">{error}</p> : null}
+        </section>
       </main>
     );
   }

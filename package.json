@@ -9,7 +9,10 @@
     "dev:web": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "smoke:api": "node scripts/smoke-api.mjs"
+    "smoke:api": "node scripts/smoke-api.mjs",
+    "test": "npm run test:server && npm run test:codex-plugin",
+    "test:server": "node --test server/input-validation.test.mjs server/server.integration.test.mjs",
+    "test:codex-plugin": "node --test plugins/localops-guardian/scripts/mcp-server.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.7.0",

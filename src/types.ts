@@ -35,6 +35,8 @@ export interface HostConfigInput {
 
 export interface DashboardStatus {
   generatedAt: string;
+  observedAt: string | null;
+  staleAfterMs: number;
   mode: "safe-simulated" | "ssh-enabled";
   counts: Record<Status, number>;
   hosts: HostState[];

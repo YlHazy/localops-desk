@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { validateSshAlias } from "./input-validation.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -114,7 +115,7 @@ async function collectHttp(host, timeoutMs = 5000) {
       status: statusFromHttp(response.ok, response.status),
       httpStatus: `${response.status} ${response.statusText || "response"}`.trim(),
       httpLatencyMs: latency,
-      evidence: [`HTTP ${response.status} from ${host.healthUrl} in ${latency}ms.`]
+      evidence: [`HTTP ${response.status} from the configured health endpoint in ${latency}ms.`]
     };
   } catch (error) {
     clearTimeout(timer);
@@ -124,7 +125,7 @@ async function collectHttp(host, timeoutMs = 5000) {
       status: "critical",
       httpStatus: message,
       httpLatencyMs: latency,
-      evidence: [`HTTP probe failed for ${host.healthUrl}: ${message} after ${latency}ms.`]
+      evidence: [`HTTP probe failed for the configured health endpoint: ${message} after ${latency}ms.`]
     };
   }
 }
@@ -150,10 +151,11 @@ async function runSshReadOnly(host, commandKey, timeoutMs = 5000) {
   if (!host.sshAlias) {
     throw new Error("SSH alias is not configured.");
   }
+  const sshAlias = validateSshAlias(host.sshAlias, { allowEmpty: false });
   const result = await execFileAsync("ssh", [
     "-o", "BatchMode=yes",
     "-o", "ConnectTimeout=5",
-    host.sshAlias,
+    sshAlias,
     command
   ], {
     timeout: timeoutMs,

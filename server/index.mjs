@@ -1,20 +1,26 @@
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectHost, seedHosts } from "./runtime.mjs";
+import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const dataDir = join(root, "data");
+const host = process.env.LOCALOPS_API_HOST || "127.0.0.1";
+const port = Number(process.env.LOCALOPS_API_PORT || "4317");
+const mode = process.env.LOCALOPS_ENABLE_SSH === "1" ? "ssh-enabled" : "safe-simulated";
+const loopbackApiHosts = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+if (!loopbackApiHosts.has(host)) {
+  throw new Error("LOCALOPS_API_HOST must be a loopback address in this MVP.");
+}
+
+const dataDir = process.env.LOCALOPS_DATA_DIR ? resolve(process.env.LOCALOPS_DATA_DIR) : join(root, "data");
 mkdirSync(dataDir, { recursive: true });
 
 const dbPath = join(dataDir, "localops.sqlite");
 const db = new DatabaseSync(dbPath);
-const host = process.env.LOCALOPS_API_HOST || "127.0.0.1";
-const port = Number(process.env.LOCALOPS_API_PORT || "4317");
-const mode = process.env.LOCALOPS_ENABLE_SSH === "1" ? "ssh-enabled" : "safe-simulated";
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS hosts (
@@ -79,7 +85,7 @@ ensureColumn("check_runs", "trigger", "TEXT NOT NULL DEFAULT 'manual'");
 ensureColumn("check_runs", "hostScope", "TEXT");
 
 const existingHosts = db.prepare("SELECT COUNT(*) AS count FROM hosts").get();
-if (existingHosts.count === 0) {
+if (existingHosts.count === 0 && process.env.LOCALOPS_SEED_HOSTS !== "0") {
   const insert = db.prepare(`
     INSERT INTO hosts (id, name, environment, role, sshAlias, healthUrl, composeProject, tags, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -129,11 +135,50 @@ function json(res, body, status = 200) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    "access-control-allow-origin": "http://127.0.0.1:5177",
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "content-type"
   });
   res.end(payload);
+}
+
+function loopbackRequestHost(value) {
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return loopbackApiHosts.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function browserOriginAllowed(origin, requestHost) {
+  try {
+    const parsed = new URL(origin);
+    const sameOrigin = parsed.host.toLowerCase() === requestHost.toLowerCase();
+    const devOrigin = loopbackRequestHost(origin) && parsed.port === "5177";
+    return sameOrigin || devOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function validateBrowserBoundary(req, res) {
+  const requestHost = req.headers.host || "";
+  if (!loopbackRequestHost(requestHost)) {
+    json(res, { error: "HOST_NOT_ALLOWED", message: "Request Host must resolve to a loopback name." }, 403);
+    return false;
+  }
+  const origin = req.headers.origin;
+  if (origin && !browserOriginAllowed(origin, requestHost)) {
+    json(res, { error: "ORIGIN_NOT_ALLOWED", message: "Browser Origin must be loopback." }, 403);
+    return false;
+  }
+  if (origin) res.setHeader("access-control-allow-origin", origin);
+  const mutating = new Set(["POST", "PUT", "DELETE"]).has(req.method || "");
+  if (mutating && !String(req.headers["content-type"] || "").toLowerCase().startsWith("application/json")) {
+    json(res, { error: "JSON_REQUIRED", message: "Mutating requests require application/json." }, 415);
+    return false;
+  }
+  return true;
 }
 
 const contentTypes = {
@@ -201,11 +246,20 @@ function normalizeHostInput(input, existing = {}) {
   }
   const healthUrl = String(input.healthUrl ?? existing.healthUrl ?? "").trim();
   if (healthUrl) {
-    const parsed = new URL(healthUrl);
+    let parsed;
+    try {
+      parsed = new URL(healthUrl);
+    } catch {
+      throw new InputValidationError("healthUrl must be a valid http:// or https:// URL.");
+    }
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      throw new Error("healthUrl must start with http:// or https://.");
+      throw new InputValidationError("healthUrl must start with http:// or https://.");
+    }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new InputValidationError("healthUrl must not contain credentials, query parameters, or fragments.");
     }
   }
+  const sshAlias = validateSshAlias(input.sshAlias ?? existing.sshAlias ?? "");
   const tags = Array.isArray(input.tags)
     ? input.tags
     : String(input.tags ?? existing.tags?.join?.(",") ?? "")
@@ -217,7 +271,7 @@ function normalizeHostInput(input, existing = {}) {
     name,
     environment: String(input.environment ?? existing.environment ?? "personal").trim() || "personal",
     role: String(input.role ?? existing.role ?? "server").trim() || "server",
-    sshAlias: String(input.sshAlias ?? existing.sshAlias ?? "").trim(),
+    sshAlias,
     healthUrl,
     composeProject: String(input.composeProject ?? existing.composeProject ?? "").trim(),
     tags,
@@ -303,6 +357,43 @@ function statusCounts(hosts) {
   }, { healthy: 0, warning: 0, critical: 0, unknown: 0 });
 }
 
+function statusSnapshot(hosts) {
+  const staleAfterMs = Math.max(settingNumber("lightIntervalMinutes", 15, { min: 1, max: 1440 }) * 2 * 60 * 1000, 10 * 60 * 1000);
+  const now = Date.now();
+  const effectiveHosts = hosts.map((hostItem) => {
+    const checkedAt = hostItem.lastCheckedAt ? new Date(hostItem.lastCheckedAt).getTime() : Number.NaN;
+    const stale = !Number.isFinite(checkedAt) || now - checkedAt > staleAfterMs;
+    if (!stale) return hostItem;
+    return {
+      ...hostItem,
+      status: "unknown",
+      summary: hostItem.lastCheckedAt
+        ? "最近一次检查证据已过期，请重新巡检。"
+        : "尚未运行过检查。"
+    };
+  });
+  const observedAt = hosts
+    .map((hostItem) => hostItem.lastCheckedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || null;
+  return {
+    generatedAt: new Date().toISOString(),
+    observedAt,
+    staleAfterMs,
+    mode,
+    counts: statusCounts(effectiveHosts),
+    hosts: effectiveHosts
+  };
+}
+
+function agentSafeSnapshot(snapshot) {
+  return {
+    ...snapshot,
+    hosts: snapshot.hosts.map(({ healthUrl, sshAlias, composeProject, evidence, ...hostItem }) => hostItem)
+  };
+}
+
 function overallStatus(hostResults) {
   if (hostResults.some((item) => item.status === "critical")) return "critical";
   if (hostResults.some((item) => item.status === "warning")) return "warning";
@@ -310,54 +401,80 @@ function overallStatus(hostResults) {
   return "healthy";
 }
 
+const activeLightChecks = new Map();
+
+class CheckAlreadyRunningError extends Error {
+  constructor(active) {
+    super(`A light check is already running for ${active.scope}.`);
+    this.code = "CHECK_ALREADY_RUNNING";
+    this.httpStatus = 409;
+    this.runId = active.runId;
+    this.scope = active.scope;
+  }
+}
+
+function conflictingLightCheck(scope) {
+  if (scope === "all") return activeLightChecks.values().next().value || null;
+  return activeLightChecks.get("all") || activeLightChecks.get(scope) || null;
+}
+
 async function runLightCheck(options = {}) {
-  const startedAt = new Date();
-  const allHosts = getHosts();
-  const hosts = options.hostId
-    ? allHosts.filter((hostItem) => hostItem.id === options.hostId)
-    : allHosts;
-  if (options.hostId && hosts.length === 0) {
-    throw new Error(`Host not found: ${options.hostId}`);
+  const scope = options.hostId || "all";
+  const active = conflictingLightCheck(scope);
+  if (active) throw new CheckAlreadyRunningError(active);
+  const activeRun = { runId: randomUUID(), scope };
+  activeLightChecks.set(scope, activeRun);
+  try {
+    const startedAt = new Date();
+    const allHosts = getHosts();
+    const hosts = options.hostId
+      ? allHosts.filter((hostItem) => hostItem.id === options.hostId)
+      : allHosts;
+    if (options.hostId && hosts.length === 0) {
+      throw new Error(`Host not found: ${options.hostId}`);
+    }
+    const hostResults = [];
+    for (const hostItem of hosts) {
+      hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
+    }
+    const finishedAt = new Date();
+    const durationMs = finishedAt.getTime() - startedAt.getTime();
+    const status = overallStatus(hostResults);
+    const trigger = String(options.trigger || (options.hostId ? "manual-host" : "manual"));
+    const hostScope = options.hostId || "all";
+    const summary = `${hostResults.length} host${hostResults.length === 1 ? "" : "s"} checked (${hostScope}), overall ${status}.`;
+
+    const run = db.prepare(`
+      INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
+
+    const insertHostCheck = db.prepare(`
+      INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const result of hostResults) {
+      insertHostCheck.run(
+        run.lastInsertRowid,
+        result.hostId,
+        result.status,
+        result.httpStatus,
+        result.httpLatencyMs,
+        result.sshStatus,
+        result.cpuPercent,
+        result.memoryPercent,
+        result.diskPercent,
+        result.dockerStatus,
+        JSON.stringify(result.evidence),
+        result.summary
+      );
+    }
+
+    return { id: Number(run.lastInsertRowid), runId: activeRun.runId, status, summary, durationMs, hostResults };
+  } finally {
+    activeLightChecks.delete(scope);
   }
-  const hostResults = [];
-  for (const hostItem of hosts) {
-    hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
-  }
-  const finishedAt = new Date();
-  const durationMs = finishedAt.getTime() - startedAt.getTime();
-  const status = overallStatus(hostResults);
-  const trigger = String(options.trigger || (options.hostId ? "manual-host" : "manual"));
-  const hostScope = options.hostId || "all";
-  const summary = `${hostResults.length} host${hostResults.length === 1 ? "" : "s"} checked (${hostScope}), overall ${status}.`;
-
-  const run = db.prepare(`
-    INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
-
-  const insertHostCheck = db.prepare(`
-    INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const result of hostResults) {
-    insertHostCheck.run(
-      run.lastInsertRowid,
-      result.hostId,
-      result.status,
-      result.httpStatus,
-      result.httpLatencyMs,
-      result.sshStatus,
-      result.cpuPercent,
-      result.memoryPercent,
-      result.diskPercent,
-      result.dockerStatus,
-      JSON.stringify(result.evidence),
-      result.summary
-    );
-  }
-
-  return { id: Number(run.lastInsertRowid), status, summary, durationMs, hostResults };
 }
 
 function recentChecks() {
@@ -436,6 +553,13 @@ function scheduleNextLightCheck(delayMs) {
       setSetting("schedulerLastRunAt", new Date().toISOString());
       runRetention();
     } catch (error) {
+      if (error?.code === "CHECK_ALREADY_RUNNING") {
+        if (getSetting("schedulerEnabled", "0") === "1") {
+          const snapshot = schedulerSnapshot();
+          scheduleNextLightCheck(snapshot.lightIntervalMinutes * 60 * 1000);
+        }
+        return;
+      }
       const failures = settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }) + 1;
       setSetting("schedulerConsecutiveFailures", String(failures));
       setSetting("schedulerLastRunAt", new Date().toISOString());
@@ -474,20 +598,21 @@ function settingNumberFromInput(value, fallback, min, max) {
   return String(Math.min(Math.max(normalized, min), max));
 }
 
-function currentReport() {
-  const hosts = latestHostChecks();
-  const counts = statusCounts(hosts);
+function currentReport(snapshot = statusSnapshot(latestHostChecks())) {
+  const hosts = snapshot.hosts;
+  const counts = snapshot.counts;
   const suspectHosts = hosts.filter((item) => item.status !== "healthy");
-  const configuredHttpHosts = hosts.filter((item) => item.healthUrl);
+  const configuredHttpHosts = hosts.filter((item) => item.healthUrl && item.status !== "unknown");
   const allHttpFailed = configuredHttpHosts.length > 0 && configuredHttpHosts.every((item) => !/^2\d\d|3\d\d/.test(item.httpStatus));
   const lines = [];
   lines.push(`LocalOps Desk 诊断报告`);
   lines.push(`生成时间：${new Date().toISOString()}`);
   lines.push(`采集模式：${mode}`);
+  lines.push(`最近观测：${snapshot.observedAt || "尚未巡检"}；证据有效期：${Math.round(snapshot.staleAfterMs / 60000)} 分钟`);
   lines.push(`状态统计：正常 ${counts.healthy} / 关注 ${counts.warning} / 异常 ${counts.critical} / 未知 ${counts.unknown}`);
   lines.push(`优先关注：${suspectHosts.length ? suspectHosts.map((item) => `${item.name}(${item.status})`).join(", ") : "暂无"}`);
   if (allHttpFailed) {
-    lines.push("全局提示：所有已配置 HTTP 健康检查都失败，先排查本机网络、代理、DNS 或运行环境限制，再判断远端整体故障。");
+    lines.push("全局提示：所有具备新鲜证据的 HTTP 健康检查都失败，先排查本机网络、代理、DNS 或运行环境限制，再判断远端整体故障。");
   }
   lines.push("");
   for (const hostItem of hosts) {
@@ -506,13 +631,19 @@ function dryRunAction(input) {
   const hostId = input.hostId || "unknown-host";
   const actionKey = input.actionKey || "inspect-service";
   const hostItem = getHosts().find((item) => item.id === hostId);
-  const ssh = hostItem?.sshAlias || "<ssh-alias>";
+  if (!hostItem) {
+    const error = new Error(`Host not found: ${hostId}`);
+    error.code = "HOST_NOT_FOUND";
+    error.httpStatus = 404;
+    throw error;
+  }
+  const ssh = validateSshAlias(hostItem.sshAlias, { allowEmpty: false });
 
   const plans = {
     "inspect-service": {
       actionKey,
       riskTier: "read-only",
-      title: `只读诊断：${hostItem?.name || hostId}`,
+      title: `只读诊断：${hostItem.name}`,
       commands: [
         `ssh ${ssh} 'uptime'`,
         `ssh ${ssh} 'free -m'`,
@@ -524,7 +655,7 @@ function dryRunAction(input) {
     "reload-nginx": {
       actionKey,
       riskTier: "low",
-      title: `Reload Nginx：${hostItem?.name || hostId}`,
+      title: `Reload Nginx：${hostItem.name}`,
       commands: [`ssh ${ssh} 'sudo nginx -t'`, `ssh ${ssh} 'sudo systemctl reload nginx'`],
       verification: ["先通过 nginx -t。", "reload 后检查 HTTP health。", "失败时不继续执行后续动作。"],
       blockedReason: "MVP 只生成 dry-run，不执行真实 reload。"
@@ -532,7 +663,7 @@ function dryRunAction(input) {
     "restart-compose-service": {
       actionKey,
       riskTier: "medium",
-      title: `重启 Compose 服务：${hostItem?.name || hostId}`,
+      title: `重启 Compose 服务：${hostItem.name}`,
       commands: [
         `ssh ${ssh} 'cd /opt/<app>/compose && docker compose ps'`,
         `ssh ${ssh} 'cd /opt/<app>/compose && docker compose restart <service>'`
@@ -576,6 +707,7 @@ function agentManifest() {
 
 const server = createServer(async (req, res) => {
   try {
+    if (!validateBrowserBoundary(req, res)) return;
     if (req.method === "OPTIONS") return json(res, {});
     const url = new URL(req.url || "/", `http://${host}:${port}`);
 
@@ -585,7 +717,7 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/status") {
       const hosts = latestHostChecks();
-      return json(res, { generatedAt: new Date().toISOString(), mode, counts: statusCounts(hosts), hosts });
+      return json(res, statusSnapshot(hosts));
     }
     if (req.method === "GET" && url.pathname === "/api/hosts") {
       return json(res, { hosts: getHosts() });
@@ -640,20 +772,23 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/agent/status") {
       const hosts = latestHostChecks();
+      const snapshot = statusSnapshot(hosts);
       return json(res, {
-        generatedAt: new Date().toISOString(),
-        mode,
-        counts: statusCounts(hosts),
-        hosts,
+        ...agentSafeSnapshot(snapshot),
         scheduler: schedulerSnapshot(),
         checks: recentChecks().slice(0, 5),
-        report: currentReport()
+        report: currentReport(snapshot)
       });
     }
 
     return json(res, { error: "Not found" }, 404);
   } catch (error) {
-    return json(res, { error: error instanceof Error ? error.message : "Unknown error" }, 500);
+    const status = Number(error?.httpStatus) || 500;
+    return json(res, {
+      error: error?.code || "REQUEST_FAILED",
+      message: error instanceof Error ? error.message : "Unknown error",
+      ...(error?.runId ? { runId: error.runId, scope: error.scope } : {})
+    }, status);
   }
 });
 
@@ -661,5 +796,7 @@ server.listen(port, host, () => {
   if (schedulerSnapshot().enabled) {
     scheduleNextLightCheck(schedulerSnapshot().lightIntervalMinutes * 60 * 1000);
   }
-  console.log(`LocalOps API listening on http://${host}:${port} (${mode})`);
+  const address = server.address();
+  const listeningPort = address && typeof address === "object" ? address.port : port;
+  console.log(`LocalOps API listening on http://${host}:${listeningPort} (${mode})`);
 });

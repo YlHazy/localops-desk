@@ -23,10 +23,27 @@ npm run dev:api
 
 Open `http://127.0.0.1:4317` after the server starts. The local API serves both `/api/*` and the built Web UI from `dist/`.
 
+Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. This view is a future desktop-shell prototype, not the official Codex pet.
+
 For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:5177` and proxies API calls to `4317`.
+
+## Codex Pet Integration
+
+`plugins/localops-guardian` packages LocalOps as a local Codex plugin, and `.agents/plugins/marketplace.json` exposes it as a repo-local marketplace entry. It lets a Codex task represented by the native Codex pet read and explain server status, run a bounded single-host light check, fetch diagnostic evidence, and prepare dry-run recovery plans through the LocalOps API. It does not modify Codex, drive native pet animations, or expose arbitrary shell/restart tools.
+
+The plugin expects LocalOps at `http://127.0.0.1:4317` by default. See `docs/03-architecture/codex-pet-integration.md` for the trust model and supported boundary.
+
+From a local clone, install the repo marketplace and plugin with:
+
+```powershell
+codex plugin marketplace add .
+codex plugin add localops-guardian@localops-desk
+```
+
+Start a new Codex task after installation so the skill and MCP tools are discovered.
 
 ## Safety Defaults
 
 Real SSH collection is disabled unless `LOCALOPS_ENABLE_SSH=1` is set. Without that flag, checks use deterministic simulated collectors so UI and workflow development remain safe.
 
-When SSH is enabled, host entries must reference aliases that already work in the local user's `~/.ssh/config`. A quick preflight is `ssh -G <alias>`; if it does not resolve to the intended host, LocalOps will still run HTTP checks but SSH resource and Docker evidence will be reported as unavailable.
+When SSH is enabled, host entries must reference aliases that already work in the local user's `~/.ssh/config`. Aliases are limited to letters, numbers, `.`, `_`, and `-`, and cannot start with `-`. A quick preflight is `ssh -G <alias>`; if it does not resolve to the intended host, LocalOps will still run HTTP checks but SSH resource and Docker evidence will be reported as unavailable.

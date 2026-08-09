@@ -1,0 +1,20 @@
+{
+  "name": "localops-desk",
+  "interface": {
+    "displayName": "LocalOps Desk"
+  },
+  "plugins": [
+    {
+      "name": "localops-guardian",
+      "source": {
+        "source": "local",
+        "path": "./plugins/localops-guardian"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

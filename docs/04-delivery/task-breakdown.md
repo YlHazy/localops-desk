@@ -29,5 +29,9 @@
 
 ## Phase 4: Desktop Package
 
-- Wrap local Web app in Tauri or Electron.
+- Add and verify a compact pet-mode surface driven by the existing local API.
+- Package the LocalOps Guardian Codex plugin and bounded MCP tools.
+- Combine the native Codex pet's task lifecycle with LocalOps evidence without patching Codex.
+- Add a dependency-light Windows app-window launcher for the pet surface.
+- Evaluate a native always-on-top shell only after the pet workflow is validated; avoid taking Electron/Tauri weight by default.
 - Add local encrypted configuration if needed.

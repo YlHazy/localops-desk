@@ -31,6 +31,32 @@ button {
   color: #556170;
 }
 
+.empty-host-setup {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f6f8fb;
+}
+
+.empty-host-card {
+  width: min(760px, 100%);
+  padding: 28px;
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 45px rgba(36, 53, 68, 0.08);
+}
+
+.empty-host-card > svg {
+  color: #24796f;
+  margin-bottom: 12px;
+}
+
+.empty-host-card > p {
+  color: #647383;
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }

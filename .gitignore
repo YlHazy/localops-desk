@@ -9,3 +9,4 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 *.log
 *.tsbuildinfo
+work/

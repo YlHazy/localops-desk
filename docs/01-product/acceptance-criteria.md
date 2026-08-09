@@ -8,4 +8,13 @@
 - Dry-run action output is visible and does not execute a real command.
 - The Agent API manifest lists supported local endpoints.
 - No sensitive values are present in seed data or output.
+- `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
+- The pet's expression, copy, and accent reflect the worst current host state.
+- The pet can run a light check, disclose local API errors, list host states, and open the full desk.
+- The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
+- Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
+- Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.
+- Evidence older than the configured freshness window is shown as unknown, and the footer uses observation time rather than response generation time.
+- A pet or Codex-triggered light check refreshes exactly one host.
+- Motion respects `prefers-reduced-motion`; keyboard focus remains visible.
 
