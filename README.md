@@ -37,6 +37,13 @@ For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:51
 
 The plugin expects LocalOps at `http://127.0.0.1:4317` by default. See `docs/03-architecture/codex-pet-integration.md` for the trust model and supported boundary.
 
+The matching visual identity is **小哨 / Sentry Otter**. Its character brief,
+state direction, official hatch prompt, and asset acceptance gate are in
+`docs/02-design/guardian-pet-identity.md`. The checked-in image is a concept
+reference, not an installable sprite; it intentionally remains blocked until a
+genuine transparent 1536 × 1872 asset is produced through the supported Codex
+pet flow.
+
 From a local clone, install the repo marketplace and plugin with:
 
 ```powershell
