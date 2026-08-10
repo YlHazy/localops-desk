@@ -12,6 +12,14 @@ import test from "node:test";
 
 const serverScript = fileURLToPath(new URL("./index.mjs", import.meta.url));
 
+async function closeTestServer(server) {
+  if (!server.listening) return;
+  const closed = once(server, "close");
+  server.close();
+  server.closeAllConnections?.();
+  await closed;
+}
+
 function requestWithHost(url, hostHeader) {
   const target = new URL(url);
   return new Promise((resolve, reject) => {
@@ -273,7 +281,7 @@ test("overlapping checks share the same in-memory run identity and do not duplic
   });
   probe.listen(0, "127.0.0.1");
   await once(probe, "listening");
-  t.after(() => probe.close());
+  t.after(() => closeTestServer(probe));
 
   const api = await startApi(t);
   const createdResponse = await fetch(`${api.base}/api/hosts`, {

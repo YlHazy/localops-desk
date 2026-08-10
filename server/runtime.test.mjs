@@ -4,6 +4,14 @@ import { once } from "node:events";
 import test from "node:test";
 import { collectHost } from "./runtime.mjs";
 
+async function closeTestServer(server) {
+  if (!server.listening) return;
+  const closed = once(server, "close");
+  server.close();
+  server.closeAllConnections?.();
+  await closed;
+}
+
 test("offline demo profile bypasses HTTP and SSH collectors even when targets are injected", async (t) => {
   let requestCount = 0;
   const probe = createServer((_req, res) => {
@@ -12,7 +20,7 @@ test("offline demo profile bypasses HTTP and SSH collectors even when targets ar
   });
   probe.listen(0, "127.0.0.1");
   await once(probe, "listening");
-  t.after(() => probe.close());
+  t.after(() => closeTestServer(probe));
 
   const result = await collectHost({
     id: "localops-sample-healthy",
