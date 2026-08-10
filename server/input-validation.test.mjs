@@ -3,7 +3,7 @@ import test from "node:test";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 
 test("accepts ordinary SSH config aliases and an intentionally empty alias", () => {
-  assert.equal(validateSshAlias("lexhub-prod-01-proxy"), "lexhub-prod-01-proxy");
+  assert.equal(validateSshAlias("my-server-readonly"), "my-server-readonly");
   assert.equal(validateSshAlias("server_01.example"), "server_01.example");
   assert.equal(validateSshAlias(""), "");
 });

@@ -25,6 +25,17 @@ npm run dev:api
 
 Open `http://127.0.0.1:4317` after the server starts. The local API serves both `/api/*` and the built Web UI from `dist/`.
 
+New data directories start empty. Add a host through the in-product setup flow;
+LocalOps never inserts or probes a real network target by default. For a fully
+offline UI demonstration, set `LOCALOPS_SEED_DEMO=1` before the first start of a
+fresh data directory. The three sample hosts contain no URL, SSH alias, Compose
+project, customer identifier, or remote collector. The retired
+`LOCALOPS_SEED_HOSTS` flag no longer inserts anything.
+
+Upgrades preserve existing SQLite host rows, including rows created by older
+versions. Review and delete obsolete entries through the UI; LocalOps does not
+silently remove user-owned configuration during startup.
+
 Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. This view is a future desktop-shell prototype, not the official Codex pet.
 
 The full desk and pet can prepare a Codex discussion task from categorized status only. Raw evidence, connection URLs, SSH aliases, and commands are deliberately excluded from that cross-app summary; detailed evidence stays in the local desk.

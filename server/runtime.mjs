@@ -4,72 +4,75 @@ import { validateSshAlias } from "./input-validation.mjs";
 
 const execFileAsync = promisify(execFile);
 
-export const seedHosts = [
+export const demoHosts = [
   {
-    id: "lexhub-prod-01",
-    name: "lexhub-prod-01",
-    environment: "production",
-    role: "prod ecs / zone h",
-    sshAlias: "lexhub-prod-01-proxy",
-    healthUrl: "https://ai2law.cn/api/v1/health/ready",
-    composeProject: "lexhub-main",
-    tags: ["main", "alb", "docker"]
+    id: "localops-sample-healthy",
+    name: "Sample healthy service",
+    environment: "sample",
+    role: "offline UI demonstration",
+    sshAlias: "",
+    healthUrl: "",
+    composeProject: "",
+    tags: ["localops:offline-demo"]
   },
   {
-    id: "lexhub-prod-02",
-    name: "lexhub-prod-02",
-    environment: "production",
-    role: "prod ecs / zone i",
-    sshAlias: "lexhub-prod-02-proxy",
-    healthUrl: "https://www.ai2law.cn/api/v1/health/ready",
-    composeProject: "lexhub-main",
-    tags: ["main", "alb", "docker"]
+    id: "localops-sample-warning",
+    name: "Sample attention service",
+    environment: "sample",
+    role: "offline UI demonstration",
+    sshAlias: "",
+    healthUrl: "",
+    composeProject: "",
+    tags: ["localops:offline-demo"]
   },
   {
-    id: "lexhub-demo-01",
-    name: "lexhub-demo-01",
-    environment: "demo",
-    role: "cloud demo runtime",
-    sshAlias: "lexhub-demo-01-proxy",
-    healthUrl: "http://182.92.161.246/api/v1/health/ready",
-    composeProject: "lexhub-cloud-demo",
-    tags: ["demo", "local-db", "docker"]
+    id: "localops-sample-unknown",
+    name: "Sample unobserved service",
+    environment: "sample",
+    role: "offline UI demonstration",
+    sshAlias: "",
+    healthUrl: "",
+    composeProject: "",
+    tags: ["localops:offline-demo"]
   }
 ];
 
-const simulatedProfiles = {
-  "lexhub-prod-01": {
+const offlineDemoProfiles = {
+  "localops-sample-healthy": {
     status: "healthy",
-    httpStatus: "200 ready",
+    httpStatus: "simulated 200 ready",
+    httpLatencyMs: 24,
     sshStatus: "simulated ok",
     cpuPercent: 18,
     memoryPercent: 46,
     diskPercent: 52,
     dockerStatus: "compose healthy",
-    summary: "生产节点健康，资源压力正常。",
-    evidence: ["ALB readiness 模拟正常。", "Docker Compose Web/API/Agent/workers 模拟在线。", "磁盘低于关注阈值。"]
+    summary: "离线演示：服务正常，资源压力正常。",
+    evidence: ["这是本机离线生成的演示证据。", "没有发起 HTTP、SSH 或其他网络请求。"]
   },
-  "lexhub-prod-02": {
+  "localops-sample-warning": {
     status: "warning",
-    httpStatus: "200 ready",
+    httpStatus: "simulated 200 ready",
+    httpLatencyMs: 37,
     sshStatus: "simulated ok",
     cpuPercent: 31,
     memoryPercent: 68,
     diskPercent: 76,
     dockerStatus: "compose healthy",
-    summary: "生产节点可用，但磁盘接近关注阈值。",
-    evidence: ["HTTP readiness 模拟正常。", "磁盘 76%，建议关注增长趋势。", "未发现关键错误摘要。"]
+    summary: "离线演示：服务可用，但磁盘接近关注阈值。",
+    evidence: ["这是本机离线生成的演示证据。", "磁盘 76% 仅用于展示关注状态。"]
   },
-  "lexhub-demo-01": {
+  "localops-sample-unknown": {
     status: "unknown",
-    httpStatus: "not probed",
+    httpStatus: "simulated not observed",
+    httpLatencyMs: null,
     sshStatus: "simulated disabled",
     cpuPercent: null,
     memoryPercent: null,
     diskPercent: null,
     dockerStatus: "not checked",
-    summary: "真实 SSH 未启用，demo 节点保持未知状态。",
-    evidence: ["LOCALOPS_ENABLE_SSH 未开启。", "MVP 默认不触碰真实服务器。", "可在后续只读 SSH 阶段启用真实采集。"]
+    summary: "离线演示：没有观测证据，状态保持未知。",
+    evidence: ["这是本机离线生成的演示证据。", "未知状态不会被伪装成正常。"]
   }
 };
 
@@ -212,8 +215,18 @@ async function collectSshReadOnly(host) {
 }
 
 export async function collectHost(host, options) {
+  const demoProfile = Array.isArray(host.tags) && host.tags.includes("localops:offline-demo")
+    ? offlineDemoProfiles[host.id]
+    : null;
+  if (demoProfile) {
+    return {
+      hostId: host.id,
+      ...demoProfile,
+      evidence: [...demoProfile.evidence]
+    };
+  }
   const http = await collectHttp(host, options.httpTimeoutMs);
-  const profile = simulatedProfiles[host.id] || {
+  const profile = {
     sshStatus: "simulated disabled",
     cpuPercent: null,
     memoryPercent: null,

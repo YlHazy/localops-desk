@@ -39,7 +39,7 @@ async function startApi(t, extraEnv = {}) {
       LOCALOPS_API_HOST: "127.0.0.1",
       LOCALOPS_API_PORT: "0",
       LOCALOPS_DATA_DIR: dataDir,
-      LOCALOPS_SEED_HOSTS: "0",
+      LOCALOPS_SEED_DEMO: "0",
       ...extraEnv
     },
     stdio: ["ignore", "pipe", "pipe"]
@@ -81,13 +81,34 @@ test("empty status exposes explicit freshness metadata", async (t) => {
   assert.deepEqual(status.hosts, []);
 });
 
-test("configured hosts keep their identity before the first check", async (t) => {
-  const api = await startApi(t, { LOCALOPS_SEED_HOSTS: "1" });
+test("offline demo hosts require explicit opt-in and contain no connection targets", async (t) => {
+  const api = await startApi(t, { LOCALOPS_SEED_DEMO: "1" });
   const response = await fetch(`${api.base}/api/status`);
   assert.equal(response.status, 200);
   const status = await response.json();
-  assert.deepEqual(status.hosts.map((host) => host.id), ["lexhub-demo-01", "lexhub-prod-01", "lexhub-prod-02"]);
+  assert.deepEqual(status.hosts.map((host) => host.id), ["localops-sample-warning", "localops-sample-healthy", "localops-sample-unknown"]);
   assert.ok(status.hosts.every((host) => host.status === "unknown"));
+
+  const configured = await fetch(`${api.base}/api/hosts`);
+  const hosts = (await configured.json()).hosts;
+  assert.ok(hosts.every((host) => host.healthUrl === "" && host.sshAlias === "" && host.composeProject === ""));
+
+  const checked = await fetch(`${api.base}/api/checks/light/localops-sample-healthy`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(checked.status, 200);
+  const result = await checked.json();
+  assert.equal(result.hostResults[0].status, "healthy");
+  assert.match(result.hostResults[0].evidence.join(" "), /没有发起 HTTP、SSH/);
+});
+
+test("legacy seed flag no longer inserts project-specific hosts", async (t) => {
+  const api = await startApi(t, { LOCALOPS_SEED_HOSTS: "1" });
+  const response = await fetch(`${api.base}/api/status`);
+  const status = await response.json();
+  assert.deepEqual(status.hosts, []);
 });
 
 test("host input rejects unsafe SSH aliases with a 400 response", async (t) => {

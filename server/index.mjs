@@ -4,7 +4,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { collectHost, seedHosts } from "./runtime.mjs";
+import { collectHost, demoHosts } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -85,13 +85,13 @@ ensureColumn("check_runs", "trigger", "TEXT NOT NULL DEFAULT 'manual'");
 ensureColumn("check_runs", "hostScope", "TEXT");
 
 const existingHosts = db.prepare("SELECT COUNT(*) AS count FROM hosts").get();
-if (existingHosts.count === 0 && process.env.LOCALOPS_SEED_HOSTS !== "0") {
+if (existingHosts.count === 0 && process.env.LOCALOPS_SEED_DEMO === "1") {
   const insert = db.prepare(`
     INSERT INTO hosts (id, name, environment, role, sshAlias, healthUrl, composeProject, tags, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const now = new Date().toISOString();
-  for (const item of seedHosts) {
+  for (const item of demoHosts) {
     insert.run(item.id, item.name, item.environment, item.role, item.sshAlias, item.healthUrl, item.composeProject, JSON.stringify(item.tags), now, now);
   }
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inspectPetPng, validateDelivery } from "../scripts/validate-delivery.mjs";
+import { inspectPetPng, scanPrivateIdentityText, validateDelivery } from "../scripts/validate-delivery.mjs";
 
 test("repository plugin and delivery references are valid", () => {
   assert.deepEqual(validateDelivery(), { ok: true, errors: [] });
@@ -17,6 +17,16 @@ test("pet gate accepts only exact alpha-capable PNG metadata", () => {
   const wrongSize = inspectPetPng(pngFixture({ width: 1151, height: 1367, colorType: 6 }));
   assert.equal(wrongSize.ok, false);
   assert.match(wrongSize.errors.join(" "), /expected 1536x1872/);
+});
+
+test("private identity scanner recognizes former project infrastructure without storing it as a fixture", () => {
+  const formerDomain = ["https://", "ai", "2law", ".cn/health"].join("");
+  const formerProject = ["lex", "hub", "-prod-01"].join("");
+  assert.deepEqual(scanPrivateIdentityText(`${formerDomain} ${formerProject}`), [
+    "former product project identifier",
+    "former product domain",
+  ]);
+  assert.deepEqual(scanPrivateIdentityText("sample-service localhost"), []);
 });
 
 function pngFixture({ width, height, colorType }) {

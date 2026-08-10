@@ -3,7 +3,7 @@
 ## Phase 1: Local MVP
 
 - Create repo and project skeleton.
-- Build local API with seed hosts and SQLite persistence.
+- Build local API with empty-by-default SQLite persistence and explicit offline demo data.
 - Build dashboard UI with overview, details, checks, actions, report, and agent API views.
 - Add safe simulated collectors and dry-run action plans.
 - Verify local startup and build.

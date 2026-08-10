@@ -7,7 +7,8 @@
   - `POST /api/checks/light`
   - `GET /api/reports/current`
 - UI smoke:
-  - Dashboard renders seed topology.
+  - Dashboard renders the zero-host onboarding state by default.
+  - Explicit demo mode renders generic offline-only examples without network targets.
   - Manual light check updates UI.
   - Dry-run action renders a non-mutating plan.
 - Security smoke:

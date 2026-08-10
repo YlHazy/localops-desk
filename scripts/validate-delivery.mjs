@@ -12,7 +12,20 @@ export function validateDelivery(root = projectRoot) {
   validatePlugin(root, errors);
   validateMarketplace(root, errors);
   validatePetDirectory(root, errors);
+  validatePrivateIdentity(root, errors);
   return { ok: errors.length === 0, errors };
+}
+
+export function scanPrivateIdentityText(text) {
+  const normalized = String(text).toLowerCase();
+  const rules = [
+    ["former product project identifier", ["lex", "hub"].join("")],
+    ["former product domain", ["ai", "2law"].join("")],
+    ["former demo IP", ["182", "92", "161", "246"].join(".")],
+    ["developer home path", ["c:", "\\users\\", "yang", "y"].join("")],
+    ["former workspace name", ["ai", "law"].join("")],
+  ];
+  return rules.filter(([, needle]) => normalized.includes(needle)).map(([label]) => label);
 }
 
 export function inspectPetPng(bytes, fileSize = bytes.length) {
@@ -109,6 +122,24 @@ function validatePetDirectory(root, errors) {
       errors.push(`${entry.name}: ${error.message}`);
     }
   }
+}
+
+function validatePrivateIdentity(root, errors) {
+  const skippedDirectories = new Set([".git", ".npm-cache", "data", "dist", "node_modules", "work"]);
+  const allowedExtensions = new Set([".example", ".js", ".json", ".jsx", ".md", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (!skippedDirectories.has(entry.name) && entry.name !== "generated-images") visit(join(directory, entry.name));
+        continue;
+      }
+      if (!entry.isFile() || entry.name === "package-lock.json" || !allowedExtensions.has(extname(entry.name).toLowerCase())) continue;
+      const path = join(directory, entry.name);
+      const matches = scanPrivateIdentityText(readFileSync(path, "utf8"));
+      for (const match of matches) errors.push(`${relative(root, path)} contains a private identity marker: ${match}`);
+    }
+  };
+  visit(root);
 }
 
 function resolveReference(root, value, label, errors) {

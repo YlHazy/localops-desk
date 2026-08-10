@@ -1,13 +1,14 @@
 # Acceptance Criteria
 
 - The app starts locally with a Web UI and local API.
-- Dashboard displays at least three seed hosts: `lexhub-prod-01`, `lexhub-prod-02`, and `lexhub-demo-01`.
+- A new data directory starts with zero hosts and never probes a network target without user configuration.
+- `LOCALOPS_SEED_DEMO=1` adds three generic offline-only examples with no Health URL, SSH alias, or Compose project.
 - Manual light check updates last-run timestamps and history.
 - At least one host can show green, one yellow, and one gray/unknown state in safe simulation.
 - The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
 - Dry-run action output is visible and does not execute a real command.
 - The Agent API manifest lists supported local endpoints.
-- No sensitive values are present in seed data or output.
+- No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
 - The pet's expression, copy, and accent reflect the worst current host state.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.
