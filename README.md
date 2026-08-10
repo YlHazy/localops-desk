@@ -44,6 +44,12 @@ reference, not an installable sprite; it intentionally remains blocked until a
 genuine transparent 1536 × 1872 asset is produced through the supported Codex
 pet flow.
 
+Installable pet sprite sheets are admitted only through `pets/`. The repository
+delivery gate checks exact PNG dimensions, encoded transparency, file size, and
+plugin/MCP references; concept art under `docs/` is never treated as an
+installable asset. Run `npm run check:delivery` locally. GitHub CI repeats that
+gate, server and plugin tests, and the production build on Windows Node 22/24.
+
 From a local clone, install the repo marketplace and plugin with:
 
 ```powershell
