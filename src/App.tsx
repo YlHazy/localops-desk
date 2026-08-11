@@ -552,20 +552,46 @@ export function App() {
   if (!selectedHost) {
     return (
       <main className="empty-host-setup">
-        <section className="empty-host-card">
-          <Server size={28} />
-          <h1>尚未配置服务器</h1>
-          <p>先添加一台服务器。只需名称；SSH alias 和健康检查地址都可以稍后再填。</p>
+        <section className={`empty-host-card ${showHostForm ? "configuring" : ""}`}>
+          <div className="empty-host-intro">
+            <div>
+              <span className="onboarding-kicker">FIRST WATCH / 首次值守校准</span>
+              <Server size={30} />
+              <h1>先建立一条安全值守线</h1>
+              <p>给服务器起个名字即可开始。没有填写 Health URL 或 SSH alias 时，LocalOps 不会产生任何网络请求。</p>
+            </div>
+            <div className="zero-contact-seal">
+              <ShieldCheck size={22} />
+              <span>当前边界</span>
+              <strong>零目标 · 零连接</strong>
+              <small>只保存你明确提交的配置</small>
+            </div>
+          </div>
+          <ol className="onboarding-steps" aria-label="首次配置步骤">
+            <li><span>01</span><strong>命名对象</strong><small>名称、环境和角色用于值守分组。</small></li>
+            <li><span>02</span><strong>选择证据</strong><small>Health URL 与 SSH 均可稍后逐项启用。</small></li>
+            <li><span>03</span><strong>先看再动</strong><small>产品给判断和预案，不替你重启或部署。</small></li>
+          </ol>
           {showHostForm ? (
-            <HostForm
-              form={hostForm}
-              setForm={setHostForm}
-              onSubmit={saveHost}
-              onCancel={() => setShowHostForm(false)}
-              editing={false}
-            />
+            <div className="onboarding-form-stage">
+              <div>
+                <span className="onboarding-kicker">STEP 01 / 先登记对象</span>
+                <h2>配置第一台服务器</h2>
+                <p>只填名称也能保存；连接信息保持为空，就只建立本地值守档案。</p>
+              </div>
+              <HostForm
+                form={hostForm}
+                setForm={setHostForm}
+                onSubmit={saveHost}
+                onCancel={() => setShowHostForm(false)}
+                editing={false}
+              />
+            </div>
           ) : (
-            <button className="primary" onClick={startCreateHost}><Plus size={16} />添加服务器</button>
+            <div className="onboarding-cta">
+              <button className="primary" onClick={startCreateHost}><Plus size={16} />配置第一台服务器</button>
+              <small>不会自动发现局域网、读取 SSH 配置或导入历史主机。</small>
+            </div>
           )}
           {error ? <p className="error-banner">{error}</p> : null}
         </section>
