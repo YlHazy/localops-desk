@@ -94,8 +94,10 @@ test("offline demo hosts require explicit opt-in and contain no connection targe
   const response = await fetch(`${api.base}/api/status`);
   assert.equal(response.status, 200);
   const status = await response.json();
-  assert.deepEqual(status.hosts.map((host) => host.id), ["localops-sample-warning", "localops-sample-healthy", "localops-sample-unknown"]);
+  assert.deepEqual(status.hosts.map((host) => host.id).sort(), ["localops-sample-healthy", "localops-sample-unknown", "localops-sample-warning"]);
   assert.ok(status.hosts.every((host) => host.status === "unknown"));
+  assert.equal(status.practiceMode, true);
+  assert.ok(status.hosts.every((host) => host.isOfflineDemo === true));
 
   const configured = await fetch(`${api.base}/api/hosts`);
   const hosts = (await configured.json()).hosts;
@@ -114,6 +116,139 @@ test("offline demo hosts require explicit opt-in and contain no connection targe
   const report = await fetch(`${api.base}/api/reports/current`).then((item) => item.json());
   assert.match(report.report, /CPU 未采集, 内存 未采集, 磁盘 未采集/);
   assert.doesNotMatch(report.report, /N\/A%/);
+});
+
+test("offline practice is explicit, exclusive, network-free, and fully removable", async (t) => {
+  const api = await startApi(t);
+  const install = await fetch(`${api.base}/api/practice/offline`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(install.status, 201);
+  assert.deepEqual((await install.json()).practice, {
+    installed: true,
+    practiceMode: true,
+    hostsAdded: 3,
+    totalHosts: 3,
+    networkTargets: 0
+  });
+
+  const status = await fetch(`${api.base}/api/status`).then((item) => item.json());
+  assert.equal(status.practiceMode, true);
+  assert.ok(status.hosts.every((host) => host.isOfflineDemo));
+  assert.ok(status.hosts.every((host) => host.healthUrl === "" && host.sshAlias === "" && host.composeProject === ""));
+
+  const blockedCreate = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "real-server" })
+  });
+  assert.equal(blockedCreate.status, 409);
+  assert.equal((await blockedCreate.json()).error, "OFFLINE_PRACTICE_CONFLICT");
+
+  const blockedDelete = await fetch(`${api.base}/api/hosts/localops-sample-healthy`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(blockedDelete.status, 409);
+
+  const checked = await fetch(`${api.base}/api/checks/light`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(checked.status, 200);
+  assert.equal((await checked.json()).hostResults.length, 3);
+
+  const schedulerEnabled = await fetch(`${api.base}/api/scheduler`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, lightIntervalMinutes: 60, retentionDays: 7 })
+  });
+  assert.equal(schedulerEnabled.status, 200);
+
+  const remove = await fetch(`${api.base}/api/practice/offline`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(remove.status, 200);
+  assert.deepEqual((await remove.json()).practice, {
+    removed: true,
+    practiceMode: false,
+    hostsRemoved: 3,
+    checksRemoved: 3,
+    runsRemoved: 1,
+    schedulerDisabled: true
+  });
+  const clearedStatus = await fetch(`${api.base}/api/status`).then((item) => item.json());
+  assert.equal(clearedStatus.practiceMode, false);
+  assert.deepEqual(clearedStatus.hosts, []);
+  assert.deepEqual((await fetch(`${api.base}/api/checks`).then((item) => item.json())).checks, []);
+  assert.equal((await fetch(`${api.base}/api/scheduler`).then((item) => item.json())).scheduler.enabled, false);
+
+  const manifest = await fetch(`${api.base}/api/agent/manifest`).then((item) => item.text());
+  assert.doesNotMatch(manifest, /practice\/offline/);
+});
+
+test("offline practice never overwrites or deletes colliding user data", async (t) => {
+  const api = await startApi(t);
+  const created = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "localops-sample-healthy", name: "user-owned-collision", tags: [] })
+  });
+  assert.equal(created.status, 201);
+
+  for (const method of ["POST", "DELETE"]) {
+    const response = await fetch(`${api.base}/api/practice/offline`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error, "OFFLINE_PRACTICE_CONFLICT");
+  }
+  const hosts = (await fetch(`${api.base}/api/hosts`).then((item) => item.json())).hosts;
+  assert.equal(hosts.length, 1);
+  assert.equal(hosts[0].name, "user-owned-collision");
+});
+
+test("legacy offline demo rows remain recognizable and removable", async (t) => {
+  const api = await startApi(t);
+  const legacyRows = [
+    ["localops-sample-healthy", "Sample healthy service"],
+    ["localops-sample-warning", "Sample attention service"],
+    ["localops-sample-unknown", "Sample unobserved service"]
+  ];
+  for (const [id, name] of legacyRows) {
+    const created = await fetch(`${api.base}/api/hosts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id,
+        name,
+        environment: "sample",
+        role: "offline UI demonstration",
+        sshAlias: "",
+        healthUrl: "",
+        composeProject: "",
+        tags: ["localops:offline-demo"]
+      })
+    });
+    assert.equal(created.status, 201);
+  }
+  assert.equal((await fetch(`${api.base}/api/status`).then((item) => item.json())).practiceMode, true);
+  const removed = await fetch(`${api.base}/api/practice/offline`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).practice.hostsRemoved, 3);
+  assert.deepEqual((await fetch(`${api.base}/api/hosts`).then((item) => item.json())).hosts, []);
 });
 
 test("legacy seed flag no longer inserts project-specific hosts", async (t) => {
@@ -367,6 +502,21 @@ test("overlapping checks share the same in-memory run identity and do not duplic
   assert.equal(conflict.scope, created.host.id);
   assert.ok(conflict.runId);
   assert.equal(probeCount, 1);
+
+  for (const mutation of [
+    { method: "PUT", body: JSON.stringify({ name: "changed-during-check" }) },
+    { method: "DELETE", body: "{}" }
+  ]) {
+    const blocked = await fetch(`${api.base}/api/hosts/${encodeURIComponent(created.host.id)}`, {
+      method: mutation.method,
+      headers: { "content-type": "application/json" },
+      body: mutation.body
+    });
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json();
+    assert.equal(blockedBody.error, "HOST_CHECK_IN_PROGRESS");
+    assert.equal(blockedBody.runId, conflict.runId);
+  }
   releaseProbe();
   const completed = await firstRequest;
   assert.equal(completed.status, 200);

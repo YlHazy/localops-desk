@@ -241,6 +241,126 @@ function getHosts() {
   }));
 }
 
+const offlineDemoIds = new Set(demoHosts.map((hostItem) => hostItem.id));
+const legacyOfflineDemoNames = {
+  "localops-sample-healthy": "Sample healthy service",
+  "localops-sample-warning": "Sample attention service",
+  "localops-sample-unknown": "Sample unobserved service"
+};
+
+class OfflinePracticeConflictError extends Error {
+  constructor(message) {
+    super(message);
+    this.code = "OFFLINE_PRACTICE_CONFLICT";
+    this.httpStatus = 409;
+  }
+}
+
+class HostCheckInProgressError extends Error {
+  constructor(active) {
+    super(`服务器 ${active.scope} 正在巡检；完成前不会修改或删除它的配置。`);
+    this.code = "HOST_CHECK_IN_PROGRESS";
+    this.httpStatus = 409;
+    this.runId = active.runId;
+    this.scope = active.scope;
+  }
+}
+
+function isManagedOfflineDemoHost(hostItem) {
+  const expected = demoHosts.find((item) => item.id === hostItem.id);
+  if (!expected) return false;
+  const currentIdentity = hostItem.name === expected.name
+    && hostItem.environment === expected.environment
+    && hostItem.role === expected.role;
+  const legacyIdentity = hostItem.name === legacyOfflineDemoNames[hostItem.id]
+    && hostItem.environment === "sample"
+    && hostItem.role === "offline UI demonstration";
+  return (currentIdentity || legacyIdentity)
+    && hostItem.sshAlias === ""
+    && hostItem.healthUrl === ""
+    && hostItem.composeProject === ""
+    && Array.isArray(hostItem.tags)
+    && hostItem.tags.length === expected.tags.length
+    && expected.tags.every((tag) => hostItem.tags.includes(tag));
+}
+
+function offlinePracticeActive(hosts = getHosts()) {
+  return hosts.length === demoHosts.length && hosts.every(isManagedOfflineDemoHost);
+}
+
+function installOfflinePractice() {
+  const existing = getHosts();
+  if (offlinePracticeActive(existing)) {
+    return { installed: false, practiceMode: true, hostsAdded: 0, totalHosts: existing.length, networkTargets: 0 };
+  }
+  if (existing.length > 0) {
+    throw new OfflinePracticeConflictError("离线练习只能在没有服务器配置时启用；现有配置不会被覆盖。");
+  }
+  const insert = db.prepare(`
+    INSERT INTO hosts (id, name, environment, role, sshAlias, healthUrl, composeProject, tags, createdAt, updatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const item of demoHosts) {
+      insert.run(item.id, item.name, item.environment, item.role, item.sshAlias, item.healthUrl, item.composeProject, JSON.stringify(item.tags), now, now);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return { installed: true, practiceMode: true, hostsAdded: demoHosts.length, totalHosts: demoHosts.length, networkTargets: 0 };
+}
+
+function removeOfflinePractice() {
+  const existing = getHosts();
+  const practiceCandidates = existing.filter((hostItem) => offlineDemoIds.has(hostItem.id));
+  if (practiceCandidates.length === 0) {
+    return { removed: false, practiceMode: false, hostsRemoved: 0, checksRemoved: 0, schedulerDisabled: false };
+  }
+  if (practiceCandidates.length !== demoHosts.length || !practiceCandidates.every(isManagedOfflineDemoHost)) {
+    throw new OfflinePracticeConflictError("检测到同名但不受 LocalOps 管理的数据，未执行删除。");
+  }
+  const active = activeLightChecks.values().next().value;
+  if (active) throw new HostCheckInProgressError(active);
+
+  const ids = demoHosts.map((item) => item.id);
+  const placeholders = ids.map(() => "?").join(", ");
+  const runIds = db.prepare(`SELECT DISTINCT runId FROM host_checks WHERE hostId IN (${placeholders})`).all(...ids).map((row) => row.runId);
+  let checksRemoved = 0;
+  let runsRemoved = 0;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    checksRemoved = db.prepare(`DELETE FROM host_checks WHERE hostId IN (${placeholders})`).run(...ids).changes;
+    db.prepare(`DELETE FROM hosts WHERE id IN (${placeholders})`).run(...ids);
+    const removeEmptyRun = db.prepare("DELETE FROM check_runs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM host_checks WHERE runId = ?)");
+    for (const runId of runIds) {
+      runsRemoved += removeEmptyRun.run(runId, runId).changes;
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  const schedulerDisabled = getHosts().length === 0 && schedulerSnapshot().enabled;
+  if (getHosts().length === 0) {
+    setSetting("schedulerEnabled", "0");
+    setSetting("schedulerConsecutiveFailures", "0");
+    stopScheduler();
+  }
+  return {
+    removed: true,
+    practiceMode: false,
+    hostsRemoved: ids.length,
+    checksRemoved,
+    runsRemoved,
+    schedulerDisabled
+  };
+}
+
 function normalizeHostInput(input, existing = {}) {
   const now = new Date().toISOString();
   const name = String(input.name ?? existing.name ?? "").trim();
@@ -284,6 +404,9 @@ function normalizeHostInput(input, existing = {}) {
 }
 
 function createHost(input) {
+  if (offlinePracticeActive()) {
+    throw new OfflinePracticeConflictError("请先退出离线练习，再配置真实服务器。");
+  }
   const hostItem = normalizeHostInput(input);
   db.prepare(`
     INSERT INTO hosts (id, name, environment, role, sshAlias, healthUrl, composeProject, tags, createdAt, updatedAt)
@@ -297,6 +420,11 @@ function updateHost(id, input) {
   if (!existing) {
     throw new Error(`Host not found: ${id}`);
   }
+  if (isManagedOfflineDemoHost(existing)) {
+    throw new OfflinePracticeConflictError("离线练习对象不能单独修改；请退出练习后配置真实服务器。");
+  }
+  const active = conflictingLightCheck(id);
+  if (active) throw new HostCheckInProgressError(active);
   const hostItem = normalizeHostInput(input, existing);
   db.prepare(`
     UPDATE hosts
@@ -307,6 +435,12 @@ function updateHost(id, input) {
 }
 
 function deleteHost(id) {
+  const existing = getHosts().find((item) => item.id === id);
+  if (existing && isManagedOfflineDemoHost(existing)) {
+    throw new OfflinePracticeConflictError("离线练习对象不能单独删除；请使用“退出离线练习”。");
+  }
+  const active = conflictingLightCheck(id);
+  if (active) throw new HostCheckInProgressError(active);
   db.prepare("DELETE FROM host_checks WHERE hostId = ?").run(id);
   const result = db.prepare("DELETE FROM hosts WHERE id = ?").run(id);
   return { deleted: result.changes > 0 };
@@ -314,7 +448,7 @@ function deleteHost(id) {
 
 function latestHostChecks() {
   const rows = db.prepare(`
-    SELECT h.id AS configuredHostId, hc.*, h.name, h.environment, h.role, h.sshAlias, h.healthUrl, h.composeProject, cr.finishedAt AS lastCheckedAt, cr.durationMs
+    SELECT h.id AS configuredHostId, hc.*, h.name, h.environment, h.role, h.sshAlias, h.healthUrl, h.composeProject, h.tags, cr.finishedAt AS lastCheckedAt, cr.durationMs
     FROM hosts h
     LEFT JOIN host_checks hc ON hc.id = (
       SELECT hc2.id FROM host_checks hc2 WHERE hc2.hostId = h.id ORDER BY hc2.id DESC LIMIT 1
@@ -331,6 +465,16 @@ function latestHostChecks() {
     sshAlias: row.sshAlias,
     healthUrl: row.healthUrl,
     composeProject: row.composeProject,
+    isOfflineDemo: isManagedOfflineDemoHost({
+      id: row.configuredHostId,
+      name: row.name,
+      environment: row.environment,
+      role: row.role,
+      sshAlias: row.sshAlias,
+      healthUrl: row.healthUrl,
+      composeProject: row.composeProject,
+      tags: JSON.parse(row.tags)
+    }),
     status: row.status || "unknown",
     lastCheckedAt: row.lastCheckedAt || null,
     durationMs: row.durationMs ?? null,
@@ -385,6 +529,7 @@ function statusSnapshot(hosts) {
     observedAt,
     staleAfterMs,
     mode,
+    practiceMode: effectiveHosts.length > 0 && effectiveHosts.every((hostItem) => hostItem.isOfflineDemo),
     counts: statusCounts(effectiveHosts),
     hosts: effectiveHosts
   };
@@ -738,6 +883,14 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/hosts") {
       return json(res, { hosts: getHosts() });
+    }
+    if (req.method === "POST" && url.pathname === "/api/practice/offline") {
+      await readBody(req);
+      return json(res, { practice: installOfflinePractice() }, 201);
+    }
+    if (req.method === "DELETE" && url.pathname === "/api/practice/offline") {
+      await readBody(req);
+      return json(res, { practice: removeOfflinePractice() });
     }
     if (req.method === "POST" && url.pathname === "/api/hosts") {
       return json(res, { host: createHost(await readBody(req)) }, 201);

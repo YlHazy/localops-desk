@@ -67,6 +67,21 @@ paths:
       responses:
         "200":
           description: Deletion result
+  /api/practice/offline:
+    post:
+      summary: Explicitly install the exclusive zero-network practice profile
+      responses:
+        "201":
+          description: Installed or already-present managed practice profile
+        "409":
+          description: Existing or colliding host data was preserved
+    delete:
+      summary: Remove only exact managed practice data and orphaned practice runs
+      responses:
+        "200":
+          description: Practice cleanup result
+        "409":
+          description: Colliding or modified data was preserved
   /api/checks:
     get:
       summary: List recent check runs

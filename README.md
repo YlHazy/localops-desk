@@ -28,10 +28,13 @@ npm run dev:api
 Open `http://127.0.0.1:4317` after the server starts. The local API serves both `/api/*` and the built Web UI from `dist/`.
 
 New data directories start empty. Add a host through the in-product setup flow;
-LocalOps never inserts or probes a real network target by default. For a fully
-offline UI demonstration, set `LOCALOPS_SEED_DEMO=1` before the first start of a
-fresh data directory. The three sample hosts contain no URL, SSH alias, Compose
-project, customer identifier, or remote collector. The retired
+LocalOps never inserts or probes a real network target by default. The first-run
+screen can explicitly enter a fully offline practice mode with three managed,
+fictional hosts. They contain no URL, SSH alias, Compose project, customer
+identifier, or remote collector. Practice mode is exclusive, cannot overwrite
+existing hosts, and exits through a second confirmation that removes only its
+exact managed rows and related checks. `LOCALOPS_SEED_DEMO=1` remains available
+for automated or environment-driven demos in a fresh data directory. The retired
 `LOCALOPS_SEED_HOSTS` flag no longer inserts anything.
 
 Upgrades preserve existing SQLite host rows, including rows created by older
@@ -50,7 +53,7 @@ After `npm run build`, Windows users can run `npm run pet:window` to open the co
 
 For normal daily use on Windows, double-click `Start LocalOps Guardian.vbs` after the first production build. The entry opens the same bounded Edge pet without a console window and waits for it to close. It does not install dependencies, request administrator rights, create a service, or change login-start settings. If prerequisites are missing, it shows a visible checklist instead of silently exiting. Node.js 22–24 and Microsoft Edge are required.
 
-The Windows Node 24 CI job also publishes `localops-guardian-windows-portable` for 14 days. That artifact already contains the production UI and the exact standard-library runtime files, so it needs no `npm install`: download, extract the whole folder, then double-click `Start LocalOps Guardian.vbs`. CI verifies every packaged SHA-256, rejects data, logs, `.env`, SQLite, and `node_modules`, then starts the API from the packaged directory and checks the built home page, empty default state, and recognizable LocalOps manifest. This is an unsigned development artifact, not a signed installer or release.
+The Windows Node 24 CI job also publishes `localops-guardian-windows-portable` for 14 days. That artifact already contains the production UI and the exact standard-library runtime files, so it needs no `npm install`: download, extract the whole folder, then double-click `Start LocalOps Guardian.vbs`. CI verifies every packaged SHA-256, rejects data, logs, `.env`, SQLite, and `node_modules`, then starts the packaged API and proves the built home page, recognizable manifest, empty default state, complete offline-practice check/cleanup lifecycle, and return to an empty database. This is an unsigned development artifact, not a signed installer or release.
 
 On Windows, the Automatic Checks page can explicitly enable login-start after a production build and Edge are available. LocalOps writes one UTF-16 current-user Startup entry that launches the same bounded pet launcher without a console window. It never installs a Windows service or requests administrator rights. Enabling and disabling both require an in-product confirmation; a same-name entry with unexpected content is never overwritten or removed. Closing the pet still ends the launcher-owned API, so login-start does not imply invisible monitoring after the window closes.
 

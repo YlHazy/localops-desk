@@ -8,6 +8,7 @@ export interface HostState {
   sshAlias: string;
   healthUrl: string;
   composeProject: string;
+  isOfflineDemo: boolean;
   status: Status;
   lastCheckedAt: string | null;
   durationMs: number | null;
@@ -38,6 +39,7 @@ export interface DashboardStatus {
   observedAt: string | null;
   staleAfterMs: number;
   mode: "safe-simulated" | "ssh-enabled";
+  practiceMode: boolean;
   counts: Record<Status, number>;
   hosts: HostState[];
 }

@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { collectionModeCopy } from "./desk-sync.mjs";
 import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
@@ -135,6 +136,7 @@ export function PetMode({
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), stale, Boolean(dashboard.observedAt));
+  const collectionMode = collectionModeCopy(dashboard);
   const visibleCounts = stale
     ? { healthy: 0, warning: 0, critical: 0, unknown: hosts.length }
     : dashboard.counts;
@@ -296,7 +298,7 @@ export function PetMode({
         <button className="pet-open" onClick={onOpenDesk}>
           控制台 <ArrowUpRight size={16} />
         </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 自动同步不触发巡检</small>
+        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : collectionMode.compact} · 自动同步不触发巡检</small>
       </footer>
     </main>
   );

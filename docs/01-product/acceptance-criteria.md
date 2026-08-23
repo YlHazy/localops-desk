@@ -3,6 +3,10 @@
 - The app starts locally with a Web UI and local API.
 - A new data directory starts with zero hosts and never probes a network target without user configuration.
 - `LOCALOPS_SEED_DEMO=1` adds three generic offline-only examples with no Health URL, SSH alias, or Compose project.
+- The empty first-run screen can explicitly install those three fictional examples without an environment variable; a second confirmation explains that the operation writes local practice rows but performs zero network requests.
+- Offline practice is exclusive and visibly labeled across the desk and pet. It cannot overwrite, edit, or individually delete colliding/user-owned rows, and normal host creation is unavailable until practice is exited.
+- Exiting practice removes only exact current or legacy managed examples and their orphaned check runs; when no targets remain it also stops local scheduling.
+- Collection-mode copy distinguishes zero-network practice, configured HTTP checks, and explicitly enabled read-only SSH; ordinary HTTP mode never claims that no real target can be contacted.
 - Manual light check updates last-run timestamps and history.
 - At least one host can show green, one yellow, and one gray/unknown state in safe simulation.
 - The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
@@ -23,6 +27,7 @@
 - Background sync does not overwrite unsaved scheduler form values and does not call a check, mutation, retention, or action endpoint.
 - After pet sync failure, retained evidence is labeled as non-current and a dedicated local-status retry is available; that retry performs no server check and creates no check-history row.
 - Pet sync failures and light-check failures are distinct: a sync failure can retry the bounded status read, while an uncertain check failure preserves prior evidence and discourages duplicate submission.
+- Host configuration cannot be edited, deleted, or batch-cleared while an overlapping light check is active; the typed conflict identifies the in-memory run rather than creating orphan evidence.
 - A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
 - Windows login-start requires a production build, a usable Node executable, Microsoft Edge, and an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
 - Startup enablement writes only one current-user LocalOps VBS entry; disablement removes it only when its exact managed content still matches. Unknown same-name entries fail closed.

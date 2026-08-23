@@ -19,9 +19,16 @@ export interface DeskSnapshot {
   startup: import("./types").StartupState;
 }
 
+export interface CollectionModeCopy {
+  label: string;
+  detail: string;
+  compact: string;
+}
+
 export type DeskReadRequest = <T>(path: string) => Promise<T>;
 
 export function deskSyncCopy(state: DeskSyncState, lastSyncedAt: number | null, now?: number): DeskSyncCopy;
 export function fetchDeskSnapshot(request: DeskReadRequest): Promise<DeskSnapshot>;
 export function fetchPetSnapshot(request: DeskReadRequest): Promise<import("./types").DashboardStatus>;
+export function collectionModeCopy(dashboard: import("./types").DashboardStatus): CollectionModeCopy;
 export function schedulerDraftAfterSync(currentDraft: SchedulerDraft, scheduler: import("./types").SchedulerState, preserveDraft: boolean): SchedulerDraft;

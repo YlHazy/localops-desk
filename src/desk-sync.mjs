@@ -38,6 +38,28 @@ export function fetchPetSnapshot(request) {
   return request("/api/status");
 }
 
+export function collectionModeCopy(dashboard) {
+  if (dashboard.practiceMode) {
+    return {
+      label: "离线练习",
+      detail: "虚构对象、虚构证据，零网络请求。",
+      compact: "离线练习 · 零网络"
+    };
+  }
+  if (dashboard.mode === "ssh-enabled") {
+    return {
+      label: "HTTP + 只读 SSH",
+      detail: "访问已配置目标；SSH 只执行允许的读取命令。",
+      compact: "HTTP + 只读 SSH"
+    };
+  }
+  return {
+    label: "仅 HTTP",
+    detail: "只访问你填写的 Health URL；不会发起 SSH。",
+    compact: "仅 HTTP（如已配置）"
+  };
+}
+
 export function schedulerDraftAfterSync(currentDraft, scheduler, preserveDraft) {
   if (preserveDraft) return currentDraft;
   return {

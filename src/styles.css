@@ -158,6 +158,33 @@ button:disabled {
 
 .onboarding-cta small { max-width: 390px; color: #647383; line-height: 1.45; }
 
+.practice-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 15px;
+  color: #24796f;
+  border: 1px solid #afd8cd;
+  border-radius: 8px;
+  background: #f3fbf8;
+  font-weight: 800;
+}
+
+.practice-confirm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 15px 16px;
+  border: 1px solid #b9ddd3;
+  border-radius: 12px;
+  background: linear-gradient(120deg, #eef9f5, #fbfefd);
+}
+.practice-confirm strong, .practice-confirm small { display: block; }
+.practice-confirm strong { margin: 5px 0 3px; color: var(--watch-ink); }
+.practice-confirm small { color: #5d716f; line-height: 1.45; }
+
 .onboarding-form-stage {
   margin-top: 24px;
   padding-top: 24px;
@@ -405,6 +432,7 @@ h3 {
 .primary:disabled {
   opacity: 0.75;
 }
+.secondary:disabled { cursor: not-allowed; opacity: 0.58; }
 
 .error-line {
   margin-top: 18px;
@@ -461,6 +489,33 @@ h3 {
   align-items: center;
   flex-wrap: wrap;
 }
+
+.practice-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin-top: 18px;
+  padding: 15px 17px 15px 21px;
+  overflow: hidden;
+  border: 1px solid #acd8cc;
+  border-left: 6px solid #24796f;
+  border-radius: 11px;
+  background:
+    repeating-linear-gradient(135deg, rgba(36, 121, 111, 0.025) 0 9px, transparent 9px 18px),
+    linear-gradient(110deg, #effaf6, #ffffff);
+}
+.practice-banner > div:first-child { min-width: 0; }
+.practice-banner strong, .practice-banner small { display: block; }
+.practice-banner strong { margin: 4px 0 3px; color: var(--watch-ink); font-size: 15px; }
+.practice-banner small { color: #58706d; line-height: 1.45; }
+.practice-exit { flex: 0 0 auto; padding: 9px 11px; color: #24796f; border: 1px solid #afd8cd; border-radius: 8px; background: white; font-weight: 800; }
+.practice-exit-confirm { display: flex; flex: 0 1 470px; align-items: center; justify-content: flex-end; gap: 8px; }
+.practice-exit-confirm span { color: #6d5b38; font-size: 11px; line-height: 1.45; }
+.practice-exit-confirm button { padding: 8px 10px; border: 1px solid #cad5dd; border-radius: 8px; background: white; font-weight: 750; white-space: nowrap; }
+.practice-exit-confirm .danger { color: #a23e36; border-color: #e4b8b3; background: #fff6f5; }
+.practice-managed-row { color: #24796f; font-size: 11px; font-weight: 750; white-space: nowrap; }
 
 .guardian-brief {
   position: relative;
@@ -1326,6 +1381,11 @@ code {
   .onboarding-steps,
   .empty-host-card.configuring .form-grid { grid-template-columns: 1fr; }
   .onboarding-cta { align-items: stretch; flex-direction: column; }
+  .practice-confirm { grid-template-columns: 1fr; }
+  .practice-confirm button { justify-content: center; }
+  .practice-banner { align-items: stretch; flex-direction: column; }
+  .practice-exit-confirm { flex: 0 0 auto; align-items: stretch; flex-direction: column; }
+  .practice-exit-confirm button, .practice-exit { width: 100%; }
   .setup-track { grid-template-columns: 1fr; }
 
   .main {

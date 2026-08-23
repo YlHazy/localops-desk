@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 
 test("desk sync copy distinguishes initial, running, and paused states", () => {
   assert.match(deskSyncCopy("idle", null, 10_000).label, /首次同步/);
@@ -51,4 +51,19 @@ test("pet sync reads status only and never triggers a check", async () => {
   assert.equal(result, expected);
   assert.deepEqual(calls, ["/api/status"]);
   assert.ok(calls.every((path) => !path.includes("checks/light")));
+});
+
+test("collection copy never mistakes ordinary HTTP mode for zero-network practice", () => {
+  const practice = collectionModeCopy({ practiceMode: true, mode: "ssh-enabled" });
+  assert.equal(practice.label, "离线练习");
+  assert.match(practice.detail, /零网络/);
+
+  const http = collectionModeCopy({ practiceMode: false, mode: "safe-simulated" });
+  assert.equal(http.label, "仅 HTTP");
+  assert.match(http.detail, /Health URL/);
+  assert.doesNotMatch(http.detail, /不会连接真实服务器/);
+
+  const ssh = collectionModeCopy({ practiceMode: false, mode: "ssh-enabled" });
+  assert.equal(ssh.label, "HTTP + 只读 SSH");
+  assert.match(ssh.detail, /允许的读取命令/);
 });

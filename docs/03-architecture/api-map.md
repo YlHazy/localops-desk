@@ -34,11 +34,21 @@ Updates a local host configuration.
 
 Deletes a local host configuration and its local check evidence.
 
+## Offline Practice
+
+`POST /api/practice/offline`
+
+Installs three exact, fictional, connection-free practice hosts only when the host table is empty. Repeating the request is idempotent; existing or colliding user data returns `409` without modification. This UI-only endpoint is deliberately absent from the Agent/MCP manifest.
+
+`DELETE /api/practice/offline`
+
+Removes only the complete set of exact current or legacy LocalOps-managed practice hosts, their host-check rows, and check runs left empty by that removal. It fails closed on collisions and stops scheduling only when no hosts remain.
+
 ## Checks
 
 `POST /api/checks/light`
 
-Runs a low-pressure collection pass. By default this uses safe simulated collectors unless real SSH is explicitly enabled.
+Runs a low-pressure collection pass. Practice hosts use offline generated evidence. Ordinary hosts may call their configured HTTP health URL; allowlisted read-only SSH is added only when explicitly enabled.
 
 `POST /api/checks/light/:hostId`
 

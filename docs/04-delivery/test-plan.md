@@ -2,14 +2,16 @@
 
 - TypeScript typecheck.
 - Production build.
-- Portable package manifest, forbidden-file scan, packaged-runtime API/UI smoke, and Windows Edge launcher check.
+- Portable package manifest, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and Windows Edge launcher check.
 - API smoke:
   - `GET /api/status`
   - `POST /api/checks/light`
   - `GET /api/reports/current`
 - UI smoke:
   - Dashboard renders the zero-host onboarding state by default.
-  - Explicit demo mode renders generic offline-only examples without network targets.
+  - First-run offline practice requires an explicit confirmation and renders generic offline-only examples without network targets.
+  - Practice blocks normal host mutation, fails closed on colliding rows, remains compatible with legacy demo rows, and removes only managed practice data.
+  - Exiting an empty-target practice stops local scheduling and removes orphaned practice runs.
   - Manual light check updates UI.
   - Dry-run action renders a non-mutating plan.
 - Security smoke:

@@ -23,7 +23,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { PetMode } from "./PetMode";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
@@ -359,6 +359,8 @@ export function App() {
   const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
   const [deskSyncError, setDeskSyncError] = useState("");
   const [petSyncError, setPetSyncError] = useState("");
+  const [practicePending, setPracticePending] = useState<"install" | "remove" | null>(null);
+  const [practiceLoading, setPracticeLoading] = useState(false);
 
   async function load({ preserveSchedulerForm = false } = {}) {
     if (petMode) {
@@ -496,6 +498,7 @@ export function App() {
   const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
+  const collectionMode = useMemo(() => dashboard ? collectionModeCopy(dashboard) : null, [dashboard]);
   const hasConnectionEvidence = dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false;
 
   async function copyBrief() {
@@ -583,6 +586,7 @@ export function App() {
   }
 
   function startCreateHost() {
+    setPracticePending(null);
     setEditingHostId(null);
     setHostForm(emptyHostForm);
     setShowHostForm(true);
@@ -647,6 +651,37 @@ export function App() {
         {error ? <button onClick={retryLoad}>重试</button> : null}
       </main>
     );
+  }
+
+  async function installOfflinePractice() {
+    setPracticeLoading(true);
+    setError("");
+    try {
+      await api("/api/practice/offline", { method: "POST", body: "{}" });
+      setPracticePending(null);
+      setSelectedHostId(null);
+      await load();
+      setSelectedTab("overview");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "启用离线练习失败");
+    } finally {
+      setPracticeLoading(false);
+    }
+  }
+
+  async function removeOfflinePractice() {
+    setPracticeLoading(true);
+    setError("");
+    try {
+      await api("/api/practice/offline", { method: "DELETE", body: "{}" });
+      setPracticePending(null);
+      setSelectedHostId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "退出离线练习失败");
+    } finally {
+      setPracticeLoading(false);
+    }
   }
 
   async function saveStartup(enabled: boolean) {
@@ -727,10 +762,24 @@ export function App() {
               />
             </div>
           ) : (
-            <div className="onboarding-cta">
-              <button className="primary" onClick={startCreateHost}><Plus size={16} />配置第一台服务器</button>
-              <small>不会自动发现局域网、读取 SSH 配置或导入历史主机。</small>
-            </div>
+            <>
+              <div className="onboarding-cta">
+                <button className="primary" onClick={startCreateHost}><Plus size={16} />配置第一台服务器</button>
+                <button className="practice-entry" onClick={() => setPracticePending("install")}><ShieldCheck size={16} />先用离线练习</button>
+                <small>不会自动发现局域网、读取 SSH 配置或导入历史主机。</small>
+              </div>
+              {practicePending === "install" ? (
+                <div className="practice-confirm" role="group" aria-label="确认启用离线练习">
+                  <div>
+                    <span className="onboarding-kicker">ZERO NETWORK / 零网络练习</span>
+                    <strong>载入 3 台纯虚构服务器？</strong>
+                    <small>只写入本地示例；地址、SSH 与 Compose 均为空。退出练习会删除这些示例和对应检查记录。</small>
+                  </div>
+                  <button className="primary slim" disabled={practiceLoading} onClick={installOfflinePractice}>{practiceLoading ? "载入中" : "确认载入"}</button>
+                  <button className="secondary slim" disabled={practiceLoading} onClick={() => setPracticePending(null)}>取消</button>
+                </div>
+              ) : null}
+            </>
           )}
           {error ? <p className="error-banner" role="alert">{error}</p> : null}
         </section>
@@ -767,8 +816,8 @@ export function App() {
         </nav>
         <div className="mode-box">
           <span>当前采集方式</span>
-          <strong>{dashboard.mode === "ssh-enabled" ? "SSH 已启用" : "安全模拟"}</strong>
-          <small>{dashboard.mode === "ssh-enabled" ? "只执行只读命令，不会重启服务。" : "不会连接真实服务器。"}</small>
+          <strong>{collectionMode?.label}</strong>
+          <small>{collectionMode?.detail}</small>
         </div>
       </aside>
 
@@ -789,11 +838,11 @@ export function App() {
           <div className="topbar-actions">
             <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
               {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
-              <span>{loading ? "检查中" : "刷新全部"}</span>
+              <span>{loading ? "检查中" : dashboard.practiceMode ? "运行离线练习" : "刷新全部"}</span>
             </button>
-            <button className="secondary" onClick={startCreateHost}>
+            <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
               <Plus size={18} />
-              <span>添加服务器</span>
+              <span>{dashboard.practiceMode ? "练习中" : "添加服务器"}</span>
             </button>
             <button className="secondary" onClick={openPetWindow}>
               <MonitorUp size={18} />
@@ -803,6 +852,25 @@ export function App() {
         </header>
 
         {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
+
+        {dashboard.practiceMode ? (
+          <section className="practice-banner" aria-label="离线练习状态">
+            <div>
+              <span className="topbar-kicker">OFFLINE PRACTICE / 离线练习</span>
+              <strong>这里的服务器和证据都是虚构的</strong>
+              <small>可以放心巡检、查看异常分级和生成预案；不会访问 HTTP、SSH 或局域网。</small>
+            </div>
+            {practicePending === "remove" ? (
+              <div className="practice-exit-confirm" role="group" aria-label="确认退出离线练习">
+                <span>删除 3 台练习对象及其检查记录；若自动检查已开启，也会停止。</span>
+                <button className="danger" disabled={practiceLoading} onClick={removeOfflinePractice}>{practiceLoading ? "清理中" : "确认退出"}</button>
+                <button disabled={practiceLoading} onClick={() => setPracticePending(null)}>取消</button>
+              </div>
+            ) : (
+              <button className="practice-exit" onClick={() => setPracticePending("remove")}>退出离线练习</button>
+            )}
+          </section>
+        ) : null}
 
         <section className={`guardian-brief ${dashboard.counts.critical ? "critical" : dashboard.counts.warning ? "warning" : "healthy"}`}>
           <div className="guardian-brief-copy">
@@ -1013,7 +1081,9 @@ export function App() {
                       <td>{host.composeProject}</td>
                       <td><StatusPill status={host.status} /></td>
                       <td className="row-actions">
-                        {pendingHostDeleteId === host.id ? (
+                        {host.isOfflineDemo ? (
+                          <span className="practice-managed-row">练习对象 · 统一退出</span>
+                        ) : pendingHostDeleteId === host.id ? (
                           <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
                             <span>本地配置和检查记录都会删除</span>
                             <button className="danger" disabled={loading} onClick={() => removeHost(host.id)}><Trash2 size={15} />{loading ? "删除中" : "确认删除"}</button>

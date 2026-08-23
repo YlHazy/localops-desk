@@ -7,9 +7,9 @@ const execFileAsync = promisify(execFile);
 export const demoHosts = [
   {
     id: "localops-sample-healthy",
-    name: "Sample healthy service",
-    environment: "sample",
-    role: "offline UI demonstration",
+    name: "示例 · 正常服务",
+    environment: "离线练习",
+    role: "虚构演示对象",
     sshAlias: "",
     healthUrl: "",
     composeProject: "",
@@ -17,9 +17,9 @@ export const demoHosts = [
   },
   {
     id: "localops-sample-warning",
-    name: "Sample attention service",
-    environment: "sample",
-    role: "offline UI demonstration",
+    name: "示例 · 需要关注",
+    environment: "离线练习",
+    role: "虚构演示对象",
     sshAlias: "",
     healthUrl: "",
     composeProject: "",
@@ -27,9 +27,9 @@ export const demoHosts = [
   },
   {
     id: "localops-sample-unknown",
-    name: "Sample unobserved service",
-    environment: "sample",
-    role: "offline UI demonstration",
+    name: "示例 · 尚未观测",
+    environment: "离线练习",
+    role: "虚构演示对象",
     sshAlias: "",
     healthUrl: "",
     composeProject: "",
