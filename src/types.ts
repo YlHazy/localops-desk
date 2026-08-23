@@ -63,6 +63,15 @@ export interface SchedulerState {
   nextRunAt: string | null;
 }
 
+export interface StartupState {
+  supported: boolean;
+  enabled: boolean;
+  status: "unsupported" | "not-installed" | "managed" | "conflict";
+  ready: boolean;
+  blockers: string[];
+  message: string;
+}
+
 export interface RetentionResult {
   retentionDays: number;
   cutoff: string;

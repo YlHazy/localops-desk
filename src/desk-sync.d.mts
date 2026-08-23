@@ -16,6 +16,7 @@ export interface DeskSnapshot {
   checks: import("./types").CheckRun[];
   report: string;
   scheduler: import("./types").SchedulerState;
+  startup: import("./types").StartupState;
 }
 
 export type DeskReadRequest = <T>(path: string) => Promise<T>;

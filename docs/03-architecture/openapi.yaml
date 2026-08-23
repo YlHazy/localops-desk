@@ -86,6 +86,21 @@ paths:
       responses:
         "200":
           description: Updated scheduler state
+  /api/startup:
+    get:
+      summary: Get public LocalOps current-user login-start state
+      responses:
+        "200":
+          description: Startup support, readiness, enablement, conflict, and blocker state without local paths
+    put:
+      summary: Explicitly enable or disable the owned current-user login-start entry
+      responses:
+        "200":
+          description: Updated public startup state
+        "400":
+          description: Unsupported platform or invalid enabled value
+        "409":
+          description: Missing readiness prerequisite or conflicting same-name entry
   /api/maintenance/retention:
     post:
       summary: Apply local SQLite retention cleanup

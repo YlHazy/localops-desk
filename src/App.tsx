@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 import { deskSyncCopy, fetchDeskSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { PetMode } from "./PetMode";
-import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, Status } from "./types";
+import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
@@ -346,6 +346,9 @@ export function App() {
   const [editingHostId, setEditingHostId] = useState<string | null>(null);
   const [showHostForm, setShowHostForm] = useState(false);
   const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
+  const [startup, setStartup] = useState<StartupState | null>(null);
+  const [startupPending, setStartupPending] = useState<boolean | null>(null);
+  const [startupLoading, setStartupLoading] = useState(false);
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
@@ -366,6 +369,7 @@ export function App() {
     setChecks(snapshot.checks);
     setReport(snapshot.report);
     setScheduler(snapshot.scheduler);
+    setStartup(snapshot.startup);
     setSchedulerForm((currentDraft) => schedulerDraftAfterSync(currentDraft, snapshot.scheduler, preserveSchedulerForm));
     setSelectedHostId((prev) => prev ?? snapshot.status.hosts[0]?.id ?? null);
     const syncedAt = Date.now();
@@ -613,6 +617,23 @@ export function App() {
         {error ? <button onClick={retryLoad}>重试</button> : null}
       </main>
     );
+  }
+
+  async function saveStartup(enabled: boolean) {
+    setStartupLoading(true);
+    setError("");
+    try {
+      const result = await api<{ startup: StartupState }>("/api/startup", {
+        method: "PUT",
+        body: JSON.stringify({ enabled })
+      });
+      setStartup(result.startup);
+      setStartupPending(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "更新登录启动设置失败");
+    } finally {
+      setStartupLoading(false);
+    }
   }
 
   if (petMode) {
@@ -1005,6 +1026,39 @@ export function App() {
                 <button onClick={() => runRetention(false)}>执行保留期清理</button>
                 <button onClick={() => runRetention(true)}>清理并压缩 SQLite</button>
               </div>
+              <section className={`startup-watch ${startup?.enabled ? "enabled" : startup?.status ?? "unknown"}`}>
+                <div className="startup-watch-head">
+                  <div>
+                    <span className="topbar-kicker">LOGIN WATCH / 登录后值守</span>
+                    <h3>登录 Windows 后自动打开桌宠</h3>
+                  </div>
+                  <StatusPill status={startup?.enabled ? "healthy" : startup?.status === "conflict" ? "warning" : "unknown"} />
+                </div>
+                <p>{startup?.message ?? "正在读取当前用户的启动设置。"}</p>
+                <ul>
+                  <li>仅管理当前 Windows 用户，不需要管理员权限。</li>
+                  <li>不会安装 Windows 服务；关闭桌宠会停止由它启动的本地 API。</li>
+                  <li>同名未知启动项不会被覆盖或删除。</li>
+                </ul>
+                {startupPending == null ? (
+                  <button
+                    className={startup?.enabled ? "secondary slim" : "primary slim"}
+                    disabled={startupLoading || !startup?.supported || (!startup.enabled && !startup.ready) || startup.status === "conflict"}
+                    onClick={() => setStartupPending(!startup?.enabled)}
+                  >
+                    <MonitorUp size={16} />{startup?.enabled ? "关闭登录后启动" : "开启登录后启动"}
+                  </button>
+                ) : (
+                  <div className="startup-confirm" role="group" aria-label="确认登录启动设置">
+                    <strong>{startupPending ? "确认下次登录自动打开桌宠？" : "确认移除 LocalOps 登录启动项？"}</strong>
+                    <small>{startupPending ? "只创建一个可识别、可撤销的当前用户启动项。" : "只移除内容完全匹配的 LocalOps 启动项。"}</small>
+                    <div>
+                      <button className="primary slim" disabled={startupLoading} onClick={() => saveStartup(startupPending)}>{startupLoading ? "处理中" : "确认"}</button>
+                      <button className="secondary slim" disabled={startupLoading} onClick={() => setStartupPending(null)}>取消</button>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
             <div className="table-panel">
               <h2>调度状态</h2>

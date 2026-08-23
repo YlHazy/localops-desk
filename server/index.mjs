@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectHost, demoHosts } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
+import { configureStartupEntry, publicStartupState, startupEntrySnapshot } from "./windows-startup.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const host = process.env.LOCALOPS_API_HOST || "127.0.0.1";
@@ -697,6 +698,8 @@ function agentManifest() {
       { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
       { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
       { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
+      { method: "GET", path: "/api/startup", description: "Read current-user LocalOps startup state without filesystem paths." },
+      { method: "PUT", path: "/api/startup", description: "Explicitly enable or disable the owned current-user LocalOps startup entry." },
       { method: "POST", path: "/api/maintenance/retention", description: "Apply local SQLite retention cleanup." },
       { method: "POST", path: "/api/actions/dry-run", description: "Generate a non-mutating action plan." },
       { method: "GET", path: "/api/reports/current", description: "Read current diagnostic report." },
@@ -757,6 +760,17 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "PUT" && url.pathname === "/api/scheduler") {
       return json(res, { scheduler: configureScheduler(await readBody(req)) });
+    }
+    if (req.method === "GET" && url.pathname === "/api/startup") {
+      return json(res, { startup: publicStartupState(await startupEntrySnapshot({ root })) });
+    }
+    if (req.method === "PUT" && url.pathname === "/api/startup") {
+      const input = await readBody(req);
+      if (typeof input.enabled !== "boolean") {
+        throw new InputValidationError("enabled must be a boolean.");
+      }
+      const startup = await configureStartupEntry({ root }, input.enabled);
+      return json(res, { startup: publicStartupState(startup) });
     }
     if (req.method === "POST" && url.pathname === "/api/maintenance/retention") {
       return json(res, { retention: runRetention(await readBody(req)) });

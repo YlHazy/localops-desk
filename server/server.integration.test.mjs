@@ -242,6 +242,34 @@ test("browser boundary rejects cross-site, rebinding, and simple-content mutatio
   assert.equal(rebound.body.error, "HOST_NOT_ALLOWED");
 });
 
+test("startup API exposes no local paths and requires an explicit boolean mutation", async (t) => {
+  const startupDir = mkdtempSync(join(tmpdir(), "localops-startup-api-test-"));
+  t.after(() => rmSync(startupDir, { recursive: true, force: true }));
+  const api = await startApi(t, { LOCALOPS_STARTUP_DIR: startupDir });
+
+  const inspected = await fetch(`${api.base}/api/startup`);
+  assert.equal(inspected.status, 200);
+  const inspectedText = await inspected.text();
+  assert.doesNotMatch(inspectedText, /localops-startup-api-test|AppData|launch-pet\.mjs/i);
+  assert.equal(JSON.parse(inspectedText).startup.enabled, false);
+
+  const invalid = await fetch(`${api.base}/api/startup`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: "yes" })
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, "INVALID_INPUT");
+
+  const disabled = await fetch(`${api.base}/api/startup`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: false })
+  });
+  assert.equal(disabled.status, 200);
+  assert.equal((await disabled.json()).startup.enabled, false);
+});
+
 test("dry-run plans require a configured host", async (t) => {
   const api = await startApi(t);
   const response = await fetch(`${api.base}/api/actions/dry-run`, {

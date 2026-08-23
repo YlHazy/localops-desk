@@ -1123,6 +1123,24 @@ th {
   color: #14633f;
 }
 
+.startup-watch {
+  margin-top: 22px;
+  padding: 17px;
+  border: 1px solid #d8e3ea;
+  border-left: 5px solid #8295a1;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #f8fbfc, #ffffff);
+}
+.startup-watch.enabled { border-left-color: #1b7f73; background: linear-gradient(110deg, #eff9f6, #ffffff); }
+.startup-watch.conflict { border-left-color: #cf8731; background: linear-gradient(110deg, #fff8ee, #ffffff); }
+.startup-watch-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.startup-watch h3 { margin: 3px 0 0; font-size: 16px; }
+.startup-watch > p { margin: 12px 0 10px; color: #526171; line-height: 1.55; }
+.startup-watch ul { margin: 0 0 14px; padding-left: 18px; color: #657383; font-size: 12px; line-height: 1.7; }
+.startup-confirm { display: grid; gap: 6px; padding: 12px; border: 1px solid #bfd1e4; border-radius: 8px; background: white; }
+.startup-confirm small { color: #657383; }
+.startup-confirm > div { display: flex; gap: 8px; margin-top: 4px; }
+
 .state-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

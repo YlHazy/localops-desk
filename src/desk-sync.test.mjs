@@ -14,22 +14,24 @@ test("desk sync age is bounded and human readable", () => {
   assert.equal(deskSyncCopy("current", 10_000, 140_000).label, "自动同步 · 2 分钟前");
 });
 
-test("desk snapshot uses only the four bounded read endpoints", async () => {
+test("desk snapshot uses only the five bounded read endpoints", async () => {
   const calls = [];
   const payloads = {
     "/api/status": { counts: {}, hosts: [] },
     "/api/checks": { checks: [{ id: 1 }] },
     "/api/reports/current": { report: "current" },
-    "/api/scheduler": { scheduler: { enabled: true } }
+    "/api/scheduler": { scheduler: { enabled: true } },
+    "/api/startup": { startup: { enabled: false, status: "not-installed" } }
   };
   const snapshot = await fetchDeskSnapshot(async (path) => {
     calls.push(path);
     return payloads[path];
   });
-  assert.deepEqual(calls, ["/api/status", "/api/checks", "/api/reports/current", "/api/scheduler"]);
+  assert.deepEqual(calls, ["/api/status", "/api/checks", "/api/reports/current", "/api/scheduler", "/api/startup"]);
   assert.equal(snapshot.checks[0].id, 1);
   assert.equal(snapshot.report, "current");
   assert.equal(snapshot.scheduler.enabled, true);
+  assert.equal(snapshot.startup.status, "not-installed");
 });
 
 test("background sync preserves an unsaved scheduler draft", () => {

@@ -18,17 +18,19 @@ export function deskSyncCopy(state, lastSyncedAt, now = Date.now()) {
 }
 
 export async function fetchDeskSnapshot(request) {
-  const [status, recent, currentReport, schedulerState] = await Promise.all([
+  const [status, recent, currentReport, schedulerState, startupState] = await Promise.all([
     request("/api/status"),
     request("/api/checks"),
     request("/api/reports/current"),
-    request("/api/scheduler")
+    request("/api/scheduler"),
+    request("/api/startup")
   ]);
   return {
     status,
     checks: recent.checks,
     report: currentReport.report,
-    scheduler: schedulerState.scheduler
+    scheduler: schedulerState.scheduler,
+    startup: startupState.startup
   };
 }
 

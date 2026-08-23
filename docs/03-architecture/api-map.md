@@ -48,6 +48,16 @@ Returns the in-process local scheduler state, including enabled flag, interval, 
 
 Updates local scheduler settings. The scheduler only runs while the LocalOps Desk process is alive.
 
+## Login Start
+
+`GET /api/startup`
+
+Returns only the public state of the LocalOps-owned current-user login entry: support, readiness, enablement, conflict state, blockers, and explanatory copy. Local paths and generated script content are excluded.
+
+`PUT /api/startup`
+
+Accepts an explicit boolean `enabled`. On Windows it creates or removes only the exact LocalOps-owned current-user VBS Startup entry. A missing build/browser or unexpected same-name file returns a typed failure without modification.
+
 ## Maintenance
 
 `POST /api/maintenance/retention`

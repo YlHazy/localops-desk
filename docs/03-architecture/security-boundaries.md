@@ -8,6 +8,8 @@
 - No arbitrary shell input in MVP.
 - Real SSH collection is disabled unless explicitly enabled.
 - The scheduler is local in-process only. It does not install a Windows service or remote cron job.
+- Windows login-start is a separate explicit opt-in. It manages one current-user VBS Startup entry, requires no administrator rights, and launches only the checked-in pet launcher through the current Node executable.
+- Login-start refuses to enable without the built UI and Edge. It never overwrites or removes an unexpected same-name entry, and public API responses omit all generated script and filesystem paths.
 
 ## SSH Rules
 

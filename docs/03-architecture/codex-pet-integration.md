@@ -30,7 +30,7 @@ LocalOps API on 127.0.0.1:4317
 
 - The plugin accepts only loopback LocalOps URLs and rejects embedded credentials. Remote transport has no escape hatch in this MVP.
 - Codex-triggered checks require one `hostId`, have a 15-second HTTP budget, and a 20-second plugin timeout. The full dashboard may still run an explicit all-host check.
-- It does not expose host CRUD, arbitrary shell, real restart/reload, secrets, scheduler mutation, or deletion.
+- It does not expose host CRUD, arbitrary shell, real restart/reload, secrets, scheduler or login-start mutation, or deletion.
 - A light check may call configured HTTP endpoints and allowlisted read-only SSH collectors through LocalOps; it records local check history.
 - LocalOps rejects overlapping checks through an in-memory single-flight gate shared by manual and scheduled runs.
 - Status freshness comes from `lastCheckedAt`/`observedAt`, never from the response generation timestamp. Expired evidence is reported as unknown.
