@@ -13,6 +13,8 @@
     "pet:window": "node scripts/launch-pet.mjs",
     "pet:window:check": "node scripts/launch-pet.mjs --check",
     "build": "tsc -b && vite build",
+    "package:portable": "node scripts/package-portable.mjs build",
+    "verify:portable": "node scripts/package-portable.mjs verify && node scripts/verify-portable-runtime.mjs",
     "check:delivery": "node scripts/validate-delivery.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "smoke:api": "node scripts/smoke-api.mjs",

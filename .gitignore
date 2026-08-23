@@ -11,3 +11,4 @@ data/pet-browser-profile/
 *.log
 *.tsbuildinfo
 work/
+artifacts/

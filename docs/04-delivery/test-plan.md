@@ -2,6 +2,7 @@
 
 - TypeScript typecheck.
 - Production build.
+- Portable package manifest, forbidden-file scan, packaged-runtime API/UI smoke, and Windows Edge launcher check.
 - API smoke:
   - `GET /api/status`
   - `POST /api/checks/light`
