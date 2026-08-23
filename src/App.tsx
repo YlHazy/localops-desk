@@ -344,6 +344,7 @@ export function App() {
   const [error, setError] = useState<string>("");
   const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
   const [editingHostId, setEditingHostId] = useState<string | null>(null);
+  const [pendingHostDeleteId, setPendingHostDeleteId] = useState<string | null>(null);
   const [showHostForm, setShowHostForm] = useState(false);
   const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
   const [startup, setStartup] = useState<StartupState | null>(null);
@@ -607,6 +608,7 @@ export function App() {
     try {
       await api(`/api/hosts/${encodeURIComponent(hostId)}`, { method: "DELETE" });
       setSelectedHostId(null);
+      setPendingHostDeleteId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除主机失败");
@@ -976,7 +978,7 @@ export function App() {
               <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
               <tbody>
                 {dashboard.hosts.map((host) => (
-                  <tr key={host.id}>
+                  <tr key={host.id} className={pendingHostDeleteId === host.id ? "pending-delete" : ""}>
                     <td>{host.name}</td>
                     <td>{host.environment}</td>
                     <td>{host.sshAlias}</td>
@@ -984,8 +986,18 @@ export function App() {
                     <td>{host.composeProject}</td>
                     <td><StatusPill status={host.status} /></td>
                     <td className="row-actions">
-                      <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
-                      <button onClick={() => removeHost(host.id)}><Trash2 size={15} />删除</button>
+                      {pendingHostDeleteId === host.id ? (
+                        <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
+                          <span>本地配置和检查记录都会删除</span>
+                          <button className="danger" disabled={loading} onClick={() => removeHost(host.id)}><Trash2 size={15} />{loading ? "删除中" : "确认删除"}</button>
+                          <button disabled={loading} onClick={() => setPendingHostDeleteId(null)}>取消</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
+                          <button onClick={() => setPendingHostDeleteId(host.id)}><Trash2 size={15} />删除</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

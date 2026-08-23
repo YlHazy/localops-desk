@@ -28,6 +28,7 @@
 - Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.
 - Saving the first host returns the user to the overview and presents the next safe steps in order: choose evidence, obtain a first observation, enable local scheduling, and optionally enable the desktop/login companion.
 - The first-run path explains LocalOps' product difference in plain language: unknown is not healthy, evidence has freshness, risky actions remain dry-run, and Codex discussion receives a sanitized summary only.
+- Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
 - Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.

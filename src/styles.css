@@ -775,6 +775,11 @@ h3 {
   gap: 12px;
 }
 
+tr.pending-delete td { background: #fff8f6; }
+.delete-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; min-width: 240px; }
+.delete-confirm > span { flex-basis: 100%; color: #a34843; font-size: 11px; text-align: right; }
+.delete-confirm .danger { color: #fff; border-color: #a83f3a; background: #a83f3a; }
+
 .host-list.simple {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
