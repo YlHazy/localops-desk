@@ -15,6 +15,9 @@
 - The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
 - Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
 - Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.
+- The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
+- The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
+- Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
 - Evidence older than the configured freshness window is shown as unknown, and the footer uses observation time rather than response generation time.
 - A pet or Codex-triggered light check refreshes exactly one host.
 - Motion respects `prefers-reduced-motion`; keyboard focus remains visible.

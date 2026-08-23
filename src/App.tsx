@@ -10,6 +10,7 @@ import {
   FileText,
   History,
   MessageCircle,
+  MonitorUp,
   Pencil,
   Play,
   Plus,
@@ -376,6 +377,11 @@ export function App() {
     load().catch((err: Error) => setError(err.message));
   }
 
+  function openPetWindow() {
+    const pet = window.open(`${window.location.origin}/?mode=pet`, "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
+    if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
+  }
+
   const selectedHost = useMemo(
     () => dashboard?.hosts.find((host) => host.id === selectedHostId) ?? dashboard?.hosts[0] ?? null,
     [dashboard, selectedHostId]
@@ -540,7 +546,10 @@ export function App() {
         loading={loading}
         error={error}
         onRefresh={(hostId) => runLightCheck(hostId)}
-        onOpenDesk={() => window.location.assign("/")}
+        onOpenDesk={() => {
+          const desk = window.open("/", "localops-desk");
+          if (!desk) window.location.assign("/");
+        }}
         onDiscuss={(hostId) => {
           const host = dashboard.hosts.find((item) => item.id === hostId);
           if (host) window.location.assign(codexDiscussionLink(discussionBrief(dashboard, host)));
@@ -639,14 +648,20 @@ export function App() {
             <h1>先看结论，再决定要不要动</h1>
             <p>页面刷新：{formatTime(dashboard.generatedAt)} · {freshness.label}</p>
           </div>
-          <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
-            {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
-            <span>{loading ? "检查中" : "刷新全部"}</span>
-          </button>
-          <button className="secondary" onClick={startCreateHost}>
-            <Plus size={18} />
-            <span>添加服务器</span>
-          </button>
+          <div className="topbar-actions">
+            <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
+              {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
+              <span>{loading ? "检查中" : "刷新全部"}</span>
+            </button>
+            <button className="secondary" onClick={startCreateHost}>
+              <Plus size={18} />
+              <span>添加服务器</span>
+            </button>
+            <button className="secondary" onClick={openPetWindow}>
+              <MonitorUp size={18} />
+              <span>打开桌宠</span>
+            </button>
+          </div>
         </header>
 
         {error ? <div className="error-line"><AlertTriangle size={16} />{error}</div> : null}

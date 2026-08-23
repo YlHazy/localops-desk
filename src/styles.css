@@ -284,6 +284,13 @@ nav button:hover {
   align-items: center;
 }
 
+.topbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 h1, h2, h3, p {
   margin-top: 0;
 }
@@ -1181,6 +1188,10 @@ code {
     flex-direction: column;
   }
 
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
   .plain-summary {
     align-items: stretch;
     flex-direction: column;
@@ -1188,6 +1199,7 @@ code {
 }
 
 @media (max-width: 620px) {
+  .topbar-actions { flex-direction: column; }
   .empty-host-setup { align-items: start; padding: 12px; }
   .empty-host-card { padding: 24px 20px; }
   .empty-host-intro h1 { font-size: 34px; }

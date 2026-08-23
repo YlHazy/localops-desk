@@ -10,13 +10,16 @@
     "dev": "concurrently -n api,web -c cyan,magenta \"node server/index.mjs\" \"vite --host 127.0.0.1\"",
     "dev:api": "node server/index.mjs",
     "dev:web": "vite --host 127.0.0.1",
+    "pet:window": "node scripts/launch-pet.mjs",
+    "pet:window:check": "node scripts/launch-pet.mjs --check",
     "build": "tsc -b && vite build",
     "check:delivery": "node scripts/validate-delivery.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "smoke:api": "node scripts/smoke-api.mjs",
-    "test": "npm run test:server && npm run test:codex-plugin",
+    "test": "npm run test:server && npm run test:codex-plugin && npm run test:pet-launcher",
     "test:server": "node --test server/input-validation.test.mjs server/runtime.test.mjs server/server.integration.test.mjs server/delivery-validation.test.mjs",
-    "test:codex-plugin": "node --test plugins/localops-guardian/scripts/mcp-server.test.mjs"
+    "test:codex-plugin": "node --test plugins/localops-guardian/scripts/mcp-server.test.mjs",
+    "test:pet-launcher": "node --test scripts/launch-pet.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.7.0",
