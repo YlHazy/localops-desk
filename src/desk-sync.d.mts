@@ -23,4 +23,5 @@ export type DeskReadRequest = <T>(path: string) => Promise<T>;
 
 export function deskSyncCopy(state: DeskSyncState, lastSyncedAt: number | null, now?: number): DeskSyncCopy;
 export function fetchDeskSnapshot(request: DeskReadRequest): Promise<DeskSnapshot>;
+export function fetchPetSnapshot(request: DeskReadRequest): Promise<import("./types").DashboardStatus>;
 export function schedulerDraftAfterSync(currentDraft: SchedulerDraft, scheduler: import("./types").SchedulerState, preserveDraft: boolean): SchedulerDraft;

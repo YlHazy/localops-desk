@@ -21,6 +21,8 @@
 - The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.
 - Full-desk sync exposes syncing, current, and paused states; failure preserves the last trustworthy result and offers retry rather than replacing it with a spinner.
 - Background sync does not overwrite unsaved scheduler form values and does not call a check, mutation, retention, or action endpoint.
+- After pet sync failure, retained evidence is labeled as non-current and a dedicated local-status retry is available; that retry performs no server check and creates no check-history row.
+- Pet sync failures and light-check failures are distinct: a sync failure can retry the bounded status read, while an uncertain check failure preserves prior evidence and discourages duplicate submission.
 - A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
 - Windows login-start requires a production build, a usable Node executable, Microsoft Edge, and an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
 - Startup enablement writes only one current-user LocalOps VBS entry; disablement removes it only when its exact managed content still matches. Unknown same-name entries fail closed.

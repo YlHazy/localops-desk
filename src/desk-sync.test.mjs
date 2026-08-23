@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deskSyncCopy, fetchDeskSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 
 test("desk sync copy distinguishes initial, running, and paused states", () => {
   assert.match(deskSyncCopy("idle", null, 10_000).label, /首次同步/);
@@ -39,4 +39,16 @@ test("background sync preserves an unsaved scheduler draft", () => {
   const runtime = { enabled: true, lightIntervalMinutes: 15, retentionDays: 7 };
   assert.equal(schedulerDraftAfterSync(draft, runtime, true), draft);
   assert.deepEqual(schedulerDraftAfterSync(draft, runtime, false), runtime);
+});
+
+test("pet sync reads status only and never triggers a check", async () => {
+  const calls = [];
+  const expected = { counts: {}, hosts: [], observedAt: null };
+  const result = await fetchPetSnapshot(async (path) => {
+    calls.push(path);
+    return expected;
+  });
+  assert.equal(result, expected);
+  assert.deepEqual(calls, ["/api/status"]);
+  assert.ok(calls.every((path) => !path.includes("checks/light")));
 });

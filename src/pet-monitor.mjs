@@ -42,3 +42,20 @@ export function selectFocusHost(hosts, selectedHostId) {
   if (!selectedHostId) return hosts[0];
   return hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
 }
+
+export function petSnapshotTrust(hasError, stale, hasObservation) {
+  if (hasError) {
+    return {
+      state: "offline",
+      label: hasObservation ? "本地同步中断 · 仅显示上次证据" : "本地同步中断 · 尚无可用证据",
+      current: false
+    };
+  }
+  if (!hasObservation) {
+    return { state: "unknown", label: "尚未取得观测证据", current: false };
+  }
+  if (stale) {
+    return { state: "stale", label: "证据已过期 · 不能视为当前状态", current: false };
+  }
+  return { state: "current", label: "证据仍在有效期内", current: true };
+}

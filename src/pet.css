@@ -121,6 +121,17 @@ body:has(.pet-window) {
 .pet-speech svg { flex: 0 0 auto; margin-top: 2px; color: var(--pet-mood); }
 .pet-speech p { margin: 0; font-size: 14px; line-height: 1.65; }
 
+.pet-recovery { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; margin-top: 9px; padding: 10px 12px; border: 1px solid rgba(215, 90, 87, 0.2); border-radius: 13px; background: rgba(255, 246, 244, 0.82); }
+.pet-recovery span { color: #a5413e; font-size: 11px; font-weight: 800; }
+.pet-recovery small { grid-column: 1; overflow: hidden; color: var(--pet-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.pet-recovery button { grid-column: 2; grid-row: 1 / 3; display: inline-flex; align-items: center; align-self: center; gap: 5px; padding: 7px 8px; color: #a5413e; border: 1px solid rgba(215, 90, 87, 0.24); border-radius: 9px; background: white; font-size: 10px; font-weight: 800; cursor: pointer; }
+.pet-recovery button:disabled { cursor: wait; opacity: 0.65; }
+.pet-action-error { display: flex; align-items: flex-start; gap: 8px; margin-top: 9px; padding: 9px 11px; color: #865a17; border: 1px solid rgba(228, 168, 69, 0.24); border-radius: 13px; background: rgba(255, 249, 237, 0.88); }
+.pet-action-error svg { flex: 0 0 auto; margin-top: 1px; }
+.pet-action-error span, .pet-action-error strong, .pet-action-error small { display: block; }
+.pet-action-error strong { font-size: 11px; }
+.pet-action-error small { margin-top: 2px; font-size: 9px; line-height: 1.45; }
+
 .pet-focus {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

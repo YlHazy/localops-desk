@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { monitorSignal, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
+import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
@@ -64,15 +64,21 @@ function hostSignal(host: HostState) {
 export function PetMode({
   dashboard,
   loading,
-  error,
+  syncing,
+  syncError,
+  actionError,
   onRefresh,
+  onRetrySync,
   onOpenDesk,
   onDiscuss
 }: {
   dashboard: DashboardStatus;
   loading: boolean;
-  error: string;
+  syncing: boolean;
+  syncError: string;
+  actionError: string;
   onRefresh: (hostId: string) => void;
+  onRetrySync: () => void;
   onOpenDesk: () => void;
   onDiscuss: (hostId: string) => void;
 }) {
@@ -126,14 +132,15 @@ export function PetMode({
   const priorityHost = hosts[0];
   const focusHost = selectFocusHost(hosts, selectedHostId);
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
-  const overallStatus: Status = error ? "unknown" : priorityHost?.status ?? "unknown";
+  const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
+  const snapshotTrust = petSnapshotTrust(Boolean(syncError), stale, Boolean(dashboard.observedAt));
   const visibleCounts = stale
     ? { healthy: 0, warning: 0, critical: 0, unknown: hosts.length }
     : dashboard.counts;
 
   useEffect(() => {
-    const current = monitorSignal(dashboard, Boolean(error));
+    const current = monitorSignal(dashboard, Boolean(syncError));
     if (notificationsEnabled && Notification.permission === "granted") {
       const notice = worseningNotice(previousSignal.current, current);
       if (notice) {
@@ -142,7 +149,7 @@ export function PetMode({
       }
     }
     previousSignal.current = current;
-  }, [dashboard, error, notificationsEnabled]);
+  }, [dashboard, syncError, notificationsEnabled]);
 
   async function toggleNotifications() {
     if (!notificationsSupported) {
@@ -192,15 +199,33 @@ export function PetMode({
       </section>
 
       <section className="pet-speech" aria-live="polite">
-        {error ? <AlertTriangle size={17} /> : overallStatus === "healthy" ? <Check size={17} /> : <Server size={17} />}
-        <p>{error
-          ? `本地监控没有响应：${error}`
+        {syncError ? <AlertTriangle size={17} /> : overallStatus === "healthy" ? <Check size={17} /> : <Server size={17} />}
+        <p>{syncError
+          ? "本地值守连接中断。服务器没有因此被检查或改动。"
           : dashboard.hosts.length === 0
             ? "尚未配置服务器，请先打开控制台添加一台。"
             : stale
               ? "检查结果已过期，先刷新最需要关注的一台。"
               : copy.line}</p>
       </section>
+
+      {syncError ? (
+        <section className="pet-recovery" aria-label="本地状态恢复">
+          <span>{snapshotTrust.label}</span>
+          <small title={syncError}>{syncError}</small>
+          <button onClick={onRetrySync} disabled={syncing}>
+            <RefreshCcw className={syncing ? "spin" : ""} size={15} />
+            {syncing ? "正在重连" : "只重连本地状态"}
+          </button>
+        </section>
+      ) : null}
+
+      {actionError ? (
+        <section className="pet-action-error" role="alert">
+          <AlertTriangle size={15} />
+          <span><strong>巡检完成状态未确认</strong><small>{actionError}。上次证据保持不变；先等自动同步，不要连续点击。</small></span>
+        </section>
+      ) : null}
 
       {focusHost ? (
         <>
@@ -271,7 +296,7 @@ export function PetMode({
         <button className="pet-open" onClick={onOpenDesk}>
           控制台 <ArrowUpRight size={16} />
         </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {dashboard.hosts.length === 0 ? "等待配置" : stale ? "证据已过期" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 自动同步不触发巡检</small>
+        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 自动同步不触发巡检</small>
       </footer>
     </main>
   );

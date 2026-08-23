@@ -34,6 +34,10 @@ export async function fetchDeskSnapshot(request) {
   };
 }
 
+export function fetchPetSnapshot(request) {
+  return request("/api/status");
+}
+
 export function schedulerDraftAfterSync(currentDraft, scheduler, preserveDraft) {
   if (preserveDraft) return currentDraft;
   return {

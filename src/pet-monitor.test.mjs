@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { monitorSignal, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
+import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 
 function dashboard(counts) {
   return { counts };
@@ -47,4 +47,20 @@ test("manual host focus never changes the priority ordering", () => {
   assert.equal(selectFocusHost(hosts, "missing-host").id, "critical-host");
   assert.equal(hosts[0].id, "critical-host");
   assert.equal(selectFocusHost([], "healthy-host"), null);
+});
+
+test("pet snapshot trust never presents retained or expired evidence as current", () => {
+  assert.deepEqual(petSnapshotTrust(true, false, true), {
+    state: "offline",
+    label: "本地同步中断 · 仅显示上次证据",
+    current: false
+  });
+  assert.equal(petSnapshotTrust(true, false, false).state, "offline");
+  assert.equal(petSnapshotTrust(false, false, false).state, "unknown");
+  assert.equal(petSnapshotTrust(false, true, true).state, "stale");
+  assert.deepEqual(petSnapshotTrust(false, false, true), {
+    state: "current",
+    label: "证据仍在有效期内",
+    current: true
+  });
 });

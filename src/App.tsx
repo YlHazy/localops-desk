@@ -23,7 +23,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { deskSyncCopy, fetchDeskSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { PetMode } from "./PetMode";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
@@ -339,6 +339,7 @@ export function App() {
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState("overview");
   const [loading, setLoading] = useState(false);
+  const [petSyncing, setPetSyncing] = useState(false);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [report, setReport] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -357,10 +358,11 @@ export function App() {
   const [deskSyncState, setDeskSyncState] = useState<DeskSyncState>("idle");
   const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
   const [deskSyncError, setDeskSyncError] = useState("");
+  const [petSyncError, setPetSyncError] = useState("");
 
   async function load({ preserveSchedulerForm = false } = {}) {
     if (petMode) {
-      const status = await api<DashboardStatus>("/api/status");
+      const status = await fetchPetSnapshot(api);
       setDashboard(status);
       setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
       return;
@@ -395,9 +397,12 @@ export function App() {
     async function poll() {
       try {
         await load();
-        if (!stopped) setError("");
+        if (!stopped) {
+          setPetSyncError("");
+          setError("");
+        }
       } catch (err) {
-        if (!stopped) setError(err instanceof Error ? err.message : "本地监控没有响应");
+        if (!stopped) setPetSyncError(err instanceof Error ? err.message : "本地监控没有响应");
       } finally {
         if (!stopped) timer = window.setTimeout(poll, 30_000);
       }
@@ -457,6 +462,19 @@ export function App() {
     }
   }
 
+  async function retryPetSync() {
+    setPetSyncing(true);
+    try {
+      await load();
+      setPetSyncError("");
+      setError("");
+    } catch (err) {
+      setPetSyncError(err instanceof Error ? err.message : "本地监控没有响应");
+    } finally {
+      setPetSyncing(false);
+    }
+  }
+
   function openPetWindow() {
     const pet = window.open(`${window.location.origin}/?mode=pet`, "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
@@ -496,7 +514,14 @@ export function App() {
     setError("");
     try {
       await api(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
-      await load();
+      try {
+        await load();
+        if (petMode) setPetSyncError("");
+      } catch (refreshError) {
+        const message = refreshError instanceof Error ? refreshError.message : "本地监控没有响应";
+        if (petMode) setPetSyncError(message);
+        else setError(`巡检已完成，但读取新结果失败：${message}`);
+      }
       setSelectedTab("overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "检查失败");
@@ -646,8 +671,11 @@ export function App() {
       <PetMode
         dashboard={dashboard}
         loading={loading}
-        error={error}
+        syncing={petSyncing}
+        syncError={petSyncError}
+        actionError={error}
         onRefresh={(hostId) => runLightCheck(hostId)}
+        onRetrySync={retryPetSync}
         onOpenDesk={() => {
           const desk = window.open("/", "localops-desk");
           if (!desk) window.location.assign("/");
