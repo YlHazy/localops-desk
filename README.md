@@ -39,6 +39,8 @@ silently remove user-owned configuration during startup.
 
 Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. This view is a future desktop-shell prototype, not the official Codex pet.
 
+While open, pet mode reads the aggregate local status every 30 seconds without triggering a server check. System anomaly notifications are explicit opt-in and fire only after a later status deterioration or an increased affected count. Notification text contains aggregate counts only: no host name, address, command, or raw evidence. The preference stays in the current browser profile (the launcher uses an isolated profile) and can be disabled from the pet at any time.
+
 After `npm run build`, Windows users can run `npm run pet:window` to open the companion as an isolated Microsoft Edge app window. The launcher reuses an API only after its loopback manifest and bounded status contract identify it as LocalOps; otherwise it fails closed. When no API is running, it starts its own process and stops only that owned process when the app window exits. Stopping the launcher also closes its own browser child. The isolated Edge profile disables extensions and stays under ignored local data. Use `npm run pet:window:check` to verify the browser, build, URL, and API state without opening a window. The app window is not always-on-top yet.
 
 The full desk and pet can prepare a Codex discussion task from categorized status only. Raw evidence, connection URLs, SSH aliases, and commands are deliberately excluded from that cross-app summary; detailed evidence stays in the local desk.

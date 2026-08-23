@@ -22,7 +22,7 @@ Avoid:
 
 Current implementation note: HTTP collection is real. SSH/resource collection remains simulated unless `LOCALOPS_ENABLE_SSH=1` is set, and then only allowlisted read-only commands may run.
 
-### Deep Check
+### Deep Check (planned, not implemented)
 
 Default cadence: daily, or manual.
 
@@ -51,9 +51,10 @@ The scheduler is in-process and local-only. It starts only when the LocalOps Des
 
 ## Failure Backoff
 
-- Two consecutive failures: mark the host as needs attention.
-- Three consecutive failures: mark the host as incident.
-- Repeated failures back off scheduled checks from 10 minutes toward 30 minutes.
+- Scheduler execution failures are recorded at scheduler level and do not reclassify a host without host-specific evidence.
+- The first scheduler failure keeps the configured interval, the second uses twice that interval, and the third and later failures use three times that interval.
+
+The open pet window observes `GET /api/status` every 30 seconds. This is a read-only UI sync, not a collection schedule: it does not call a check endpoint, open SSH, write check history, or keep monitoring after the local process/window is closed. Browser system notifications are separately opt-in and compare only aggregate status transitions in page memory.
 
 ## Log Policy
 

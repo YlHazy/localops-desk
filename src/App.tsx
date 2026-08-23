@@ -367,6 +367,26 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!petMode) return;
+    let stopped = false;
+    let timer = window.setTimeout(poll, 30_000);
+    async function poll() {
+      try {
+        await load();
+        if (!stopped) setError("");
+      } catch (err) {
+        if (!stopped) setError(err instanceof Error ? err.message : "本地监控没有响应");
+      } finally {
+        if (!stopped) timer = window.setTimeout(poll, 30_000);
+      }
+    }
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [petMode]);
+
+  useEffect(() => {
     if (petMode) return;
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);

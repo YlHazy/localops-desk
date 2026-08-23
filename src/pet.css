@@ -20,7 +20,8 @@ body:has(.pet-window) {
   min-height: 100vh;
   margin: 0 auto;
   padding: 12px 18px 18px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--pet-ink);
   background:
     radial-gradient(circle at 82% 12%, rgba(142, 217, 194, 0.2), transparent 29%),
@@ -159,6 +160,27 @@ body:has(.pet-window) {
 .pet-stats span { color: var(--pet-muted); font-size: 11px; text-align: center; border-right: 1px solid rgba(25, 51, 60, 0.09); }
 .pet-stats span:last-child { border-right: 0; }
 .pet-stats strong { display: block; margin-bottom: 2px; color: var(--pet-ink); font: 700 19px/1 Consolas, monospace; }
+
+.pet-watch { margin: 0 0 12px; }
+.pet-watch > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--pet-ink);
+  text-align: left;
+  border: 1px solid rgba(25, 51, 60, 0.12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+}
+.pet-watch > button[aria-pressed="true"] { border-color: rgba(36, 121, 111, 0.3); background: rgba(142, 217, 194, 0.13); }
+.pet-watch > button svg { flex: 0 0 auto; color: var(--pet-teal); }
+.pet-watch span, .pet-watch strong, .pet-watch small { display: block; }
+.pet-watch strong { font-size: 12px; }
+.pet-watch small { margin-top: 2px; color: var(--pet-muted); font-size: 10px; }
+.pet-watch p { margin: 6px 3px 0; color: var(--pet-muted); font-size: 10px; line-height: 1.45; }
 
 .pet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pet-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 39px; border-radius: 12px; font-weight: 700; cursor: pointer; }

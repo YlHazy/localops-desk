@@ -1,5 +1,7 @@
-import { AlertTriangle, ArrowUpRight, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { monitorSignal, worseningNotice } from "./pet-monitor.mjs";
+import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
@@ -15,6 +17,33 @@ const statusRank: Record<Status, number> = {
   unknown: 2,
   healthy: 3
 };
+
+const notificationPreferenceKey = "localops.pet.notifications";
+
+function readNotificationPreference() {
+  try {
+    return window.localStorage.getItem(notificationPreferenceKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeNotificationPreference(enabled: boolean) {
+  try {
+    window.localStorage.setItem(notificationPreferenceKey, enabled ? "1" : "0");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showSystemNotification(title: string, options: NotificationOptions) {
+  try {
+    return new Notification(title, options);
+  } catch {
+    return null;
+  }
+}
 
 function latestTime(value: string | null) {
   if (!value) return "尚未巡检";
@@ -48,6 +77,13 @@ export function PetMode({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const notificationsSupported = "Notification" in window;
+  const notificationsBlocked = notificationsSupported && Notification.permission === "denied";
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationsSupported
+    && Notification.permission === "granted"
+    && readNotificationPreference());
+  const [notificationNote, setNotificationNote] = useState("");
+  const previousSignal = useRef<MonitorSignal | null>(null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -66,6 +102,46 @@ export function PetMode({
   const visibleCounts = stale
     ? { healthy: 0, warning: 0, critical: 0, unknown: hosts.length }
     : dashboard.counts;
+
+  useEffect(() => {
+    const current = monitorSignal(dashboard, Boolean(error));
+    if (notificationsEnabled && Notification.permission === "granted") {
+      const notice = worseningNotice(previousSignal.current, current);
+      if (notice) {
+        const notification = showSystemNotification(notice.title, { body: notice.body, tag: "localops-status" });
+        if (notification) notification.onclick = () => window.focus();
+      }
+    }
+    previousSignal.current = current;
+  }, [dashboard, error, notificationsEnabled]);
+
+  async function toggleNotifications() {
+    if (!notificationsSupported) {
+      setNotificationNote("当前窗口不支持系统提醒，状态仍会每 30 秒自动同步。");
+      return;
+    }
+    if (notificationsEnabled) {
+      writeNotificationPreference(false);
+      setNotificationsEnabled(false);
+      setNotificationNote("异常提醒已关闭，自动同步仍在继续。");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      writeNotificationPreference(false);
+      setNotificationNote("系统没有允许提醒。可在 Edge 的站点权限中重新开启。");
+      return;
+    }
+    const preferenceSaved = writeNotificationPreference(true);
+    setNotificationsEnabled(true);
+    setNotificationNote(preferenceSaved
+      ? "异常提醒已开启；只显示数量，不显示服务器地址或命令。"
+      : "本次已开启提醒，但浏览器不允许保存偏好；下次打开需重新开启。");
+    showSystemNotification("LocalOps 已开始值守", {
+      body: "状态恶化时会提醒你；通知不包含地址、命令或检查证据。",
+      tag: "localops-notifications-ready"
+    });
+  }
 
   return (
     <main className={`pet-window ${overallStatus}`}>
@@ -126,6 +202,20 @@ export function PetMode({
         <span><strong>{visibleCounts.healthy ?? 0}</strong>正常</span>
       </section>
 
+      <section className="pet-watch" aria-live="polite">
+        <button onClick={toggleNotifications} aria-pressed={notificationsEnabled}>
+          {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+          <span><strong>{notificationsEnabled
+            ? "异常提醒已开"
+            : !notificationsSupported
+              ? "当前窗口不支持提醒"
+              : notificationsBlocked
+                ? "系统提醒已阻止"
+                : "开启异常提醒"}</strong><small>30 秒自动同步 · 只显示状态数量</small></span>
+        </button>
+        {notificationNote ? <p>{notificationNote}</p> : null}
+      </section>
+
       <footer className="pet-actions">
         <button className="pet-refresh" onClick={() => focusHost && onRefresh(focusHost.id)} disabled={loading || !focusHost}>
           <RefreshCcw className={loading ? "spin" : ""} size={17} />
@@ -137,7 +227,7 @@ export function PetMode({
         <button className="pet-open" onClick={onOpenDesk}>
           控制台 <ArrowUpRight size={16} />
         </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {dashboard.hosts.length === 0 ? "等待配置" : stale ? "证据已过期" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 讨论只预填</small>
+        <small>{latestTime(dashboard.observedAt)} 观测 · {dashboard.hosts.length === 0 ? "等待配置" : stale ? "证据已过期" : dashboard.mode === "ssh-enabled" ? "只读 SSH" : "安全模拟"} · 自动同步不触发巡检</small>
       </footer>
     </main>
   );

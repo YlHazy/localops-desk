@@ -12,6 +12,10 @@
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
 - The pet's expression, copy, and accent reflect the worst current host state.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.
+- While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
+- System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
+- Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
+- Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
 - The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
 - Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
 - Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.
