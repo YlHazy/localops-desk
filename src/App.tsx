@@ -25,6 +25,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
+import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 import { PetMode } from "./PetMode";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 
@@ -144,21 +145,6 @@ function friendlyEvidence(value: string) {
   return shortSignal(value);
 }
 
-function httpSignalStatus(host: HostState): Status {
-  if (!host.httpStatus || /not checked|未检查/i.test(host.httpStatus)) return "unknown";
-  return /HTTP 2\d\d|\bok\b/i.test(host.httpStatus) ? "healthy" : "critical";
-}
-
-function sshSignalStatus(host: HostState): Status {
-  if (!host.sshStatus || host.sshStatus === "not checked") return "unknown";
-  return host.sshStatus === "ok" ? "healthy" : "warning";
-}
-
-function runtimeSignalStatus(host: HostState): Status {
-  if (!host.dockerStatus || host.dockerStatus === "not checked") return "unknown";
-  return host.dockerStatus === "docker checked" ? "healthy" : "warning";
-}
-
 function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
   if (!dashboard.observedAt) return { state: "unknown", label: "没有观测证据" };
   const ageMs = now - new Date(dashboard.observedAt).getTime();
@@ -174,49 +160,6 @@ function nextStepFor(host: HostState) {
   if (host.status === "warning") return { title: "复核异常信号", detail: "刷新这台服务器，再比较 HTTP、SSH 与运行时证据。" };
   if (host.status === "unknown") return { title: "取得一份新证据", detail: "运行单机轻巡检；未知状态不按正常处理。" };
   return { title: "保持值守", detail: "当前没有操作理由；等待下一次巡检即可。" };
-}
-
-function shareableJudgment(host: HostState) {
-  if (host.status === "critical") return "至少一类基础检查明确失败，需要先定位失败层。";
-  if (host.status === "warning") return "服务可能仍可用，但至少一类信号需要复核。";
-  if (host.status === "unknown") return "当前证据不足，不能把未知状态当作正常。";
-  return "最近一次有效观测没有发现基础检查异常。";
-}
-
-function shareableSignal(label: string, status: Status) {
-  const copy: Record<Status, string> = {
-    healthy: "有效证据显示正常",
-    warning: "存在需要复核的信号",
-    critical: "有效证据显示失败",
-    unknown: "没有足够的新鲜证据"
-  };
-  return `- ${label}：${copy[status]}`;
-}
-
-function discussionBrief(dashboard: DashboardStatus, host: HostState, now = Date.now()) {
-  const freshness = evidenceFreshness(dashboard, now);
-  const nextStep = nextStepFor(host);
-  const evidence = [
-    shareableSignal(signalLabels.http, httpSignalStatus(host)),
-    shareableSignal(signalLabels.ssh, sshSignalStatus(host)),
-    shareableSignal(signalLabels.runtime, runtimeSignalStatus(host))
-  ].join("\n");
-  return [
-    "LocalOps 值守讨论摘要",
-    `对象：${host.name}（${host.environment} / ${host.role}）`,
-    `状态：${statusLabels[host.status]}`,
-    `证据时效：${freshness.label}`,
-    `当前判断：${shareableJudgment(host)}`,
-    "证据：",
-    evidence,
-    `建议：${nextStep.title}。${nextStep.detail}`,
-    "边界：只讨论诊断与验证步骤，不执行重启、部署、删除或配置变更。"
-  ].join("\n");
-}
-
-function codexDiscussionLink(brief: string) {
-  const prompt = `[@LocalOps Guardian] 请基于下面的本地脱敏摘要解释最可能的故障层、缺失证据和下一条安全验证动作。不要执行任何变更。\n\n${brief}`;
-  return `codex://new?prompt=${encodeURIComponent(prompt)}`;
 }
 
 function StatusPill({ status }: { status: Status }) {
@@ -889,10 +832,10 @@ export function App() {
             <p>{selectedNextStep?.detail}</p>
             <div className="guardian-actions">
               <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={loading}><RefreshCcw size={16} />刷新证据</button>
-              <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制讨论摘要"}</button>
+              <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制最小披露摘要"}</button>
               <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
             </div>
-            <small>Codex 链接只预填摘要，不会自动发送或执行操作。</small>
+            <small>不含本地名称、环境、角色、地址、SSH alias、命令或原始证据；只预填，不会自动发送或执行。</small>
           </div>
         </section>
 

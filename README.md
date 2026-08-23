@@ -57,7 +57,7 @@ The Windows Node 24 CI job also publishes `localops-guardian-windows-portable` f
 
 On Windows, the Automatic Checks page can explicitly enable login-start after a production build and Edge are available. LocalOps writes one UTF-16 current-user Startup entry that launches the same bounded pet launcher without a console window. It never installs a Windows service or requests administrator rights. Enabling and disabling both require an in-product confirmation; a same-name entry with unexpected content is never overwritten or removed. Closing the pet still ends the launcher-owned API, so login-start does not imply invisible monitoring after the window closes.
 
-The full desk and pet can prepare a Codex discussion task from categorized status only. Raw evidence, connection URLs, SSH aliases, and commands are deliberately excluded from that cross-app summary; detailed evidence stays in the local desk.
+The full desk and pet can prepare a Codex discussion task from categorized status only. Server names, environments, roles, raw evidence, connection URLs, SSH aliases, Compose projects, and commands are structurally excluded from that cross-app summary; detailed and identifying context stays in the local desk. The deep link only prefills reviewable text and never sends or executes it automatically.
 
 For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:5177` and proxies API calls to `4317`.
 

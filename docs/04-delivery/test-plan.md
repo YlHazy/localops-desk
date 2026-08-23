@@ -14,6 +14,7 @@
   - Exiting an empty-target practice stops local scheduling and removes orphaned practice runs.
   - Manual light check updates UI.
   - Dry-run action renders a non-mutating plan.
+  - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
 - Security smoke:
   - Search outputs for obvious secret placeholders.
   - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.

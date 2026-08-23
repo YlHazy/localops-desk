@@ -292,7 +292,7 @@ export function PetMode({
           <RefreshCcw className={loading ? "spin" : ""} size={17} />
           {loading ? "巡检中" : "立即巡检"}
         </button>
-        <button className="pet-discuss" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
+        <button className="pet-discuss" title="只预填不含名称、地址或原始证据的最小披露摘要" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
           <MessageCircle size={16} /> 和 Codex 讨论
         </button>
         <button className="pet-open" onClick={onOpenDesk}>
