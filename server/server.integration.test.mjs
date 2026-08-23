@@ -246,6 +246,33 @@ test("browser boundary rejects cross-site, rebinding, and simple-content mutatio
   assert.equal(rebound.body.error, "HOST_NOT_ALLOWED");
 });
 
+test("pet presence is session-scoped, validated, and closeable", async (t) => {
+  const api = await startApi(t);
+  const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
+  const path = `${api.base}/api/pet-presence/${sessionId}`;
+
+  assert.deepEqual(await fetch(path).then((item) => item.json()), { presence: { present: false, lastSeenAt: null } });
+  const opened = await fetch(path, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "open" })
+  });
+  assert.equal(opened.status, 200);
+  assert.equal((await opened.json()).presence.present, true);
+  assert.equal((await fetch(path).then((item) => item.json())).presence.present, true);
+
+  const closed = await fetch(path, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "closing" })
+  });
+  assert.deepEqual(await closed.json(), { presence: { present: false, lastSeenAt: null } });
+
+  const invalid = await fetch(`${api.base}/api/pet-presence/not-a-uuid`);
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, "INVALID_PET_SESSION");
+});
+
 test("startup API exposes no local paths and requires an explicit boolean mutation", async (t) => {
   const startupDir = mkdtempSync(join(tmpdir(), "localops-startup-api-test-"));
   t.after(() => rmSync(startupDir, { recursive: true, force: true }));

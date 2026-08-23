@@ -33,6 +33,7 @@
 - Package the LocalOps Guardian Codex plugin and bounded MCP tools.
 - Combine the native Codex pet's task lifecycle with LocalOps evidence without patching Codex.
 - Add and verify a dependency-light Windows Edge app-window launcher for the pet surface; reuse only a recognizable loopback LocalOps API and stop only a launcher-owned API process.
+- Make launcher-owned API lifetime follow an ephemeral page-presence session so Edge bootstrap handoff cannot terminate monitoring early.
 - Add and verify 30-second read-only pet observation plus opt-in, aggregate-only deterioration notifications with stable-state deduplication.
 - Add and verify full-desk read-only auto-sync with visible runtime state, preserved editing drafts, and explicit recovery.
 - Add and verify explicit current-user Windows login-start with readiness checks, two-step UI confirmation, exact ownership matching, and fail-closed removal.

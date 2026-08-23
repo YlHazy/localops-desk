@@ -54,7 +54,7 @@ The scheduler is in-process and local-only. It starts only when the LocalOps Des
 - Scheduler execution failures are recorded at scheduler level and do not reclassify a host without host-specific evidence.
 - The first scheduler failure keeps the configured interval, the second uses twice that interval, and the third and later failures use three times that interval.
 
-The open pet window observes `GET /api/status` every 30 seconds. This is a read-only UI sync, not a collection schedule: it does not call a check endpoint, open SSH, write check history, or keep monitoring after the local process/window is closed. Browser system notifications are separately opt-in and compare only aggregate status transitions in page memory.
+The open pet window observes `GET /api/status` every 30 seconds. This is a read-only UI sync, not a collection schedule: it does not call a check endpoint, open SSH, or write check history. A launcher-created window additionally sends a memory-only presence heartbeat every 15 seconds containing only its random session UUID and `open`/`closing` state. Browser system notifications are separately opt-in and compare only aggregate status transitions in page memory.
 
 The open full desk performs the same 30-second observation cadence across `GET /api/status`, `GET /api/checks`, `GET /api/reports/current`, `GET /api/scheduler`, and `GET /api/startup`. It updates scheduler runtime output separately from the editable scheduler draft. A sync failure retains the most recent successful snapshot and never changes server health on its own.
 

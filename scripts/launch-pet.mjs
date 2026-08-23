@@ -1,18 +1,26 @@
 import { access } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isPetSessionId, petPresencePath } from "../src/pet-presence.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHost = "127.0.0.1";
 const defaultPort = 4317;
 
-export function petUrl({ host = defaultHost, port = defaultPort } = {}) {
+export function petUrl({ host = defaultHost, port = defaultPort, sessionId = null } = {}) {
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
     throw new Error("Pet window only supports a loopback LocalOps host.");
   }
   const authority = host === "::1" ? `[${host}]:${port}` : `${host}:${port}`;
-  return `http://${authority}/?mode=pet`;
+  const url = new URL(`http://${authority}/`);
+  url.searchParams.set("mode", "pet");
+  if (sessionId != null) {
+    if (!isPetSessionId(sessionId)) throw new Error("Pet window session must be a UUID.");
+    url.searchParams.set("session", sessionId);
+  }
+  return url.toString();
 }
 
 export function edgeCandidates(environment = process.env) {
@@ -36,6 +44,21 @@ export async function firstExistingPath(candidates, canAccess = access) {
   return null;
 }
 
+export function assertSupportedNodeVersion(version = process.versions.node) {
+  const major = Number.parseInt(String(version).split(".")[0], 10);
+  if (!Number.isInteger(major) || major < 22 || major >= 25) {
+    throw new Error(`LocalOps 需要 Node.js 22–24；当前版本为 ${version || "未知"}。`);
+  }
+}
+
+export async function assertPetBuildAvailable(canAccess = access) {
+  try {
+    await canAccess(join(root, "dist", "index.html"));
+  } catch {
+    throw new Error("尚未生成 LocalOps 桌宠界面。首次使用请在项目目录运行 npm install，然后运行 npm run build。");
+  }
+}
+
 export async function localOpsReady(url, fetchImpl = fetch) {
   try {
     const request = { signal: AbortSignal.timeout(1_500) };
@@ -53,9 +76,56 @@ export async function localOpsReady(url, fetchImpl = fetch) {
   }
 }
 
+export async function petSessionPresent(url, fetchImpl = fetch) {
+  try {
+    const target = new URL(url);
+    const sessionId = target.searchParams.get("session");
+    if (!isPetSessionId(sessionId)) return false;
+    const response = await fetchImpl(new URL(petPresencePath(sessionId), target), {
+      signal: AbortSignal.timeout(1_500)
+    });
+    if (!response.ok) return false;
+    return (await response.json())?.presence?.present === true;
+  } catch {
+    return false;
+  }
+}
+
+function delay(milliseconds) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+export async function waitForPetPresence(url, {
+  fetchImpl = fetch,
+  delayImpl = delay,
+  attempts = 40,
+  intervalMs = 250
+} = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (await petSessionPresent(url, fetchImpl)) return true;
+    await delayImpl(intervalMs);
+  }
+  throw new Error("桌宠窗口没有在 10 秒内完成加载，已停止本次本地值守。");
+}
+
+export async function monitorPetPresence(url, {
+  fetchImpl = fetch,
+  delayImpl = delay,
+  intervalMs = 3_000,
+  maxConsecutiveMisses = 3
+} = {}) {
+  let misses = 0;
+  while (misses < maxConsecutiveMisses) {
+    await delayImpl(intervalMs);
+    misses = await petSessionPresent(url, fetchImpl) ? 0 : misses + 1;
+  }
+}
+
 export function launcherSummary(result) {
+  const visibleUrl = new URL(result.url);
+  visibleUrl.searchParams.delete("session");
   const lines = [
-    `${result.checkOnly ? "LocalOps pet check passed" : "LocalOps pet ready"}: ${result.url}`,
+    `${result.checkOnly ? "LocalOps pet check passed" : "LocalOps pet ready"}: ${visibleUrl.toString()}`,
     `Browser: ${result.browserPath}`,
     result.apiAlreadyRunning
       ? "API: recognizable loopback LocalOps is already running"
@@ -81,15 +151,18 @@ function stopOwnedProcess(child) {
   child.kill();
 }
 
-export async function launchPet({ checkOnly = false } = {}) {
+export async function launchPet({ checkOnly = false, sessionId = randomUUID() } = {}) {
+  assertSupportedNodeVersion();
   if (process.platform !== "win32") throw new Error("The desktop pet launcher currently supports Windows only.");
   const browserPath = await firstExistingPath(edgeCandidates());
   if (!browserPath) throw new Error("Microsoft Edge was not found. Set LOCALOPS_BROWSER_PATH to an approved Chromium executable.");
-  await access(join(root, "dist", "index.html"));
+  await assertPetBuildAvailable();
 
-  const url = petUrl();
-  const alreadyRunning = await localOpsReady(url);
-  if (checkOnly) return { browserPath, url, apiAlreadyRunning: alreadyRunning, checkOnly: true };
+  const baseUrl = petUrl();
+  const alreadyRunning = await localOpsReady(baseUrl);
+  if (checkOnly) return { browserPath, url: baseUrl, apiAlreadyRunning: alreadyRunning, checkOnly: true };
+
+  const url = petUrl({ sessionId });
 
   let apiProcess = null;
   if (!alreadyRunning) {
@@ -124,13 +197,17 @@ export async function launchPet({ checkOnly = false } = {}) {
   };
   process.once("SIGINT", stopLauncherChildren);
   process.once("SIGTERM", stopLauncherChildren);
-  browser.once("error", (error) => {
-    cleanupApi();
-    console.error(`Unable to open the pet window: ${error.message}`);
-    process.exitCode = 1;
+  const browserStartError = new Promise((_, reject) => {
+    browser.once("error", reject);
   });
-  browser.once("exit", () => cleanupApi());
-  return { browserPath, url, apiAlreadyRunning: alreadyRunning, browser, apiProcess };
+  try {
+    await Promise.race([waitForPetPresence(url), browserStartError]);
+  } catch (error) {
+    stopLauncherChildren();
+    throw error;
+  }
+  const sessionMonitor = monitorPetPresence(url).finally(cleanupApi);
+  return { browserPath, url, sessionId, apiAlreadyRunning: alreadyRunning, browser, apiProcess, sessionMonitor };
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

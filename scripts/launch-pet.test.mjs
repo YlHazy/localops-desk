@@ -1,11 +1,70 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, petUrl } from "./launch-pet.mjs";
+import { assertPetBuildAvailable, assertSupportedNodeVersion, edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, monitorPetPresence, petSessionPresent, petUrl, waitForPetPresence } from "./launch-pet.mjs";
+
+const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
+
+test("checked-in Windows entry launches only the bounded pet launcher", async () => {
+  const content = await readFile(new URL("../Start%20LocalOps%20Guardian.vbs", import.meta.url), "utf8");
+  assert.match(content, /scripts\\launch-pet\.mjs/);
+  assert.match(content, /shell\.Run\(.+, 0, True\)/);
+  assert.match(content, /MsgBox/);
+  assert.doesNotMatch(content, /powershell|npm install|https?:\/\/|schtasks|service/i);
+});
+
+test("launcher accepts only the supported Node release range", () => {
+  assert.doesNotThrow(() => assertSupportedNodeVersion("22.12.0"));
+  assert.doesNotThrow(() => assertSupportedNodeVersion("24.9.1"));
+  assert.throws(() => assertSupportedNodeVersion("21.7.0"), /Node\.js 22–24/);
+  assert.throws(() => assertSupportedNodeVersion("25.0.0"), /Node\.js 22–24/);
+  assert.throws(() => assertSupportedNodeVersion("unknown"), /当前版本为 unknown/);
+});
+
+test("missing production build has an actionable first-run error", async () => {
+  await assert.rejects(() => assertPetBuildAvailable(async () => { throw new Error("missing"); }), /npm install.+npm run build/);
+});
 
 test("pet URL is fixed to the loopback app surface", () => {
   assert.equal(petUrl(), "http://127.0.0.1:4317/?mode=pet");
   assert.equal(petUrl({ host: "::1", port: 9443 }), "http://[::1]:9443/?mode=pet");
+  assert.equal(petUrl({ sessionId }), `http://127.0.0.1:4317/?mode=pet&session=${sessionId}`);
   assert.throws(() => petUrl({ host: "example.com" }), /loopback/);
+  assert.throws(() => petUrl({ sessionId: "../status" }), /UUID/);
+});
+
+test("pet presence waits for a real page heartbeat and tolerates brief misses", async () => {
+  const url = petUrl({ sessionId });
+  const states = [false, false, true];
+  const fetchImpl = async () => ({
+    ok: true,
+    async json() { return { presence: { present: states.shift() ?? false } }; }
+  });
+  assert.equal(await petSessionPresent(url, fetchImpl), false);
+  await waitForPetPresence(url, { fetchImpl, delayImpl: async () => undefined, attempts: 3 });
+
+  const monitorStates = [true, false, true, false, false, false];
+  let reads = 0;
+  await monitorPetPresence(url, {
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        reads += 1;
+        return { presence: { present: monitorStates.shift() ?? false } };
+      }
+    }),
+    delayImpl: async () => undefined,
+    maxConsecutiveMisses: 3
+  });
+  assert.equal(reads, 6);
+});
+
+test("pet presence wait fails closed when the page never loads", async () => {
+  await assert.rejects(() => waitForPetPresence(petUrl({ sessionId }), {
+    fetchImpl: async () => ({ ok: true, async json() { return { presence: { present: false } }; } }),
+    delayImpl: async () => undefined,
+    attempts: 2
+  }), /没有在 10 秒内完成加载/);
 });
 
 test("explicit browser path is checked before bounded Edge locations", () => {
@@ -65,10 +124,11 @@ test("live launcher summary identifies only the child processes it owns", () => 
     checkOnly: false,
     apiAlreadyRunning: false,
     browserPath: "approved.exe",
-    url: petUrl(),
+    url: petUrl({ sessionId }),
     browser: { pid: 1201 },
     apiProcess: { pid: 1202 }
   });
   assert.match(lines.join("\n"), /Pet window PID: 1201/);
   assert.match(lines.join("\n"), /Owned API PID: 1202/);
+  assert.doesNotMatch(lines.join("\n"), new RegExp(sessionId));
 });

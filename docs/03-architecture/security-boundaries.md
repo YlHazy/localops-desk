@@ -10,6 +10,7 @@
 - The scheduler is local in-process only. It does not install a Windows service or remote cron job.
 - Windows login-start is a separate explicit opt-in. It manages one current-user VBS Startup entry, requires no administrator rights, and launches only the checked-in pet launcher through the current Node executable.
 - Login-start refuses to enable without the built UI and Edge. It never overwrites or removes an unexpected same-name entry, and public API responses omit all generated script and filesystem paths.
+- Desktop lifetime uses an unlisted UUID-scoped presence endpoint on loopback. Sessions remain in memory only, expire automatically, and are excluded from Agent/MCP manifests and diagnostic reports.
 
 ## SSH Rules
 

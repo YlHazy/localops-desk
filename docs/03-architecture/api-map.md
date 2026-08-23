@@ -6,6 +6,16 @@
 
 Returns latest host states, last check time, and dashboard aggregates.
 
+## Pet Presence
+
+`GET /api/pet-presence/:sessionId`
+
+Returns presence and last-seen time for one random desktop-launch session.
+
+`PUT /api/pet-presence/:sessionId`
+
+Accepts only `open` or `closing`. State is memory-only, automatically expires, and is not part of the Agent/MCP tool surface.
+
 ## Hosts
 
 `GET /api/hosts`

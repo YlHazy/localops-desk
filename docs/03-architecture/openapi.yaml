@@ -5,6 +5,28 @@ info:
 servers:
   - url: http://127.0.0.1:4317
 paths:
+  /api/pet-presence/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Read one ephemeral desktop-pet presence session
+      responses:
+        "200":
+          description: Presence and last-seen time only
+        "400":
+          description: Invalid UUID session
+    put:
+      summary: Record open or closing state for one ephemeral pet session
+      responses:
+        "200":
+          description: Updated memory-only presence
+        "400":
+          description: Invalid UUID or state
   /api/status:
     get:
       summary: Get latest dashboard status

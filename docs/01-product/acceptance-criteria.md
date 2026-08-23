@@ -32,6 +32,8 @@
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
 - Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
+- Launcher-owned API lifetime follows a random, memory-only pet presence session rather than the short-lived Edge bootstrap PID; missing initial presence fails within 10 seconds and stale presence expires automatically.
+- After the first production build, Windows users can double-click the checked-in desktop entry to open the same bounded pet launcher without a console window; it performs no install, elevation, service, or login-start mutation and shows a visible prerequisite checklist on failure.
 - Evidence older than the configured freshness window is shown as unknown, and the footer uses observation time rather than response generation time.
 - A pet or Codex-triggered light check refreshes exactly one host.
 - Motion respects `prefers-reduced-motion`; keyboard focus remains visible.

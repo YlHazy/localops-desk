@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectHost, demoHosts } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
+import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { configureStartupEntry, publicStartupState, startupEntrySnapshot } from "./windows-startup.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -22,6 +23,7 @@ mkdirSync(dataDir, { recursive: true });
 
 const dbPath = join(dataDir, "localops.sqlite");
 const db = new DatabaseSync(dbPath);
+const petPresence = createPetPresenceTracker();
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS hosts (
@@ -725,6 +727,14 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/status") {
       const hosts = latestHostChecks();
       return json(res, statusSnapshot(hosts));
+    }
+    const petPresenceMatch = url.pathname.match(/^\/api\/pet-presence\/([^/]+)$/);
+    if (petPresenceMatch && req.method === "GET") {
+      return json(res, { presence: petPresence.read(decodeURIComponent(petPresenceMatch[1])) });
+    }
+    if (petPresenceMatch && req.method === "PUT") {
+      const input = await readBody(req);
+      return json(res, { presence: petPresence.update(decodeURIComponent(petPresenceMatch[1]), input.state) });
     }
     if (req.method === "GET" && url.pathname === "/api/hosts") {
       return json(res, { hosts: getHosts() });

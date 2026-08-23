@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Message
 import { useEffect, useMemo, useRef, useState } from "react";
 import { monitorSignal, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
+import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
@@ -84,6 +85,31 @@ export function PetMode({
     && readNotificationPreference());
   const [notificationNote, setNotificationNote] = useState("");
   const previousSignal = useRef<MonitorSignal | null>(null);
+  const petSessionId = new URLSearchParams(window.location.search).get("session");
+
+  useEffect(() => {
+    if (!isPetSessionId(petSessionId)) return;
+    const path = petPresencePath(petSessionId);
+    const sendPresence = (state: "open" | "closing", keepalive = false) => {
+      void fetch(path, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state }),
+        keepalive,
+        signal: keepalive ? undefined : AbortSignal.timeout(1_500)
+      }).catch(() => undefined);
+    };
+    sendPresence("open");
+    const timer = window.setInterval(() => sendPresence("open"), 15_000);
+    const closePresence = () => sendPresence("closing", true);
+    window.addEventListener("pagehide", closePresence);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", closePresence);
+      closePresence();
+    };
+  }, [petSessionId]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
