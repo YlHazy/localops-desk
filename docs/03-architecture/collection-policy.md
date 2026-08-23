@@ -56,6 +56,8 @@ The scheduler is in-process and local-only. It starts only when the LocalOps Des
 
 The open pet window observes `GET /api/status` every 30 seconds. This is a read-only UI sync, not a collection schedule: it does not call a check endpoint, open SSH, write check history, or keep monitoring after the local process/window is closed. Browser system notifications are separately opt-in and compare only aggregate status transitions in page memory.
 
+The open full desk performs the same 30-second observation cadence across `GET /api/status`, `GET /api/checks`, `GET /api/reports/current`, and `GET /api/scheduler`. It updates scheduler runtime output separately from the editable scheduler draft. A sync failure retains the most recent successful snapshot and never changes server health on its own.
+
 ## Log Policy
 
 - Max 300 lines per log pull.

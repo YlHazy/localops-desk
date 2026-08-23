@@ -16,6 +16,10 @@
 - System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
 - Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
 - Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
+- The full desk refreshes status, recent checks, the current report, and scheduler runtime state every 30 seconds through GET-only requests.
+- Full-desk sync exposes syncing, current, and paused states; failure preserves the last trustworthy result and offers retry rather than replacing it with a spinner.
+- Background sync does not overwrite unsaved scheduler form values and does not call a check, mutation, retention, or action endpoint.
+- A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
 - The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
 - Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
 - Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.

@@ -23,6 +23,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { deskSyncCopy, fetchDeskSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import type { DeskSyncState } from "./desk-sync.mjs";
 import { PetMode } from "./PetMode";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, Status } from "./types";
 
@@ -53,12 +55,24 @@ const emptyHostForm: HostConfigInput = {
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "content-type": "application/json" },
-    ...init
-  });
+  const method = (init?.method ?? "GET").toUpperCase();
+  const timeoutMs = method === "GET" ? 8_000 : 60_000;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      headers: { "content-type": "application/json" },
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new Error(`本地 API ${Math.round(timeoutMs / 1000)} 秒内没有响应`);
+    }
+    throw error;
+  }
   if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}`);
+    const payload = await res.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || `${res.status} ${res.statusText}`);
   }
   return res.json();
 }
@@ -336,34 +350,37 @@ export function App() {
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [deskSyncState, setDeskSyncState] = useState<DeskSyncState>("idle");
+  const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
+  const [deskSyncError, setDeskSyncError] = useState("");
 
-  async function load() {
+  async function load({ preserveSchedulerForm = false } = {}) {
     if (petMode) {
       const status = await api<DashboardStatus>("/api/status");
       setDashboard(status);
       setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
       return;
     }
-    const [status, recent, currentReport, schedulerState] = await Promise.all([
-      api<DashboardStatus>("/api/status"),
-      api<{ checks: CheckRun[] }>("/api/checks"),
-      api<{ report: string }>("/api/reports/current"),
-      api<{ scheduler: SchedulerState }>("/api/scheduler")
-    ]);
-    setDashboard(status);
-    setChecks(recent.checks);
-    setReport(currentReport.report);
-    setScheduler(schedulerState.scheduler);
-    setSchedulerForm({
-      enabled: schedulerState.scheduler.enabled,
-      lightIntervalMinutes: schedulerState.scheduler.lightIntervalMinutes,
-      retentionDays: schedulerState.scheduler.retentionDays
-    });
-    setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
+    const snapshot = await fetchDeskSnapshot(api);
+    setDashboard(snapshot.status);
+    setChecks(snapshot.checks);
+    setReport(snapshot.report);
+    setScheduler(snapshot.scheduler);
+    setSchedulerForm((currentDraft) => schedulerDraftAfterSync(currentDraft, snapshot.scheduler, preserveSchedulerForm));
+    setSelectedHostId((prev) => prev ?? snapshot.status.hosts[0]?.id ?? null);
+    const syncedAt = Date.now();
+    setLastDeskSyncAt(syncedAt);
+    setNow(syncedAt);
+    setDeskSyncState("current");
+    setDeskSyncError("");
   }
 
   useEffect(() => {
-    load().catch((err: Error) => setError(err.message));
+    if (!petMode) setDeskSyncState("syncing");
+    load().catch((err: Error) => {
+      setError(err.message);
+      if (!petMode) setDeskSyncState("offline");
+    });
   }, []);
 
   useEffect(() => {
@@ -388,13 +405,51 @@ export function App() {
 
   useEffect(() => {
     if (petMode) return;
+    let stopped = false;
+    let timer = window.setTimeout(sync, 30_000);
+    async function sync() {
+      setDeskSyncState("syncing");
+      try {
+        await load({ preserveSchedulerForm: true });
+      } catch (err) {
+        if (!stopped) {
+          setDeskSyncState("offline");
+          setDeskSyncError(err instanceof Error ? err.message : "本地监控没有响应");
+        }
+      } finally {
+        if (!stopped) timer = window.setTimeout(sync, 30_000);
+      }
+    }
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [petMode]);
+
+  useEffect(() => {
+    if (petMode) return;
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, [petMode]);
 
   function retryLoad() {
     setError("");
-    load().catch((err: Error) => setError(err.message));
+    if (!petMode) setDeskSyncState("syncing");
+    load({ preserveSchedulerForm: !petMode && dashboard != null }).catch((err: Error) => {
+      setError(err.message);
+      if (!petMode) setDeskSyncState("offline");
+    });
+  }
+
+  async function retryDeskSync() {
+    setDeskSyncState("syncing");
+    setDeskSyncError("");
+    try {
+      await load({ preserveSchedulerForm: true });
+    } catch (err) {
+      setDeskSyncState("offline");
+      setDeskSyncError(err instanceof Error ? err.message : "本地监控没有响应");
+    }
   }
 
   function openPetWindow() {
@@ -417,6 +472,7 @@ export function App() {
   const selectedNextStep = useMemo(() => selectedHost ? nextStepFor(selectedHost) : null, [selectedHost]);
   const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
+  const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
 
   async function copyBrief() {
     if (!selectedBrief) return;
@@ -667,6 +723,13 @@ export function App() {
             <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
             <h1>先看结论，再决定要不要动</h1>
             <p>页面刷新：{formatTime(dashboard.generatedAt)} · {freshness.label}</p>
+            <div className={`sync-rail ${deskSyncState}`} aria-live="polite">
+              <span className="sync-pulse" aria-hidden="true" />
+              <strong>{deskSync.label}</strong>
+              <small>{deskSync.detail}</small>
+              {deskSyncState === "offline" ? <button onClick={retryDeskSync}>重试同步</button> : null}
+            </div>
+            {deskSyncError ? <p className="sync-error">本地 API 暂时没有响应：{deskSyncError}</p> : null}
           </div>
           <div className="topbar-actions">
             <button className="primary" onClick={() => runLightCheck()} disabled={loading}>

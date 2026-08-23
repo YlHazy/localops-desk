@@ -167,6 +167,15 @@ button {
   to { transform: rotate(360deg); }
 }
 
+@keyframes watch-pulse {
+  from { opacity: 0.5; transform: scale(0.82); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin, .sync-pulse { animation: none !important; }
+}
+
 .app-shell {
   min-height: 100vh;
   display: grid;
@@ -324,6 +333,28 @@ h3 {
   font: 700 11px/1.2 Consolas, monospace;
   letter-spacing: 0.14em;
 }
+
+.sync-rail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 6px 9px;
+  color: #53697a;
+  border: 1px solid #d7e1ec;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+}
+.sync-rail strong { color: #264353; font-size: 11px; }
+.sync-rail small { color: #718391; }
+.sync-pulse { width: 7px; height: 7px; border-radius: 50%; background: #1b7f73; box-shadow: 0 0 0 4px rgba(27, 127, 115, 0.1); }
+.sync-rail.syncing .sync-pulse { animation: watch-pulse 1s ease-in-out infinite alternate; }
+.sync-rail.offline { border-color: #e9c7b9; background: #fff8f4; }
+.sync-rail.offline .sync-pulse { background: #b65a3c; box-shadow: 0 0 0 4px rgba(182, 90, 60, 0.1); }
+.sync-rail button { padding: 2px 6px; color: #1769aa; border: 0; border-left: 1px solid #d7e1ec; background: transparent; font-weight: 700; }
+.sync-error { margin: 6px 0 0 !important; color: #a33c24 !important; font-size: 11px; }
 
 .primary, .secondary {
   border: 0;
@@ -1199,6 +1230,8 @@ code {
 }
 
 @media (max-width: 620px) {
+  .sync-rail { align-items: flex-start; flex-wrap: wrap; border-radius: 12px; }
+  .sync-rail small { flex-basis: calc(100% - 15px); margin-left: 15px; }
   .topbar-actions { flex-direction: column; }
   .empty-host-setup { align-items: start; padding: 12px; }
   .empty-host-card { padding: 24px 20px; }
