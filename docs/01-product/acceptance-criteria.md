@@ -12,6 +12,8 @@
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
 - The pet's expression, copy, and accent reflect the worst current host state.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.
+- Selecting a non-priority host changes only the target for refresh and discussion; the pet's mood and headline continue to represent the worst current global state.
+- A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
 - While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
 - System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
 - Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.

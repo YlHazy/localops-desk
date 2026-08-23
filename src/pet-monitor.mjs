@@ -36,3 +36,9 @@ export function worseningNotice(previous, current) {
     body: `故障 ${current.critical} · 关注 ${current.warning} · 待确认 ${current.unknown}。打开桌宠查看证据。`
   };
 }
+
+export function selectFocusHost(hosts, selectedHostId) {
+  if (!Array.isArray(hosts) || hosts.length === 0) return null;
+  if (!selectedHostId) return hosts[0];
+  return hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
+}

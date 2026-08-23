@@ -1,4 +1,4 @@
-import type { DashboardStatus } from "./types";
+import type { DashboardStatus, HostState } from "./types";
 
 export interface MonitorSignal {
   level: "healthy" | "unknown" | "warning" | "critical" | "offline";
@@ -15,3 +15,4 @@ export interface MonitorNotice {
 
 export function monitorSignal(dashboard: DashboardStatus, offline?: boolean): MonitorSignal;
 export function worseningNotice(previous: MonitorSignal | null, current: MonitorSignal): MonitorNotice | null;
+export function selectFocusHost(hosts: HostState[], selectedHostId: string | null): HostState | null;

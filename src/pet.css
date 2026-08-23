@@ -139,9 +139,11 @@ body:has(.pet-window) {
 .pet-focus-copy { min-width: 0; }
 .pet-focus-copy strong, .pet-focus-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pet-focus-copy strong { font-size: 14px; }
+.pet-focus-copy strong em { margin-left: 7px; padding: 2px 6px; color: var(--pet-teal); border-radius: 999px; background: rgba(142, 217, 194, 0.18); font-size: 9px; font-style: normal; font-weight: 700; vertical-align: 1px; }
 .pet-focus-copy small { margin-top: 3px; color: var(--pet-muted); font-size: 12px; }
 .pet-focus svg { transition: transform 160ms ease; }
 .pet-focus svg.is-expanded { transform: rotate(180deg); }
+.pet-return-priority { display: block; margin: 7px 0 1px auto; padding: 4px 7px; color: var(--pet-teal); border: 0; background: transparent; font-size: 10px; font-weight: 700; cursor: pointer; }
 
 .pet-status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--pet-muted); box-shadow: 0 0 0 4px rgba(121, 144, 150, 0.12); }
 .pet-status-dot.healthy { background: var(--pet-teal); box-shadow: 0 0 0 4px rgba(36, 121, 111, 0.12); }
@@ -149,7 +151,8 @@ body:has(.pet-window) {
 .pet-status-dot.critical { background: var(--pet-danger); box-shadow: 0 0 0 4px rgba(215, 90, 87, 0.13); }
 
 .pet-hosts { max-height: 150px; overflow-y: auto; border-bottom: 1px solid rgba(25, 51, 60, 0.1); }
-.pet-host-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 3px; }
+.pet-host-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 9px 3px; color: inherit; text-align: left; border: 0; border-radius: 9px; background: transparent; cursor: pointer; }
+.pet-host-row:hover, .pet-host-row[aria-current="true"] { background: rgba(142, 217, 194, 0.12); }
 .pet-host-row span:nth-child(2) { min-width: 0; }
 .pet-host-row strong, .pet-host-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pet-host-row strong { font-size: 12px; }

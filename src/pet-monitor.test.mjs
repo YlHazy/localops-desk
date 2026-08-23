@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { monitorSignal, worseningNotice } from "./pet-monitor.mjs";
+import { monitorSignal, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 
 function dashboard(counts) {
   return { counts };
@@ -35,4 +35,16 @@ test("local API loss is urgent but repeated loss and recovery stay quiet", () =>
   assert.match(worseningNotice(healthy, offline).title, /值守中断/);
   assert.equal(worseningNotice(offline, offline), null);
   assert.equal(worseningNotice(offline, healthy), null);
+});
+
+test("manual host focus never changes the priority ordering", () => {
+  const hosts = [
+    { id: "critical-host", status: "critical" },
+    { id: "healthy-host", status: "healthy" }
+  ];
+  assert.equal(selectFocusHost(hosts, null).id, "critical-host");
+  assert.equal(selectFocusHost(hosts, "healthy-host").id, "healthy-host");
+  assert.equal(selectFocusHost(hosts, "missing-host").id, "critical-host");
+  assert.equal(hosts[0].id, "critical-host");
+  assert.equal(selectFocusHost([], "healthy-host"), null);
 });

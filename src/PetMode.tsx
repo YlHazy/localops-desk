@@ -1,14 +1,14 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { monitorSignal, worseningNotice } from "./pet-monitor.mjs";
+import { monitorSignal, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
-  warning: { label: "有事要看", line: "有一处信号不太对，点开就能看懂。" },
-  critical: { label: "需要处理", line: "发现明确故障，先处理最上面这一台。" },
+  warning: { label: "有事要看", line: "有一处信号不太对，最高优先级已排在列表顶部。" },
+  critical: { label: "需要处理", line: "发现明确故障，最高优先级已排在列表顶部。" },
   unknown: { label: "等待检查", line: "还没有足够证据，先让我巡检一次。" }
 };
 
@@ -77,6 +77,7 @@ export function PetMode({
   onDiscuss: (hostId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const notificationsSupported = "Notification" in window;
   const notificationsBlocked = notificationsSupported && Notification.permission === "denied";
@@ -122,8 +123,10 @@ export function PetMode({
       .sort((left, right) => statusRank[left.status] - statusRank[right.status] || left.name.localeCompare(right.name)),
     [dashboard.hosts, stale]
   );
-  const focusHost = hosts[0];
-  const overallStatus: Status = error ? "unknown" : focusHost?.status ?? "unknown";
+  const priorityHost = hosts[0];
+  const focusHost = selectFocusHost(hosts, selectedHostId);
+  const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
+  const overallStatus: Status = error ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
   const visibleCounts = stale
     ? { healthy: 0, warning: 0, critical: 0, unknown: hosts.length }
@@ -200,24 +203,39 @@ export function PetMode({
       </section>
 
       {focusHost ? (
-        <button className="pet-focus" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-          <span className={`pet-status-dot ${focusHost.status}`} />
-          <span className="pet-focus-copy">
-            <strong>{focusHost.name}</strong>
-            <small>{hostSignal(focusHost)}</small>
-          </span>
-          <ChevronDown className={expanded ? "is-expanded" : ""} size={18} />
-        </button>
+        <>
+          <button className="pet-focus" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
+            <span className={`pet-status-dot ${focusHost.status}`} />
+            <span className="pet-focus-copy">
+              <strong>{focusHost.name}{manuallyFocused ? <em>手动查看</em> : null}</strong>
+              <small>{hostSignal(focusHost)}</small>
+            </span>
+            <ChevronDown className={expanded ? "is-expanded" : ""} size={18} />
+          </button>
+          {manuallyFocused ? (
+            <button className="pet-return-priority" onClick={() => setSelectedHostId(null)}>
+              回到最高优先级 · {priorityHost.name}
+            </button>
+          ) : null}
+        </>
       ) : null}
 
       {expanded ? (
         <section className="pet-hosts" aria-label="服务器状态列表">
           {hosts.map((host) => (
-            <div className="pet-host-row" key={host.id}>
+            <button
+              className="pet-host-row"
+              key={host.id}
+              aria-current={host.id === focusHost?.id ? "true" : undefined}
+              onClick={() => {
+                setSelectedHostId(host.id === priorityHost?.id ? null : host.id);
+                setExpanded(false);
+              }}
+            >
               <span className={`pet-status-dot ${host.status}`} />
               <span><strong>{host.name}</strong><small>{host.environment} · {host.role}</small></span>
               <em>{statusCopy[host.status].label}</em>
-            </div>
+            </button>
           ))}
         </section>
       ) : null}
