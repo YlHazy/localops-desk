@@ -13,7 +13,7 @@
   - Practice blocks normal host mutation, fails closed on colliding rows, remains compatible with legacy demo rows, and removes only managed practice data.
   - Exiting an empty-target practice stops local scheduling and removes orphaned practice runs.
   - Manual light check updates UI.
-  - Dry-run action renders a non-mutating plan.
+  - Dry-run actions reject unknown keys, allow copying only configured read-only commands, and keep practice/mutating plans placeholder-only and non-copyable.
   - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
 - Security smoke:
   - Search outputs for obvious secret placeholders.

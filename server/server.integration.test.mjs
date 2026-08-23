@@ -139,6 +139,18 @@ test("offline practice is explicit, exclusive, network-free, and fully removable
   assert.ok(status.hosts.every((host) => host.isOfflineDemo));
   assert.ok(status.hosts.every((host) => host.healthUrl === "" && host.sshAlias === "" && host.composeProject === ""));
 
+  const practicePlanResponse = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: status.hosts[0].id, actionKey: "inspect-service" })
+  });
+  assert.equal(practicePlanResponse.status, 200);
+  const practicePlan = await practicePlanResponse.json();
+  assert.equal(practicePlan.executionState, "blocked-template");
+  assert.equal(practicePlan.copyAllowed, false);
+  assert.ok(practicePlan.commands.every((command) => command.includes("<ssh-alias>")));
+  assert.ok(practicePlan.commands.every((command) => !command.includes(status.hosts[0].name)));
+
   const blockedCreate = await fetch(`${api.base}/api/hosts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -436,7 +448,7 @@ test("startup API exposes no local paths and requires an explicit boolean mutati
   assert.equal((await disabled.json()).startup.enabled, false);
 });
 
-test("dry-run plans require a configured host", async (t) => {
+test("dry-run plans enforce read-only copying and placeholder-only mutations", async (t) => {
   const api = await startApi(t);
   const response = await fetch(`${api.base}/api/actions/dry-run`, {
     method: "POST",
@@ -452,13 +464,79 @@ test("dry-run plans require a configured host", async (t) => {
     body: JSON.stringify({ name: "http-only", sshAlias: "", healthUrl: "" })
   });
   assert.equal(created.status, 201);
+  const httpOnlyHost = (await created.json()).host;
   const noAliasPlan = await fetch(`${api.base}/api/actions/dry-run`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ hostId: "http-only", actionKey: "inspect-service" })
+    body: JSON.stringify({ hostId: httpOnlyHost.id, actionKey: "inspect-service" })
   });
   assert.equal(noAliasPlan.status, 400);
   assert.equal((await noAliasPlan.json()).error, "INVALID_INPUT");
+
+  const noAliasMutationResponse = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: httpOnlyHost.id, actionKey: "reload-nginx" })
+  });
+  assert.equal(noAliasMutationResponse.status, 200);
+  const noAliasMutation = await noAliasMutationResponse.json();
+  assert.equal(noAliasMutation.executionState, "blocked-template");
+  assert.equal(noAliasMutation.copyAllowed, false);
+  assert.ok(noAliasMutation.commands.every((command) => command.includes("<ssh-alias>")));
+
+  const actionableResponse = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "actionable", sshAlias: "safe-readonly", healthUrl: "" })
+  });
+  assert.equal(actionableResponse.status, 201);
+  const actionable = (await actionableResponse.json()).host;
+
+  const inspectResponse = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: actionable.id, actionKey: "inspect-service" })
+  });
+  assert.equal(inspectResponse.status, 200);
+  const inspect = await inspectResponse.json();
+  assert.equal(inspect.riskTier, "read-only");
+  assert.equal(inspect.executionState, "read-only-ready");
+  assert.equal(inspect.copyAllowed, true);
+  assert.ok(inspect.commands.every((command) => command.includes("safe-readonly")));
+
+  const reloadResponse = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: actionable.id, actionKey: "reload-nginx" })
+  });
+  assert.equal(reloadResponse.status, 200);
+  const reload = await reloadResponse.json();
+  assert.equal(reload.riskTier, "medium");
+  assert.equal(reload.executionState, "blocked-template");
+  assert.equal(reload.copyAllowed, false);
+  assert.ok(reload.commands.every((command) => command.includes("<ssh-alias>")));
+  assert.ok(reload.commands.every((command) => !command.includes("safe-readonly")));
+
+  const restartResponse = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: actionable.id, actionKey: "restart-compose-service" })
+  });
+  assert.equal(restartResponse.status, 200);
+  const restart = await restartResponse.json();
+  assert.equal(restart.riskTier, "high");
+  assert.equal(restart.copyAllowed, false);
+  assert.ok(restart.commands.every((command) => command.includes("<ssh-alias>")));
+  assert.ok(restart.commands.every((command) => !command.includes("safe-readonly")));
+  assert.match(restart.commands.join("\n"), /<app>.*<service>/s);
+
+  const unknown = await fetch(`${api.base}/api/actions/dry-run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: actionable.id, actionKey: "unexpected-action" })
+  });
+  assert.equal(unknown.status, 400);
+  assert.equal((await unknown.json()).error, "INVALID_INPUT");
 });
 
 test("overlapping checks share the same in-memory run identity and do not duplicate collection", async (t) => {

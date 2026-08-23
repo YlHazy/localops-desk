@@ -88,6 +88,9 @@ export interface DryRunAction {
   actionKey: string;
   riskTier: "read-only" | "low" | "medium" | "high";
   title: string;
+  executionState: "read-only-ready" | "blocked-template";
+  copyAllowed: boolean;
+  safetyBoundary: string;
   commands: string[];
   verification: string[];
   blockedReason?: string;

@@ -284,6 +284,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [petSyncing, setPetSyncing] = useState(false);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
+  const [dryRunCopied, setDryRunCopied] = useState(false);
   const [report, setReport] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
@@ -516,6 +517,7 @@ export function App() {
 
   async function runDryAction(actionKey: string) {
     setError("");
+    setDryRunCopied(false);
     try {
       const result = await api<DryRunAction>("/api/actions/dry-run", {
         method: "POST",
@@ -594,6 +596,17 @@ export function App() {
         {error ? <button onClick={retryLoad}>重试</button> : null}
       </main>
     );
+  }
+
+  async function copyDryRunCommands() {
+    if (!dryRun?.copyAllowed) return;
+    setError("");
+    try {
+      await navigator.clipboard.writeText(dryRun.commands.join("\n"));
+      setDryRunCopied(true);
+    } catch {
+      setError("复制失败，请检查系统剪贴板权限后重试。");
+    }
   }
 
   async function installOfflinePractice() {
@@ -1185,13 +1198,25 @@ export function App() {
               <h2>{dryRun?.title ?? "选择左侧操作，先生成计划"}</h2>
               {dryRun ? (
                 <>
-                  <p>风险等级：{dryRun.riskTier}</p>
-                  {dryRun.blockedReason ? <div className="error-line" role="alert"><AlertTriangle size={16} />{dryRun.blockedReason}</div> : null}
-                  <h3>计划命令</h3>
+                  <div className={`action-contract ${dryRun.executionState}`}>
+                    <div><span>风险等级</span><strong>{({ "read-only": "只读", low: "低风险", medium: "中风险", high: "高风险" } as const)[dryRun.riskTier]}</strong></div>
+                    <div><span>远程执行</span><strong>关闭</strong></div>
+                    <div><span>参数状态</span><strong>{dryRun.copyAllowed ? "可复制只读命令" : "占位符模板"}</strong></div>
+                    <p>{dryRun.safetyBoundary}</p>
+                  </div>
+                  {dryRun.blockedReason ? <div className="action-boundary"><AlertTriangle size={16} />{dryRun.blockedReason}</div> : null}
+                  <h3>命令预览（不会执行）</h3>
                   <pre>{dryRun.commands.join("\n")}</pre>
+                  <button
+                    className={dryRun.copyAllowed ? "copy-action" : "disabled-action"}
+                    disabled={!dryRun.copyAllowed}
+                    onClick={copyDryRunCommands}
+                  >
+                    {dryRunCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}
+                    {dryRun.copyAllowed ? (dryRunCopied ? "已复制" : "复制只读命令") : "模板不可直接复制"}
+                  </button>
                   <h3>验证步骤</h3>
                   <ul>{dryRun.verification.map((item) => <li key={item}>{item}</li>)}</ul>
-                  <button className="disabled-action" disabled>这里只生成计划，不会执行</button>
                 </>
               ) : (
                 <p>这里不会直接连接服务器执行操作。先看命令和验证步骤，后续版本再接入二次确认。</p>

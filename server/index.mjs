@@ -782,6 +782,10 @@ function currentReport(snapshot = statusSnapshot(latestHostChecks())) {
 function dryRunAction(input) {
   const hostId = input.hostId || "unknown-host";
   const actionKey = input.actionKey || "inspect-service";
+  const supportedActions = new Set(["inspect-service", "reload-nginx", "restart-compose-service"]);
+  if (!supportedActions.has(actionKey)) {
+    throw new InputValidationError("actionKey must be inspect-service, reload-nginx, or restart-compose-service.");
+  }
   const hostItem = getHosts().find((item) => item.id === hostId);
   if (!hostItem) {
     const error = new Error(`Host not found: ${hostId}`);
@@ -789,43 +793,58 @@ function dryRunAction(input) {
     error.httpStatus = 404;
     throw error;
   }
-  const ssh = validateSshAlias(hostItem.sshAlias, { allowEmpty: false });
+  const practice = isManagedOfflineDemoHost(hostItem);
+  const ssh = actionKey === "inspect-service" && !practice
+    ? validateSshAlias(hostItem.sshAlias, { allowEmpty: false })
+    : "<ssh-alias>";
 
   const plans = {
     "inspect-service": {
       actionKey,
       riskTier: "read-only",
       title: `只读诊断：${hostItem.name}`,
+      executionState: practice ? "blocked-template" : "read-only-ready",
+      copyAllowed: !practice,
+      safetyBoundary: practice
+        ? "离线练习只展示命令结构，不包含可连接目标。"
+        : "仅包含白名单只读命令；复制后仍由用户在独立终端决定是否运行。",
       commands: [
         `ssh ${ssh} 'uptime'`,
         `ssh ${ssh} 'free -m'`,
         `ssh ${ssh} 'df -h /'`,
         `ssh ${ssh} 'docker compose ps'`
       ],
-      verification: ["确认命令只读。", "确认输出经过脱敏。", "确认不会读取 .env 或打印密钥。"]
+      verification: ["确认命令只读。", "确认输出经过脱敏。", "确认不会读取 .env 或打印密钥。"],
+      ...(practice ? { blockedReason: "离线练习没有 SSH 目标，因此只展示不可执行的命令结构。" } : {})
     },
     "reload-nginx": {
       actionKey,
-      riskTier: "low",
+      riskTier: "medium",
       title: `Reload Nginx：${hostItem.name}`,
-      commands: [`ssh ${ssh} 'sudo nginx -t'`, `ssh ${ssh} 'sudo systemctl reload nginx'`],
+      executionState: "blocked-template",
+      copyAllowed: false,
+      safetyBoundary: "变更类预案固定使用占位符，不携带真实 SSH alias，也不提供一键复制。",
+      commands: ["ssh <ssh-alias> 'sudo nginx -t'", "ssh <ssh-alias> 'sudo systemctl reload nginx'"],
       verification: ["先通过 nginx -t。", "reload 后检查 HTTP health。", "失败时不继续执行后续动作。"],
       blockedReason: "MVP 只生成 dry-run，不执行真实 reload。"
     },
     "restart-compose-service": {
       actionKey,
-      riskTier: "medium",
+      riskTier: "high",
       title: `重启 Compose 服务：${hostItem.name}`,
+      executionState: "blocked-template",
+      copyAllowed: false,
+      safetyBoundary: "重启预案只显示占位符结构；必须在独立授权、版本和回滚核对后重新生成。",
       commands: [
-        `ssh ${ssh} 'cd /opt/<app>/compose && docker compose ps'`,
-        `ssh ${ssh} 'cd /opt/<app>/compose && docker compose restart <service>'`
+        "ssh <ssh-alias> 'cd /opt/<app>/compose && docker compose ps'",
+        "ssh <ssh-alias> 'cd /opt/<app>/compose && docker compose restart <service>'"
       ],
       verification: ["重启前记录当前 release。", "重启后检查 readiness。", "保留回滚边界。"],
       blockedReason: "MVP 禁止真实重启；后续需二次确认和审计。"
     }
   };
 
-  return plans[actionKey] || plans["inspect-service"];
+  return plans[actionKey];
 }
 
 function agentManifest() {

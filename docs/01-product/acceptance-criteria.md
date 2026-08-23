@@ -10,7 +10,9 @@
 - Manual light check updates last-run timestamps and history.
 - At least one host can show green, one yellow, and one gray/unknown state in safe simulation.
 - The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
-- Dry-run action output is visible and does not execute a real command.
+- Dry-run action output is visible and never executes a command; unknown action keys fail closed.
+- Only allow-listed read-only plans with a configured SSH alias are copyable. Practice plans and all mutating plans use explicit placeholders, never include the configured alias, and are not directly copyable.
+- Nginx reload is labeled medium risk and Compose service restart high risk; the UI keeps remote execution visibly off and presents blocked templates as an expected boundary rather than a runtime error.
 - The Agent API manifest lists supported local endpoints.
 - No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.

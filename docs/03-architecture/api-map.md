@@ -88,7 +88,7 @@ Deletes expired local check history and orphan check rows according to the confi
 
 `POST /api/actions/dry-run`
 
-Returns an action plan and verification steps. It does not mutate remote state.
+Returns an allow-listed action plan and verification steps. It does not mutate remote state. Read-only plans may return a copyable configured target; practice and mutating plans return non-copyable placeholders and never disclose the configured SSH alias. Unknown action keys are rejected.
 
 ## Reports
 

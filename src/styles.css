@@ -1046,7 +1046,7 @@ tr.pending-delete td { background: #fff8f6; }
   margin-top: 16px;
 }
 
-.quick-actions button, .action-menu button, .disabled-action {
+.quick-actions button, .action-menu button, .disabled-action, .copy-action {
   border: 1px solid #cfd9e3;
   background: #fff;
   border-radius: 8px;
@@ -1074,6 +1074,15 @@ tr.pending-delete td { background: #fff8f6; }
 .disabled-action {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.copy-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  border-color: #8eb7d8;
+  color: #0f5b92;
 }
 
 .status-pill {
@@ -1189,6 +1198,56 @@ th {
   grid-template-columns: 260px 1fr;
   gap: 18px;
 }
+
+.action-contract {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #c7d8e7;
+  border-left: 4px solid #2c7bb6;
+  border-radius: 10px;
+  background: #f4f9fc;
+}
+
+.action-contract.blocked-template {
+  border-color: #ead6ad;
+  border-left-color: #bf7a00;
+  background: #fffaf0;
+}
+
+.action-contract div {
+  display: grid;
+  gap: 3px;
+}
+
+.action-contract span {
+  color: #657485;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.action-contract strong { font-size: 14px; }
+
+.action-contract p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: #425466;
+  line-height: 1.55;
+}
+
+.action-boundary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  color: #775116;
+  font-size: 13px;
+}
+
+.action-boundary svg { flex: 0 0 auto; margin-top: 1px; }
 
 .scheduler-layout {
   display: grid;
@@ -1387,6 +1446,7 @@ code {
   .practice-exit-confirm { flex: 0 0 auto; align-items: stretch; flex-direction: column; }
   .practice-exit-confirm button, .practice-exit { width: 100%; }
   .setup-track { grid-template-columns: 1fr; }
+  .action-contract { grid-template-columns: 1fr; }
 
   .main {
     padding: 18px;
