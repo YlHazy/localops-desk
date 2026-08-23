@@ -35,4 +35,6 @@
 - Evidence older than the configured freshness window is shown as unknown, and the footer uses observation time rather than response generation time.
 - A pet or Codex-triggered light check refreshes exactly one host.
 - Motion respects `prefers-reduced-motion`; keyboard focus remains visible.
+- Full-desk keyboard users can skip the sidebar, interactive focus has an explicit high-contrast ring, and asynchronous errors are announced as alerts.
+- Wide server and history tables remain keyboard-focusable and horizontally scrollable at compact widths instead of forcing the whole page wider.
 

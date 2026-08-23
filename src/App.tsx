@@ -478,10 +478,7 @@ export function App() {
   const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
-  const hasConnectionEvidence = useMemo(
-    () => dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false,
-    [dashboard]
-  );
+  const hasConnectionEvidence = dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false;
 
   async function copyBrief() {
     if (!selectedBrief) return;
@@ -619,7 +616,7 @@ export function App() {
 
   if (!dashboard) {
     return (
-      <main className={`boot ${petMode ? "pet-boot" : ""}`}>
+      <main className={`boot ${petMode ? "pet-boot" : ""}`} role={error ? "alert" : undefined}>
         {error ? <AlertTriangle /> : <Activity className="spin" />}
         <span>{error ? `无法连接本地 LocalOps API：${error}` : "正在连接本地 LocalOps API..."}</span>
         {error ? <button onClick={retryLoad}>重试</button> : null}
@@ -707,7 +704,7 @@ export function App() {
               <small>不会自动发现局域网、读取 SSH 配置或导入历史主机。</small>
             </div>
           )}
-          {error ? <p className="error-banner">{error}</p> : null}
+          {error ? <p className="error-banner" role="alert">{error}</p> : null}
         </section>
       </main>
     );
@@ -716,6 +713,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
+        <a className="skip-link" href="#localops-main">跳到主要内容</a>
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={21} /></div>
           <div>
@@ -746,7 +744,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" id="localops-main" tabIndex={-1}>
         <header className="topbar">
           <div>
             <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
@@ -776,7 +774,7 @@ export function App() {
           </div>
         </header>
 
-        {error ? <div className="error-line"><AlertTriangle size={16} />{error}</div> : null}
+        {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
 
         <section className={`guardian-brief ${dashboard.counts.critical ? "critical" : dashboard.counts.warning ? "warning" : "healthy"}`}>
           <div className="guardian-brief-copy">
@@ -974,58 +972,62 @@ export function App() {
                 editing={Boolean(editingHostId)}
               />
             ) : null}
-            <table>
-              <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
-              <tbody>
-                {dashboard.hosts.map((host) => (
-                  <tr key={host.id} className={pendingHostDeleteId === host.id ? "pending-delete" : ""}>
-                    <td>{host.name}</td>
-                    <td>{host.environment}</td>
-                    <td>{host.sshAlias}</td>
-                    <td>{host.healthUrl}</td>
-                    <td>{host.composeProject}</td>
-                    <td><StatusPill status={host.status} /></td>
-                    <td className="row-actions">
-                      {pendingHostDeleteId === host.id ? (
-                        <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
-                          <span>本地配置和检查记录都会删除</span>
-                          <button className="danger" disabled={loading} onClick={() => removeHost(host.id)}><Trash2 size={15} />{loading ? "删除中" : "确认删除"}</button>
-                          <button disabled={loading} onClick={() => setPendingHostDeleteId(null)}>取消</button>
-                        </div>
-                      ) : (
-                        <>
-                          <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
-                          <button onClick={() => setPendingHostDeleteId(host.id)}><Trash2 size={15} />删除</button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="服务器配置表，可横向滚动">
+              <table>
+                <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody>
+                  {dashboard.hosts.map((host) => (
+                    <tr key={host.id} className={pendingHostDeleteId === host.id ? "pending-delete" : ""}>
+                      <td>{host.name}</td>
+                      <td>{host.environment}</td>
+                      <td>{host.sshAlias}</td>
+                      <td>{host.healthUrl}</td>
+                      <td>{host.composeProject}</td>
+                      <td><StatusPill status={host.status} /></td>
+                      <td className="row-actions">
+                        {pendingHostDeleteId === host.id ? (
+                          <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
+                            <span>本地配置和检查记录都会删除</span>
+                            <button className="danger" disabled={loading} onClick={() => removeHost(host.id)}><Trash2 size={15} />{loading ? "删除中" : "确认删除"}</button>
+                            <button disabled={loading} onClick={() => setPendingHostDeleteId(null)}>取消</button>
+                          </div>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
+                            <button onClick={() => setPendingHostDeleteId(host.id)}><Trash2 size={15} />删除</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
         {selectedTab === "checks" && (
           <section className="table-panel">
             <h2>检查历史</h2>
-            <table>
-              <thead><tr><th>ID</th><th>类型</th><th>触发</th><th>范围</th><th>开始</th><th>耗时</th><th>状态</th><th>摘要</th></tr></thead>
-              <tbody>
-                {checks.map((check) => (
-                  <tr key={check.id}>
-                    <td>#{check.id}</td>
-                    <td>{check.kind}</td>
-                    <td>{check.trigger}</td>
-                    <td>{check.hostScope ?? "all"}</td>
-                    <td>{formatTime(check.startedAt)}</td>
-                    <td>{check.durationMs}ms</td>
-                    <td><StatusPill status={check.overallStatus} /></td>
-                    <td>{check.summary}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="检查历史表，可横向滚动">
+              <table>
+                <thead><tr><th>ID</th><th>类型</th><th>触发</th><th>范围</th><th>开始</th><th>耗时</th><th>状态</th><th>摘要</th></tr></thead>
+                <tbody>
+                  {checks.map((check) => (
+                    <tr key={check.id}>
+                      <td>#{check.id}</td>
+                      <td>{check.kind}</td>
+                      <td>{check.trigger}</td>
+                      <td>{check.hostScope ?? "all"}</td>
+                      <td>{formatTime(check.startedAt)}</td>
+                      <td>{check.durationMs}ms</td>
+                      <td><StatusPill status={check.overallStatus} /></td>
+                      <td>{check.summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
@@ -1143,7 +1145,7 @@ export function App() {
               {dryRun ? (
                 <>
                   <p>风险等级：{dryRun.riskTier}</p>
-                  {dryRun.blockedReason ? <div className="error-line"><AlertTriangle size={16} />{dryRun.blockedReason}</div> : null}
+                  {dryRun.blockedReason ? <div className="error-line" role="alert"><AlertTriangle size={16} />{dryRun.blockedReason}</div> : null}
                   <h3>计划命令</h3>
                   <pre>{dryRun.commands.join("\n")}</pre>
                   <h3>验证步骤</h3>

@@ -599,6 +599,10 @@ function settingNumberFromInput(value, fallback, min, max) {
   return String(Math.min(Math.max(normalized, min), max));
 }
 
+function reportPercent(value) {
+  return value == null ? "未采集" : `${value}%`;
+}
+
 function currentReport(snapshot = statusSnapshot(latestHostChecks())) {
   const hosts = snapshot.hosts;
   const counts = snapshot.counts;
@@ -619,7 +623,7 @@ function currentReport(snapshot = statusSnapshot(latestHostChecks())) {
   for (const hostItem of hosts) {
     lines.push(`- ${hostItem.name} [${hostItem.status}]`);
     lines.push(`  HTTP: ${hostItem.httpStatus}${hostItem.httpLatencyMs == null ? "" : `, ${hostItem.httpLatencyMs}ms`}; SSH: ${hostItem.sshStatus}; Docker: ${hostItem.dockerStatus}`);
-    lines.push(`  资源: CPU ${hostItem.cpuPercent ?? "N/A"}%, 内存 ${hostItem.memoryPercent ?? "N/A"}%, 磁盘 ${hostItem.diskPercent ?? "N/A"}%`);
+    lines.push(`  资源: CPU ${reportPercent(hostItem.cpuPercent)}, 内存 ${reportPercent(hostItem.memoryPercent)}, 磁盘 ${reportPercent(hostItem.diskPercent)}`);
     lines.push(`  摘要: ${hostItem.summary}`);
   }
   lines.push("");

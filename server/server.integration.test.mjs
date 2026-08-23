@@ -110,6 +110,10 @@ test("offline demo hosts require explicit opt-in and contain no connection targe
   const result = await checked.json();
   assert.equal(result.hostResults[0].status, "healthy");
   assert.match(result.hostResults[0].evidence.join(" "), /没有发起 HTTP、SSH/);
+
+  const report = await fetch(`${api.base}/api/reports/current`).then((item) => item.json());
+  assert.match(report.report, /CPU 未采集, 内存 未采集, 磁盘 未采集/);
+  assert.doesNotMatch(report.report, /N\/A%/);
 });
 
 test("legacy seed flag no longer inserts project-specific hosts", async (t) => {
