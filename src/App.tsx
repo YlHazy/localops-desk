@@ -477,6 +477,10 @@ export function App() {
   const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
+  const hasConnectionEvidence = useMemo(
+    () => dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false,
+    [dashboard]
+  );
 
   async function copyBrief() {
     if (!selectedBrief) return;
@@ -578,6 +582,7 @@ export function App() {
   }
 
   async function saveHost() {
+    const creatingFirstHost = dashboard?.hosts.length === 0;
     setLoading(true);
     setError("");
     try {
@@ -588,6 +593,7 @@ export function App() {
       setShowHostForm(false);
       setEditingHostId(null);
       await load();
+      if (creatingFirstHost) setSelectedTab("overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存主机失败");
     } finally {
@@ -807,7 +813,38 @@ export function App() {
         </section>
 
         {selectedTab === "overview" && (
-          <section className="home-grid">
+          <>
+            <section className="setup-runway" aria-label="持续值守配置路径">
+              <div className="setup-runway-copy">
+                <span className="topbar-kicker">WATCH PATH / 从一次查看到持续值守</span>
+                <h2>不用记命令，也不会把“没查到”涂成绿色</h2>
+                <p>LocalOps 保存证据时效、解释判断依据，并把可能有风险的动作停在预案阶段；需要讨论时才交给 Codex。</p>
+                <div className="setup-differences" aria-label="LocalOps 核心优势">
+                  <span>未知 ≠ 正常</span><span>证据带时效</span><span>操作先 dry-run</span><span>摘要脱敏后讨论</span>
+                </div>
+              </div>
+              <div className="setup-track">
+                <button className="complete" onClick={() => setSelectedTab("hosts")}>
+                  <span>01</span><CheckCircle2 size={18} /><strong>服务器已登记</strong><small>{dashboard.hosts.length} 台对象，只保存明确提交的配置</small>
+                </button>
+                <button
+                  className={dashboard.observedAt ? "complete" : "current"}
+                  onClick={() => hasConnectionEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
+                >
+                  <span>02</span>{dashboard.observedAt ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{dashboard.observedAt ? "已有观测证据" : hasConnectionEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
+                </button>
+                <button className={scheduler?.enabled ? "complete" : ""} onClick={() => setSelectedTab("scheduler")}>
+                  <span>03</span>{scheduler?.enabled ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<strong>{scheduler?.enabled ? "自动巡检已开启" : "开启自动巡检"}</strong><small>本地调度，可随时暂停与调整频率</small>
+                </button>
+                <button
+                  className={startup?.enabled ? "complete" : startup?.status === "conflict" ? "attention" : "optional"}
+                  onClick={() => startup?.enabled || startup?.ready || startup?.status === "conflict" ? setSelectedTab("scheduler") : openPetWindow()}
+                >
+                  <span>04 · 可选</span>{startup?.enabled ? <CheckCircle2 size={18} /> : <MonitorUp size={18} />}<strong>{startup?.enabled ? "登录桌宠已就位" : startup?.status === "conflict" ? "登录启动需处理" : "把值守放到桌面"}</strong><small>{startup?.status === "conflict" ? startup.message : startup?.ready ? "打开桌宠，或设置登录后自动出现" : "先按需打开桌宠；就绪后可设登录启动"}</small>
+                </button>
+              </div>
+            </section>
+            <section className="home-grid">
             <div className="todo-panel">
               <div className="panel-head">
                 <div>
@@ -913,7 +950,8 @@ export function App() {
                 ))}
               </div>
             </div>
-          </section>
+            </section>
+          </>
         )}
 
         {selectedTab === "hosts" && (

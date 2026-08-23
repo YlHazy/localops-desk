@@ -596,6 +596,35 @@ h3 {
   align-items: start;
 }
 
+.setup-runway {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.64fr) minmax(560px, 1.36fr);
+  gap: 22px;
+  margin-bottom: 18px;
+  padding: 20px;
+  color: #edf7f5;
+  border-radius: 12px 12px 12px 3px;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(76, 169, 148, 0.2), transparent 32%),
+    var(--watch-night);
+}
+
+.setup-runway-copy h2 { margin: 8px 0; font-size: clamp(20px, 2vw, 27px); line-height: 1.08; }
+.setup-runway-copy p { margin: 0; color: #b9c8ca; line-height: 1.6; }
+.setup-differences { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
+.setup-differences span { padding: 5px 8px; color: #bfe6dc; border: 1px solid rgba(142, 217, 194, 0.2); border-radius: 999px; font-size: 11px; }
+.setup-track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; align-self: stretch; background: rgba(255, 255, 255, 0.14); }
+.setup-track button { position: relative; display: grid; align-content: start; gap: 7px; min-width: 0; padding: 15px; color: #dce8ef; border: 0; background: #132b35; text-align: left; }
+.setup-track button:hover { background: #193641; }
+.setup-track button.current { background: #17423f; }
+.setup-track button.attention { background: #493520; }
+.setup-track button.complete svg { color: #8ed9c2; }
+.setup-track button.attention svg { color: #e7a33e; }
+.setup-track button.optional { color: #bdcbd1; }
+.setup-track button > span { color: #8ed9c2; font: 700 10px/1 Consolas, monospace; letter-spacing: 0.08em; }
+.setup-track button > strong { font-size: 13px; line-height: 1.25; }
+.setup-track button > small { color: #9fb0bf; line-height: 1.45; }
+
 .rail-panel, .incident-panel, .matrix-panel, .report-preview, .todo-panel, .all-hosts-panel {
   background: white;
   border: 1px solid #dde5ee;
@@ -1215,9 +1244,11 @@ code {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .workspace, .dashboard-grid, .home-grid, .action-layout, .scheduler-layout, .guardian-brief {
+  .workspace, .dashboard-grid, .home-grid, .action-layout, .scheduler-layout, .guardian-brief, .setup-runway {
     grid-template-columns: 1fr;
   }
+
+  .setup-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .guardian-brief-copy {
     border-right: 0;
@@ -1257,6 +1288,7 @@ code {
   .onboarding-steps,
   .empty-host-card.configuring .form-grid { grid-template-columns: 1fr; }
   .onboarding-cta { align-items: stretch; flex-direction: column; }
+  .setup-track { grid-template-columns: 1fr; }
 
   .main {
     padding: 18px;
