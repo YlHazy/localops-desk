@@ -22,7 +22,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, retainCheckSelection } from "./check-history.mjs";
@@ -35,6 +35,8 @@ import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
+import { petDeskIntent, petDeskPath } from "./pet-navigation.mjs";
+import type { PetDeskTab } from "./pet-navigation.mjs";
 import { petModePath } from "./pet-presence.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
@@ -67,6 +69,8 @@ const emptyHostForm: HostConfigInput = {
   composeProject: "",
   tags: []
 };
+
+const deskIntentAtLoad = petDeskIntent(window.location.hash);
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -331,8 +335,8 @@ export function App() {
   const [checkDetail, setCheckDetail] = useState<CheckDetail | null>(null);
   const [checkDetailState, setCheckDetailState] = useState<"idle" | "loading" | "current" | "error">("idle");
   const [checkDetailError, setCheckDetailError] = useState("");
-  const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState("overview");
+  const [selectedHostId, setSelectedHostId] = useState<string | null>(deskIntentAtLoad.hostId);
+  const [selectedTab, setSelectedTab] = useState<string>(deskIntentAtLoad.tab ?? "overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
   const [lastCheckOutcome, setLastCheckOutcome] = useState<{ status: Status; summary: string; coverage: CollectionCoverage } | null>(null);
@@ -490,6 +494,17 @@ export function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (petMode) return;
+    const applyPetDeskIntent = () => {
+      const intent = petDeskIntent(window.location.hash);
+      if (intent.hostId) setSelectedHostId(intent.hostId);
+      if (intent.tab) setSelectedTab(intent.tab);
+    };
+    window.addEventListener("hashchange", applyPetDeskIntent);
+    return () => window.removeEventListener("hashchange", applyPetDeskIntent);
+  }, [petMode]);
+
   function retryLoad() {
     setError("");
     if (!petMode) setDeskSyncState("syncing");
@@ -529,6 +544,12 @@ export function App() {
     const pet = window.open(petModePath(crypto.randomUUID()), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
+
+  const openDeskFromPet = useCallback((hostId?: string, tab: PetDeskTab = "overview", source: "pet" | "pet-alert" = "pet") => {
+    const path = petDeskPath({ hostId, tab, source, revision: source === "pet-alert" ? Date.now() : null });
+    const desk = window.open(path, "localops-desk");
+    if (!desk) window.location.assign(path);
+  }, []);
 
   const displayDashboard = useMemo(
     () => dashboard ? trustworthyDashboard(dashboard, now) : null,
@@ -875,10 +896,7 @@ export function App() {
         actionError={error}
         onRefresh={(hostId) => runLightCheck(hostId)}
         onRetrySync={retryPetSync}
-        onOpenDesk={() => {
-          const desk = window.open("/", "localops-desk");
-          if (!desk) window.location.assign("/");
-        }}
+        onOpenDesk={openDeskFromPet}
         onDiscuss={(hostId) => {
           const host = currentDashboard.hosts.find((item) => item.id === hostId);
           if (host) window.location.assign(codexDiscussionLink(discussionBrief(currentDashboard, host)));

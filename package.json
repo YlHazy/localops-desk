@@ -22,7 +22,7 @@
     "test:server": "node --test server/input-validation.test.mjs server/runtime.test.mjs server/windows-startup.test.mjs server/pet-presence.test.mjs server/server.integration.test.mjs server/delivery-validation.test.mjs",
     "test:codex-plugin": "node --test plugins/localops-guardian/scripts/mcp-server.test.mjs",
     "test:pet-launcher": "node --test scripts/launch-pet.test.mjs",
-    "test:pet-monitor": "node --test src/host-priority.test.mjs src/pet-monitor.test.mjs",
+    "test:pet-monitor": "node --test src/host-priority.test.mjs src/pet-monitor.test.mjs src/pet-navigation.test.mjs src/pet-watch.test.mjs",
     "test:pet-presence": "node --test src/pet-presence.test.mjs",
     "test:desk-sync": "node --test src/desk-sync.test.mjs",
     "test:collection-coverage": "node --test shared/collection-coverage.test.mjs",

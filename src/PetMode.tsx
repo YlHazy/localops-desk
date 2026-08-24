@@ -1,12 +1,14 @@
-import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
-import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.mjs";
+import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
+import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
+import { notificationDecision, petQuietDurationMs, readQuietUntil, watchModeCopy, writeQuietUntil } from "./pet-watch.mjs";
 import type { DashboardStatus, Status } from "./types";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 
@@ -20,6 +22,13 @@ const statusCopy: Record<Status, { label: string; line: string }> = {
 const notificationPreferenceKey = "localops.pet.notifications";
 const sentryOtterUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
+type AlertReceipt = {
+  outcome: "sent" | "suppressed" | "failed";
+  title: string;
+  body: string;
+  at: number;
+};
+
 function readNotificationPreference() {
   try {
     return window.localStorage.getItem(notificationPreferenceKey) === "1";
@@ -32,6 +41,22 @@ function writeNotificationPreference(enabled: boolean) {
   try {
     window.localStorage.setItem(notificationPreferenceKey, enabled ? "1" : "0");
     return true;
+  } catch {
+    return false;
+  }
+}
+
+function readQuietPreference() {
+  try {
+    return readQuietUntil(window.localStorage);
+  } catch {
+    return 0;
+  }
+}
+
+function writeQuietPreference(value: number) {
+  try {
+    return writeQuietUntil(window.localStorage, value);
   } catch {
     return false;
   }
@@ -75,7 +100,7 @@ export function PetMode({
   actionError: string;
   onRefresh: (hostId: string) => void;
   onRetrySync: () => void;
-  onOpenDesk: () => void;
+  onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void;
   onDiscuss: (hostId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -86,6 +111,8 @@ export function PetMode({
     && Notification.permission === "granted"
     && readNotificationPreference());
   const [notificationNote, setNotificationNote] = useState("");
+  const [quietUntil, setQuietUntil] = useState(readQuietPreference);
+  const [alertReceipt, setAlertReceipt] = useState<AlertReceipt | null>(null);
   const previousSignal = useRef<MonitorSignal | null>(null);
   const recovery = localRecoveryCopy(lastSyncedAt, now);
   const petSessionId = new URLSearchParams(window.location.search).get("session");
@@ -133,18 +160,45 @@ export function PetMode({
     ? { label: "入口正常", line: "Health URL 当前可达；资源与管理通道还没有证据。" }
     : copy;
   const visibleCounts = trustedDashboard.counts;
+  const watchMode = watchModeCopy({
+    supported: notificationsSupported,
+    blocked: notificationsBlocked,
+    enabled: notificationsEnabled,
+    quietUntil,
+    now
+  });
 
   useEffect(() => {
     const current = monitorSignal(trustedDashboard, Boolean(syncError));
-    if (notificationsEnabled && Notification.permission === "granted") {
-      const notice = worseningNotice(previousSignal.current, current);
-      if (notice) {
-        const notification = showSystemNotification(notice.title, { body: notice.body, tag: "localops-status" });
-        if (notification) notification.onclick = () => window.focus();
+    const decision = notificationDecision(previousSignal.current, current, {
+      enabled: notificationsEnabled,
+      permission: notificationsSupported ? Notification.permission : "default",
+      quietUntil,
+      now
+    });
+    if (decision.notice && decision.outcome !== "none") {
+      if (decision.outcome === "suppressed") {
+        setAlertReceipt({ outcome: "suppressed", title: decision.notice.title, body: decision.notice.body, at: now });
+      } else {
+        const notification = showSystemNotification(decision.notice.title, { body: decision.notice.body, tag: "localops-status" });
+        setAlertReceipt({ outcome: notification ? "sent" : "failed", title: decision.notice.title, body: decision.notice.body, at: now });
+        if (notification) {
+          notification.onclick = () => {
+            notification.close();
+            onOpenDesk(priorityHost?.id, "overview", "pet-alert");
+          };
+        } else setNotificationNote("系统提醒没有成功弹出；异常已记录在桌宠中，可直接打开控制台。");
       }
     }
     previousSignal.current = current;
-  }, [trustedDashboard, syncError, notificationsEnabled]);
+  }, [trustedDashboard, syncError, notificationsEnabled, notificationsSupported, quietUntil, now, priorityHost?.id, onOpenDesk]);
+
+  useEffect(() => {
+    if (!quietUntil || quietUntil > now) return;
+    writeQuietPreference(0);
+    setQuietUntil(0);
+    setNotificationNote("一小时安静期已结束；下一次状态恶化会正常提醒。");
+  }, [quietUntil, now]);
 
   async function toggleNotifications() {
     if (!notificationsSupported) {
@@ -153,6 +207,8 @@ export function PetMode({
     }
     if (notificationsEnabled) {
       writeNotificationPreference(false);
+      writeQuietPreference(0);
+      setQuietUntil(0);
       setNotificationsEnabled(false);
       setNotificationNote("异常提醒已关闭，自动同步仍在继续。");
       return;
@@ -164,6 +220,8 @@ export function PetMode({
       return;
     }
     const preferenceSaved = writeNotificationPreference(true);
+    writeQuietPreference(0);
+    setQuietUntil(0);
     setNotificationsEnabled(true);
     setNotificationNote(preferenceSaved
       ? "异常提醒已开启；只显示数量，不显示服务器地址或命令。"
@@ -172,6 +230,20 @@ export function PetMode({
       body: "状态恶化时会提醒你；通知不包含地址、命令或检查证据。",
       tag: "localops-notifications-ready"
     });
+  }
+
+  function toggleQuietTime() {
+    if (!notificationsEnabled) return;
+    if (quietUntil > now) {
+      const saved = writeQuietPreference(0);
+      setQuietUntil(0);
+      setNotificationNote(saved ? "异常提醒已恢复。" : "本次已恢复提醒，但浏览器没有保存设置。");
+      return;
+    }
+    const nextQuietUntil = now + petQuietDurationMs;
+    const saved = writeQuietPreference(nextQuietUntil);
+    setQuietUntil(nextQuietUntil);
+    setNotificationNote(saved ? "接下来一小时不弹系统提醒；状态恶化仍会留在桌宠收据中。" : "本次已进入安静期，但浏览器没有保存设置。");
   }
 
   return (
@@ -264,18 +336,27 @@ export function PetMode({
         <span><strong>{visibleCounts.healthy ?? 0}</strong>正常</span>
       </section>
 
-      <section className="pet-watch" aria-live="polite">
-        <button onClick={toggleNotifications} aria-pressed={notificationsEnabled}>
-          {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-          <span><strong>{notificationsEnabled
-            ? "异常提醒已开"
-            : !notificationsSupported
-              ? "当前窗口不支持提醒"
-              : notificationsBlocked
-                ? "系统提醒已阻止"
-                : "开启异常提醒"}</strong><small>30 秒自动同步 · 只显示状态数量</small></span>
-        </button>
+      <section className={`pet-watch ${watchMode.state}`} aria-live="polite">
+        <div className="pet-watch-controls">
+          <button className="pet-watch-toggle" onClick={toggleNotifications} aria-pressed={notificationsEnabled}>
+            {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+            <span><strong>{watchMode.label}</strong><small>{watchMode.detail}</small></span>
+          </button>
+          {notificationsEnabled && !notificationsBlocked ? (
+            <button className="pet-quiet-toggle" onClick={toggleQuietTime} aria-pressed={quietUntil > now}>
+              <Clock3 size={15} />{quietUntil > now ? "恢复提醒" : "安静 1 小时"}
+            </button>
+          ) : null}
+        </div>
         {notificationNote ? <p>{notificationNote}</p> : null}
+        {alertReceipt ? (
+          <div className={`pet-alert-receipt ${alertReceipt.outcome}`}>
+            <span>{alertReceipt.outcome === "sent" ? "LAST ALERT / 已提醒" : alertReceipt.outcome === "suppressed" ? "QUIET LOG / 安静期记录" : "ALERT FALLBACK / 提醒未弹出"}<time>{latestTime(new Date(alertReceipt.at).toISOString())}</time></span>
+            <strong>{alertReceipt.title}</strong>
+            <p>{alertReceipt.body}</p>
+            <button onClick={() => onOpenDesk(priorityHost?.id, "overview", "pet-alert")} disabled={!priorityHost}>打开当前最高优先级 <ArrowUpRight size={13} /></button>
+          </div>
+        ) : null}
       </section>
 
       <footer className="pet-actions">
@@ -283,14 +364,14 @@ export function PetMode({
           <strong>{focusReadiness.label}</strong>
           <small>{focusReadiness.detail}</small>
         </div>
-        <button className="pet-refresh" onClick={() => focusHost && (focusReadiness.canCollect ? onRefresh(focusHost.id) : onOpenDesk())} disabled={loading || !focusHost}>
+        <button className="pet-refresh" onClick={() => focusHost && (focusReadiness.canCollect ? onRefresh(focusHost.id) : onOpenDesk(focusHost.id, "hosts"))} disabled={loading || !focusHost}>
           {focusReadiness.canCollect ? <RefreshCcw className={loading ? "spin" : ""} size={17} /> : <ArrowUpRight size={17} />}
           {loading ? "巡检中" : focusReadiness.canCollect ? focusReadiness.actionLabel : "控制台补充证据"}
         </button>
         <button className="pet-discuss" title="只预填不含名称、地址或原始证据的最小披露摘要" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
           <MessageCircle size={16} /> 和 Codex 讨论
         </button>
-        <button className="pet-open" onClick={onOpenDesk}>
+        <button className="pet-open" onClick={() => onOpenDesk(focusHost?.id, "overview")}>
           控制台 <ArrowUpRight size={16} />
         </button>
         <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : `${collectionMode.compact} · 可采集 ${batchCoverage.collectible}/${batchCoverage.total}`} · 自动同步不触发巡检</small>

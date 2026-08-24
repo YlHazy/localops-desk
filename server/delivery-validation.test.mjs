@@ -76,6 +76,20 @@ test("every desk-opened pet participates in anonymous presence", () => {
   assert.doesNotMatch(appSource, /window\.open\(`\$\{window\.location\.origin\}\/\?mode=pet`/);
 });
 
+test("pet alerts support a quiet receipt and open the focused desk without sending identity to the API", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const watchSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
+  const navigationSource = readFileSync(new URL("../src/pet-navigation.mjs", import.meta.url), "utf8");
+  assert.match(petSource, /安静 1 小时/);
+  assert.match(petSource, /QUIET LOG \/ 安静期记录/);
+  assert.match(petSource, /onOpenDesk\(priorityHost\?\.id, "overview", "pet-alert"\)/);
+  assert.match(watchSource, /outcome: "suppressed"/);
+  assert.match(appSource, /petDeskIntent\(window\.location\.hash\)/);
+  assert.match(navigationSource, /return `\/#\$\{params\.toString\(\)}`/);
+  assert.doesNotMatch(navigationSource, /healthUrl|sshAlias|composeProject|evidence/);
+});
+
 test("desk and pet expose one truthful local-status recovery contract", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
