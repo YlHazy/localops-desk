@@ -42,7 +42,7 @@ Upgrades preserve existing SQLite host rows, including rows created by older
 versions. Review and delete obsolete entries through the UI; LocalOps does not
 silently remove user-owned configuration during startup.
 
-Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. This view is a future desktop-shell prototype, not the official Codex pet.
+Open `http://127.0.0.1:4317/?mode=pet` for LocalOps' compact companion view. It surfaces the worst current signal first, refreshes one host at a time, and expands into the full control desk when detailed work is needed. A pet opened from the desk receives the same random, memory-only presence session as the Windows launcher, so either entry participates in ordinary duplicate-window refusal without exposing local identity. This view is a future desktop-shell prototype, not the official Codex pet.
 
 While open, pet mode reads the aggregate local status every 30 seconds without triggering a server check. One shared evidence clock drives the rendered pet, expiry notifications, and Codex discussion summary, so a long-lived window cannot keep sharing an initially healthy claim after evidence becomes stale. System anomaly notifications are explicit opt-in and fire only after a later status deterioration, evidence expiry, or an increased affected count. Notification text contains aggregate counts only: no host name, address, command, or raw evidence. The preference stays in the current browser profile (the launcher uses an isolated profile) and can be disabled from the pet at any time.
 

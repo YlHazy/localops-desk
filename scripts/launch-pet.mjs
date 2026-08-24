@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isPetSessionId, petPresencePath } from "../src/pet-presence.mjs";
+import { isPetSessionId, petModePath, petPresencePath } from "../src/pet-presence.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHost = "127.0.0.1";
@@ -14,13 +14,8 @@ export function petUrl({ host = defaultHost, port = defaultPort, sessionId = nul
     throw new Error("Pet window only supports a loopback LocalOps host.");
   }
   const authority = host === "::1" ? `[${host}]:${port}` : `${host}:${port}`;
-  const url = new URL(`http://${authority}/`);
-  url.searchParams.set("mode", "pet");
-  if (sessionId != null) {
-    if (!isPetSessionId(sessionId)) throw new Error("Pet window session must be a UUID.");
-    url.searchParams.set("session", sessionId);
-  }
-  return url.toString();
+  if (sessionId != null && !isPetSessionId(sessionId)) throw new Error("Pet window session must be a UUID.");
+  return new URL(petModePath(sessionId), `http://${authority}`).toString();
 }
 
 export function edgeCandidates(environment = process.env) {

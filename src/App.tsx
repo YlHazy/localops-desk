@@ -30,6 +30,7 @@ import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
+import { petModePath } from "./pet-presence.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
@@ -457,7 +458,7 @@ export function App() {
   }
 
   function openPetWindow() {
-    const pet = window.open(`${window.location.origin}/?mode=pet`, "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
+    const pet = window.open(petModePath(crypto.randomUUID()), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
 

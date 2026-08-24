@@ -52,6 +52,12 @@ test("the desk cannot keep a healthy headline after evidence expires", () => {
   assert.doesNotMatch(appSource, /dashboard\.counts/);
 });
 
+test("every desk-opened pet participates in anonymous presence", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /window\.open\(petModePath\(crypto\.randomUUID\(\)\)/);
+  assert.doesNotMatch(appSource, /window\.open\(`\$\{window\.location\.origin\}\/\?mode=pet`/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

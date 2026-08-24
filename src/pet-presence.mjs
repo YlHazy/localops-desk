@@ -9,3 +9,12 @@ export function petPresencePath(sessionId) {
   if (!isPetSessionId(sessionId)) throw new Error("Invalid LocalOps pet session.");
   return `/api/pet-presence/${sessionId}`;
 }
+
+export function petModePath(sessionId = null) {
+  const params = new URLSearchParams({ mode: "pet" });
+  if (sessionId != null) {
+    if (!isPetSessionId(sessionId)) throw new Error("Invalid LocalOps pet session.");
+    params.set("session", sessionId);
+  }
+  return `/?${params}`;
+}

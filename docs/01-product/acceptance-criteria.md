@@ -49,6 +49,7 @@
 - The report page labels the full identity-bearing report as internal, never recommends it as a fallback for failed safe-copy, and requires a second confirmation before copying; the adjacent safe-share path reuses the tested minimal-disclosure summary.
 - Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
+- A pet opened from the full desk uses a random validated memory-only session, sends the same bounded presence heartbeat as a launcher-opened pet, and is therefore visible to aggregate ordinary duplicate-window refusal without exposing a server or user identity.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
 - Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
 - Launcher-owned API lifetime follows a random, memory-only pet presence session rather than the short-lived Edge bootstrap PID; missing initial presence fails within 10 seconds and stale presence expires automatically.
