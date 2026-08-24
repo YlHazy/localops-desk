@@ -170,6 +170,18 @@ body:has(.pet-window) {
 .pet-watch p { margin: 6px 3px 0; color: var(--pet-muted); font-size: 10px; line-height: 1.45; }
 
 .pet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pet-evidence-gate {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(24, 109, 89, 0.2);
+  background: rgba(221, 247, 238, 0.72);
+}
+.pet-evidence-gate.blocked { border-color: rgba(170, 113, 24, 0.25); background: rgba(255, 239, 200, 0.8); }
+.pet-evidence-gate strong { font-size: 11px; }
+.pet-evidence-gate small { line-height: 1.4; color: #53645f; }
 .pet-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 39px; border-radius: 12px; font-weight: 700; cursor: pointer; }
 .pet-refresh { grid-column: 1 / -1; color: white; border: 1px solid var(--pet-teal); background: var(--pet-teal); }
 .pet-refresh:disabled { cursor: wait; opacity: 0.7; }

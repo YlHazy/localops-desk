@@ -116,6 +116,22 @@ test("desk and pet share automatic priority focus instead of trusting API row or
   assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);
 });
 
+test("desk, pet, and runtime share host-scoped evidence readiness", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const runtimeSource = readFileSync(new URL("./runtime.mjs", import.meta.url), "utf8");
+  const readinessSource = readFileSync(new URL("../src/evidence-readiness.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /evidenceReadiness\(dashboard, selectedHost\)/);
+  assert.match(appSource, /selectedReadiness\.canCollect/);
+  assert.match(appSource, /证据仍不完整/);
+  assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
+  assert.match(petSource, /控制台补充证据/);
+  assert.match(petSource, /资源与管理通道还没有证据/);
+  assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
+  assert.match(readinessSource, /state: "ssh-disabled"/);
+  assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

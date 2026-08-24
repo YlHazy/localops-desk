@@ -26,6 +26,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
+import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
@@ -96,7 +97,7 @@ function formatTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function overallMessage(counts: Record<Status, number>, evidenceExpired = false) {
+function overallMessage(counts: Record<Status, number>, evidenceExpired = false, partialEvidenceCount = 0) {
   if (evidenceExpired) {
     return {
       title: `${counts.unknown ?? 0} 台服务器需要重新取证`,
@@ -121,6 +122,12 @@ function overallMessage(counts: Record<Status, number>, evidenceExpired = false)
       description: "先运行一次检查，拿到当前状态。"
     };
   }
+  if (partialEvidenceCount > 0) {
+    return {
+      title: `${partialEvidenceCount} 台入口正常，证据仍不完整`,
+      description: "Health URL 当前可达，但 SSH、运行时或资源状态仍未知；不会把局部正常写成全部正常。"
+    };
+  }
   return {
     title: "当前全部正常",
     description: "所有已配置服务器最近一次检查都没有发现问题。"
@@ -135,6 +142,8 @@ function shortSignal(value: string) {
 
 function friendlySshStatus(value: string) {
   if (!value || value === "not checked") return "未检查";
+  if (value === "not configured") return "未配置";
+  if (value === "simulated disabled") return "当前未启用";
   if (value === "ok") return "正常";
   if (/Could not resolve hostname|alias not found|DNS unresolved/i.test(value)) return "SSH alias 不可用";
   if (/Permission denied|publickey/i.test(value)) return "SSH 权限失败";
@@ -257,7 +266,8 @@ function HostForm({
   onCancel,
   editing,
   saving,
-  disabled
+  disabled,
+  sshCollectionEnabled
 }: {
   form: HostConfigInput;
   setForm: (form: HostConfigInput) => void;
@@ -266,6 +276,7 @@ function HostForm({
   editing: boolean;
   saving: boolean;
   disabled: boolean;
+  sshCollectionEnabled: boolean;
 }) {
   const hasHealthUrl = form.healthUrl.trim().length > 0;
   const hasSshAlias = form.sshAlias.trim().length > 0;
@@ -279,13 +290,21 @@ function HostForm({
           <strong>{editing ? "修改本机保存的服务器配置" : "先登记服务器，再选择证据来源"}</strong>
           <small>只要求名称；Health URL 和 SSH alias 均为可选，不要填写密码、Token 或私钥。</small>
         </div>
-        <span className={hasHealthUrl || hasSshAlias ? "ready" : "waiting"}>{hasHealthUrl || hasSshAlias ? "已有证据来源" : "保存后保持未检查"}</span>
+        <span className={hasHealthUrl || (hasSshAlias && sshCollectionEnabled) ? "ready" : "waiting"}>
+          {hasHealthUrl
+            ? "Health URL 可用"
+            : hasSshAlias && sshCollectionEnabled
+              ? "只读 SSH 可用"
+              : hasSshAlias
+                ? "SSH 已登记 · 当前未启用"
+                : "保存后保持未检查"}
+        </span>
       </div>
       <div className="form-grid">
         <label>名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：个人博客" /><small>显示名称，只保存在本机。</small></label>
         <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
         <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
-        <label>SSH Alias · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>填写 SSH config 的 Host 名；默认不会启用 SSH。</small></label>
+        <label>SSH Alias · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>填写 SSH config 的 Host 名；{sshCollectionEnabled ? "当前启动仅执行固定只读命令。" : "当前启动不会使用 SSH。"}</small></label>
         <label className="wide">Health URL · 可选<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>巡检会向这里发起 HTTP GET；不能含账号、查询参数或 # 片段。</small></label>
         <label>Compose 项目 · 备注<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="例如：blog-stack" /><small>当前仅作本机标记，不会拼入命令。</small></label>
         <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
@@ -480,12 +499,19 @@ export function App() {
       : { state: "unknown", label: "没有观测证据" },
     [dashboard, selectedHost, now]
   );
+  const partialEvidenceCount = useMemo(
+    () => dashboard
+      ? displayDashboard?.hosts.filter((host) => host.status === "healthy" && evidenceReadiness(dashboard, host).state === "http").length ?? 0
+      : 0,
+    [displayDashboard, dashboard]
+  );
   const currentMessage = useMemo(
     () => overallMessage(
       displayDashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 },
-      freshness.state === "unknown" && Boolean(dashboard?.observedAt)
+      freshness.state === "unknown" && Boolean(dashboard?.observedAt),
+      partialEvidenceCount
     ),
-    [displayDashboard, freshness.state, dashboard?.observedAt]
+    [displayDashboard, freshness.state, dashboard?.observedAt, partialEvidenceCount]
   );
   const selectedGuidance = useMemo(
     () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
@@ -495,14 +521,22 @@ export function App() {
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
   const collectionMode = useMemo(() => dashboard ? collectionModeCopy(dashboard) : null, [dashboard]);
-  const hasConnectionEvidence = dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false;
-  const canCollectEvidence = Boolean(dashboard?.practiceMode) || hasConnectionEvidence;
+  const selectedReadiness = useMemo(
+    () => dashboard ? evidenceReadiness(dashboard, selectedHost) : null,
+    [dashboard, selectedHost]
+  );
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
 
   function chooseFocusHost(hostId: string) {
     setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
+  }
+
+  function runOrConfigureSelected() {
+    if (!selectedHost || !selectedReadiness) return;
+    if (selectedReadiness.canCollect) runLightCheck(selectedHost.id);
+    else startEditHost(selectedHost);
   }
 
   async function copyBrief() {
@@ -815,6 +849,7 @@ export function App() {
                 editing={false}
                 saving={operationState.savingHost}
                 disabled={operationBusy}
+                sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
               />
             </div>
           ) : (
@@ -948,8 +983,8 @@ export function App() {
                 <strong>上次结果已过期，不能证明当前正常</strong>
                 <small>数值与说明仍保留供比较；当前状态已统一降级为“未知”。</small>
               </div>
-              <button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}>
-                <RefreshCcw className={checking ? "spin" : undefined} size={15} />{checking ? "正在取证" : "重新取得证据"}
+              <button disabled={operationBusy} onClick={runOrConfigureSelected}>
+                {selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={15} /> : <Pencil size={15} />}{checking ? "正在取证" : selectedReadiness?.canCollect ? "重新取得证据" : "补充证据来源"}
               </button>
             </div>
           ) : null}
@@ -974,8 +1009,14 @@ export function App() {
             <p className="guardian-why"><b>为什么：</b>{selectedGuidance?.reason}</p>
             <p>{selectedGuidance?.detail}</p>
             <em className="guardian-avoid">安全边界：{selectedGuidance?.avoid}</em>
+            {selectedReadiness ? (
+              <div className={`evidence-gate ${selectedReadiness.canCollect ? "ready" : "blocked"}`}>
+                <span>{selectedReadiness.label}</span>
+                <small>{selectedReadiness.detail}</small>
+              </div>
+            ) : null}
             <div className="guardian-actions">
-              <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={operationBusy}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "刷新证据"}</button>
+              <button className="primary slim" onClick={runOrConfigureSelected} disabled={operationBusy}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.actionLabel ?? "刷新证据"}</button>
               <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制最小披露摘要"}</button>
               <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
             </div>
@@ -1013,9 +1054,9 @@ export function App() {
                 <button
                   className={selectedFreshness.state === "fresh" ? "complete" : "current"}
                   disabled={operationBusy}
-                  onClick={() => canCollectEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
+                  onClick={runOrConfigureSelected}
                 >
-                  <span>02</span>{selectedFreshness.state === "fresh" ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{selectedFreshness.state === "fresh" ? "已有当前证据" : selectedHost.lastCheckedAt ? "重新取得证据" : canCollectEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{dashboard.practiceMode ? "纯离线生成练习证据" : hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
+                  <span>02</span>{selectedFreshness.state === "fresh" ? <CheckCircle2 size={18} /> : selectedReadiness?.canCollect ? <RefreshCcw size={18} /> : <Pencil size={18} />}<strong>{selectedFreshness.state === "fresh" ? "已有当前证据" : selectedHost.lastCheckedAt && selectedReadiness?.canCollect ? "重新取得证据" : selectedReadiness?.canCollect ? "取得第一份证据" : "选择证据来源"}</strong><small>{selectedReadiness?.detail}</small>
                 </button>
                 <button className={scheduler?.enabled ? "complete" : ""} onClick={() => setSelectedTab("scheduler")}>
                   <span>03</span>{scheduler?.enabled ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<strong>{scheduler?.enabled ? "自动巡检已开启" : "开启自动巡检"}</strong><small>本地调度，可随时暂停与调整频率</small>
@@ -1110,7 +1151,7 @@ export function App() {
                 {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
               </div>
               <div className="quick-actions">
-                <button className="primary slim" disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "刷新这台"}</button>
+                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.actionLabel ?? "刷新这台"}</button>
                 <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />修改配置</button>
                 <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>生成检查命令</button>
               </div>
@@ -1156,6 +1197,7 @@ export function App() {
                 editing={Boolean(editingHostId)}
                 saving={operationState.savingHost}
                 disabled={operationBusy}
+                sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
               />
             ) : null}
             <div className="table-scroll" tabIndex={0} role="region" aria-label="服务器配置表，可横向滚动">

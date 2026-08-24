@@ -15,6 +15,24 @@ export function collectedSummary(status, httpStatus, resourceStatus) {
   return "HTTP 或 SSH 检查异常，需要结合证据排查。";
 }
 
+function uncollectedSshSummary(httpStatus, sshEnabled, hasSshAlias) {
+  if (httpStatus === "healthy") {
+    if (hasSshAlias && !sshEnabled) return "HTTP 健康检查正常；SSH alias 已保存但当前未启用，资源状态未知。";
+    return "HTTP 健康检查正常；未采集 SSH 与资源证据。";
+  }
+  if (httpStatus === "critical") return "HTTP 健康检查失败，优先确认公网服务链路。";
+  if (httpStatus === "warning") return "HTTP 健康检查返回非成功状态，需要先复核入口证据。";
+  if (hasSshAlias && !sshEnabled) return "SSH alias 已保存但当前未启用；未配置 Health URL，状态保持未知。";
+  return "尚无可用证据来源，状态保持未知。";
+}
+
+export function sshOnlyCollectedSummary(sshStatus, resourceStatus) {
+  if (sshStatus !== "ok") return "只读 SSH 检查失败；未配置 Health URL，网页/API 仍保持未知。";
+  if (resourceStatus === "critical") return "只读 SSH 已完成，但资源使用率进入高风险区间；网页/API 未配置。";
+  if (resourceStatus === "warning") return "只读 SSH 已完成，但资源使用率接近关注阈值；网页/API 未配置。";
+  return "只读 SSH 已完成；未配置 Health URL，网页/API 保持未知。";
+}
+
 export const demoHosts = [
   {
     id: "localops-sample-healthy",
@@ -257,7 +275,7 @@ export async function collectHost(host, options) {
     evidence: ["LOCALOPS_ENABLE_SSH 未开启。", "资源和 Docker 指标将在只读 SSH collector 阶段启用。"]
   };
 
-  if (options.mode === "ssh-enabled") {
+  if (options.mode === "ssh-enabled" && host.sshAlias?.trim()) {
     const ssh = await collectSshReadOnly(host);
     const resourceStatus = resourceSignalStatus(ssh);
     const status = classifyCollectedStatus(http.status, ssh);
@@ -271,7 +289,9 @@ export async function collectHost(host, options) {
       memoryPercent: ssh.memoryPercent,
       diskPercent: ssh.diskPercent,
       dockerStatus: ssh.dockerStatus,
-      summary: collectedSummary(status, http.status, resourceStatus),
+      summary: host.healthUrl?.trim()
+        ? collectedSummary(status, http.status, resourceStatus)
+        : sshOnlyCollectedSummary(ssh.sshStatus, resourceStatus),
       evidence: [
         ...http.evidence,
         ...ssh.evidence,
@@ -281,29 +301,26 @@ export async function collectHost(host, options) {
     };
   }
 
-  const status = http.status === "healthy" && profile.status === "healthy"
-    ? "healthy"
-    : http.status === "critical"
-      ? "critical"
-      : profile.status === "warning" || http.status === "warning"
-        ? "warning"
-        : profile.status || http.status;
+  const sshEnabled = options.mode === "ssh-enabled";
+  const hasSshAlias = Boolean(host.sshAlias?.trim());
+  const status = http.status;
 
   return {
     hostId: host.id,
     status,
     httpStatus: http.httpStatus,
     httpLatencyMs: http.httpLatencyMs,
-    sshStatus: profile.sshStatus,
+    sshStatus: sshEnabled ? "not configured" : profile.sshStatus,
     cpuPercent: profile.cpuPercent,
     memoryPercent: profile.memoryPercent,
     diskPercent: profile.diskPercent,
     dockerStatus: profile.dockerStatus,
-    summary: status === "healthy"
-      ? "HTTP 健康检查正常，模拟资源检查正常。"
-      : http.status === "critical"
-        ? "HTTP 健康检查失败，优先确认公网服务链路。"
-        : profile.summary,
-    evidence: [...http.evidence, ...profile.evidence]
+    summary: uncollectedSshSummary(http.status, sshEnabled, hasSshAlias),
+    evidence: [
+      ...http.evidence,
+      ...(sshEnabled
+        ? ["此服务器未配置 SSH alias；没有执行 SSH 命令，资源与 Docker 保持未知。"]
+        : profile.evidence)
+    ]
   };
 }

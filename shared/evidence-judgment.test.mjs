@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyCollectedStatus, httpSignalStatus, resourceSignalStatus, resourceSignalSummary } from "./evidence-judgment.mjs";
+import { classifyCollectedStatus, httpSignalStatus, resourceSignalStatus, resourceSignalSummary, sshSignalStatus } from "./evidence-judgment.mjs";
 
 test("resource judgment uses one explicit warning and critical contract", () => {
   assert.equal(resourceSignalStatus({}), "unknown");
@@ -17,6 +17,11 @@ test("HTTP judgment preserves unknown, warning, and critical distinctions", () =
   assert.equal(httpSignalStatus({ httpStatus: "404 Not Found" }), "warning");
   assert.equal(httpSignalStatus({ httpStatus: "503 Service Unavailable" }), "critical");
   assert.equal(httpSignalStatus({ httpStatus: "timeout" }), "critical");
+});
+
+test("an intentionally unconfigured SSH source stays unknown instead of becoming a warning", () => {
+  assert.equal(sshSignalStatus({ sshStatus: "not configured" }), "unknown");
+  assert.equal(sshSignalStatus({ sshStatus: "simulated disabled" }), "unknown");
 });
 
 test("collected status cannot stay green when resource or runtime evidence warns", () => {

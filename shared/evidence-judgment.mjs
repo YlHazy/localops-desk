@@ -21,7 +21,7 @@ export function httpSignalStatus(host) {
 
 export function sshSignalStatus(host) {
   const value = String(host?.sshStatus || "");
-  if (!value || value === "not checked" || value === "simulated disabled") return "unknown";
+  if (!value || value === "not checked" || value === "not configured" || value === "simulated disabled") return "unknown";
   return /^(ok|simulated ok)$/.test(value) ? "healthy" : "warning";
 }
 

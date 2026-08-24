@@ -1,6 +1,7 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
+import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
 import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.mjs";
@@ -125,6 +126,10 @@ export function PetMode({
   const copy = statusCopy[overallStatus];
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
   const collectionMode = collectionModeCopy(dashboard);
+  const focusReadiness = evidenceReadiness(dashboard, focusHost);
+  const visibleCopy = overallStatus === "healthy" && focusReadiness.state === "http"
+    ? { label: "入口正常", line: "Health URL 当前可达；资源与管理通道还没有证据。" }
+    : copy;
   const visibleCounts = trustedDashboard.counts;
 
   useEffect(() => {
@@ -170,7 +175,7 @@ export function PetMode({
   return (
     <main className={`pet-window ${overallStatus}`}>
       <div className="pet-grab" aria-hidden="true" />
-      <section className="pet-identity" aria-label={`LocalOps 守护宠物：${copy.label}`}>
+      <section className="pet-identity" aria-label={`LocalOps 守护宠物：${visibleCopy.label}`}>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />
           <span className="pet-signal pet-signal-one" />
@@ -178,7 +183,7 @@ export function PetMode({
         </div>
         <div className="pet-title">
           <span>LOCALOPS · 小哨值守中</span>
-          <strong>{copy.label}</strong>
+          <strong>{visibleCopy.label}</strong>
         </div>
       </section>
 
@@ -190,7 +195,7 @@ export function PetMode({
             ? "尚未配置服务器，请先打开控制台添加一台。"
             : priorityHost && !priorityFresh
               ? "最高优先级对象的证据不是当前状态，先刷新这一台。"
-              : priorityGuidance?.reason ?? copy.line}</p>
+              : priorityGuidance?.reason ?? visibleCopy.line}</p>
       </section>
 
       {syncError ? (
@@ -272,9 +277,13 @@ export function PetMode({
       </section>
 
       <footer className="pet-actions">
-        <button className="pet-refresh" onClick={() => focusHost && onRefresh(focusHost.id)} disabled={loading || !focusHost}>
-          <RefreshCcw className={loading ? "spin" : ""} size={17} />
-          {loading ? "巡检中" : "立即巡检"}
+        <div className={`pet-evidence-gate ${focusReadiness.canCollect ? "ready" : "blocked"}`}>
+          <strong>{focusReadiness.label}</strong>
+          <small>{focusReadiness.detail}</small>
+        </div>
+        <button className="pet-refresh" onClick={() => focusHost && (focusReadiness.canCollect ? onRefresh(focusHost.id) : onOpenDesk())} disabled={loading || !focusHost}>
+          {focusReadiness.canCollect ? <RefreshCcw className={loading ? "spin" : ""} size={17} /> : <ArrowUpRight size={17} />}
+          {loading ? "巡检中" : focusReadiness.canCollect ? focusReadiness.actionLabel : "控制台补充证据"}
         </button>
         <button className="pet-discuss" title="只预填不含名称、地址或原始证据的最小披露摘要" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
           <MessageCircle size={16} /> 和 Codex 讨论
