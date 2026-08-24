@@ -18,14 +18,15 @@
     "check:delivery": "node scripts/validate-delivery.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "smoke:api": "node scripts/smoke-api.mjs",
-    "test": "npm run test:server && npm run test:codex-plugin && npm run test:pet-launcher && npm run test:pet-monitor && npm run test:pet-presence && npm run test:desk-sync && npm run test:discussion-brief",
+    "test": "npm run test:server && npm run test:codex-plugin && npm run test:pet-launcher && npm run test:pet-monitor && npm run test:pet-presence && npm run test:desk-sync && npm run test:discussion-brief && npm run test:operation-state",
     "test:server": "node --test server/input-validation.test.mjs server/runtime.test.mjs server/windows-startup.test.mjs server/pet-presence.test.mjs server/server.integration.test.mjs server/delivery-validation.test.mjs",
     "test:codex-plugin": "node --test plugins/localops-guardian/scripts/mcp-server.test.mjs",
     "test:pet-launcher": "node --test scripts/launch-pet.test.mjs",
     "test:pet-monitor": "node --test src/pet-monitor.test.mjs",
     "test:pet-presence": "node --test src/pet-presence.test.mjs",
     "test:desk-sync": "node --test src/desk-sync.test.mjs",
-    "test:discussion-brief": "node --test src/discussion-brief.test.mjs"
+    "test:discussion-brief": "node --test src/discussion-brief.test.mjs",
+    "test:operation-state": "node --test src/operation-state.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.7.0",

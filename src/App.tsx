@@ -27,6 +27,8 @@ import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, 
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 import { PetMode } from "./PetMode";
+import { operationUiState } from "./operation-state.mjs";
+import type { PendingOperation } from "./operation-state.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 
 const statusLabels: Record<Status, string> = {
@@ -245,13 +247,17 @@ function HostForm({
   setForm,
   onSubmit,
   onCancel,
-  editing
+  editing,
+  saving,
+  disabled
 }: {
   form: HostConfigInput;
   setForm: (form: HostConfigInput) => void;
   onSubmit: () => void;
   onCancel: () => void;
   editing: boolean;
+  saving: boolean;
+  disabled: boolean;
 }) {
   const hasHealthUrl = form.healthUrl.trim().length > 0;
   const hasSshAlias = form.sshAlias.trim().length > 0;
@@ -277,8 +283,8 @@ function HostForm({
         <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
       </div>
       <div className="form-actions">
-        <button className="primary slim" disabled={!form.name.trim()} onClick={onSubmit}><Save size={16} />{editing ? "保存配置" : "新增主机"}</button>
-        <button onClick={onCancel}><X size={16} />取消</button>
+        <button className="primary slim" disabled={!form.name.trim() || disabled} onClick={onSubmit}><Save size={16} />{saving ? "保存中" : editing ? "保存配置" : "新增主机"}</button>
+        <button disabled={saving} onClick={onCancel}><X size={16} />取消</button>
       </div>
     </div>
   );
@@ -290,7 +296,7 @@ export function App() {
   const [checks, setChecks] = useState<CheckRun[]>([]);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState("overview");
-  const [loading, setLoading] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [dryRunCopied, setDryRunCopied] = useState(false);
@@ -453,6 +459,9 @@ export function App() {
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
   const collectionMode = useMemo(() => dashboard ? collectionModeCopy(dashboard) : null, [dashboard]);
   const hasConnectionEvidence = dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false;
+  const operationState = operationUiState(pendingOperation);
+  const operationBusy = operationState.busy;
+  const checking = operationState.checking;
 
   async function copyBrief() {
     if (!selectedBrief) return;
@@ -466,7 +475,8 @@ export function App() {
   }
 
   async function runLightCheck(hostId?: string) {
-    setLoading(true);
+    if (pendingOperation) return;
+    setPendingOperation("check");
     setError("");
     try {
       await api(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
@@ -482,12 +492,13 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "检查失败");
     } finally {
-      setLoading(false);
+      setPendingOperation(null);
     }
   }
 
   async function saveScheduler(next = schedulerForm) {
-    setLoading(true);
+    if (pendingOperation) return;
+    setPendingOperation("scheduler");
     setError("");
     try {
       const result = await api<{ scheduler: SchedulerState }>("/api/scheduler", {
@@ -503,12 +514,13 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存巡检配置失败");
     } finally {
-      setLoading(false);
+      setPendingOperation(null);
     }
   }
 
   async function runRetention(vacuum = false) {
-    setLoading(true);
+    if (pendingOperation) return;
+    setPendingOperation("retention");
     setError("");
     try {
       const result = await api<{ retention: RetentionResult }>("/api/maintenance/retention", {
@@ -520,11 +532,13 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "保留期清理失败");
     } finally {
-      setLoading(false);
+      setPendingOperation(null);
     }
   }
 
   async function runDryAction(actionKey: string) {
+    if (pendingOperation) return;
+    setPendingOperation("action");
     setError("");
     setDryRunCopied(false);
     try {
@@ -536,6 +550,8 @@ export function App() {
       setSelectedTab("actions");
     } catch (err) {
       setError(err instanceof Error ? err.message : "dry-run 失败");
+    } finally {
+      setPendingOperation(null);
     }
   }
 
@@ -563,8 +579,9 @@ export function App() {
   }
 
   async function saveHost() {
+    if (pendingOperation) return;
     const creatingFirstHost = dashboard?.hosts.length === 0;
-    setLoading(true);
+    setPendingOperation("host-save");
     setError("");
     try {
       await api(editingHostId ? `/api/hosts/${encodeURIComponent(editingHostId)}` : "/api/hosts", {
@@ -578,12 +595,13 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存主机失败");
     } finally {
-      setLoading(false);
+      setPendingOperation(null);
     }
   }
 
   async function removeHost(hostId: string) {
-    setLoading(true);
+    if (pendingOperation) return;
+    setPendingOperation("host-delete");
     setError("");
     try {
       await api(`/api/hosts/${encodeURIComponent(hostId)}`, { method: "DELETE" });
@@ -593,7 +611,7 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除主机失败");
     } finally {
-      setLoading(false);
+      setPendingOperation(null);
     }
   }
 
@@ -670,7 +688,7 @@ export function App() {
     return (
       <PetMode
         dashboard={dashboard}
-        loading={loading}
+        loading={checking}
         syncing={petSyncing}
         syncError={petSyncError}
         actionError={error}
@@ -724,6 +742,8 @@ export function App() {
                 onSubmit={saveHost}
                 onCancel={() => setShowHostForm(false)}
                 editing={false}
+                saving={operationState.savingHost}
+                disabled={operationBusy}
               />
             </div>
           ) : (
@@ -801,11 +821,11 @@ export function App() {
             {deskSyncError ? <p className="sync-error">本地 API 暂时没有响应：{deskSyncError}</p> : null}
           </div>
           <div className="topbar-actions">
-            <button className="primary" onClick={() => runLightCheck()} disabled={loading}>
-              {loading ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
-              <span>{loading ? "检查中" : dashboard.practiceMode ? "运行离线练习" : "刷新全部"}</span>
+            <button className="primary" onClick={() => runLightCheck()} disabled={operationBusy}>
+              {checking ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
+              <span>{checking ? "检查中" : dashboard.practiceMode ? "运行离线练习" : "刷新全部"}</span>
             </button>
-            <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
+            <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
               <Plus size={18} />
               <span>{dashboard.practiceMode ? "练习中" : "添加服务器"}</span>
             </button>
@@ -853,7 +873,7 @@ export function App() {
             <strong>{selectedNextStep?.title}</strong>
             <p>{selectedNextStep?.detail}</p>
             <div className="guardian-actions">
-              <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={loading}><RefreshCcw size={16} />刷新证据</button>
+              <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={operationBusy}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "刷新证据"}</button>
               <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制最小披露摘要"}</button>
               <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
             </div>
@@ -890,6 +910,7 @@ export function App() {
                 </button>
                 <button
                   className={dashboard.observedAt ? "complete" : "current"}
+                  disabled={operationBusy}
                   onClick={() => hasConnectionEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
                 >
                   <span>02</span>{dashboard.observedAt ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{dashboard.observedAt ? "已有观测证据" : hasConnectionEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
@@ -987,9 +1008,9 @@ export function App() {
                 {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
               </div>
               <div className="quick-actions">
-                <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw size={16} />刷新这台</button>
+                <button className="primary slim" disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "刷新这台"}</button>
                 <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />修改配置</button>
-                <button onClick={() => runDryAction("inspect-service")}>生成检查命令</button>
+                <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>生成检查命令</button>
               </div>
             </div>
 
@@ -1031,6 +1052,8 @@ export function App() {
                 onSubmit={saveHost}
                 onCancel={() => setShowHostForm(false)}
                 editing={Boolean(editingHostId)}
+                saving={operationState.savingHost}
+                disabled={operationBusy}
               />
             ) : null}
             <div className="table-scroll" tabIndex={0} role="region" aria-label="服务器配置表，可横向滚动">
@@ -1051,8 +1074,8 @@ export function App() {
                         ) : pendingHostDeleteId === host.id ? (
                           <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
                             <span>本地配置和检查记录都会删除</span>
-                            <button className="danger" disabled={loading} onClick={() => removeHost(host.id)}><Trash2 size={15} />{loading ? "删除中" : "确认删除"}</button>
-                            <button disabled={loading} onClick={() => setPendingHostDeleteId(null)}>取消</button>
+                            <button className="danger" disabled={operationBusy} onClick={() => removeHost(host.id)}><Trash2 size={15} />{operationState.deletingHost ? "删除中" : "确认删除"}</button>
+                            <button disabled={operationState.deletingHost} onClick={() => setPendingHostDeleteId(null)}>取消</button>
                           </div>
                         ) : (
                           <>
@@ -1136,10 +1159,10 @@ export function App() {
                 </label>
               </div>
               <div className="quick-actions">
-                <button className="primary slim" onClick={() => saveScheduler()} disabled={loading}><Save size={16} />保存巡检配置</button>
-                <button onClick={() => saveScheduler({ ...schedulerForm, enabled: false })}>停止定时巡检</button>
-                <button onClick={() => runRetention(false)}>执行保留期清理</button>
-                <button onClick={() => runRetention(true)}>清理并压缩 SQLite</button>
+                <button className="primary slim" onClick={() => saveScheduler()} disabled={operationBusy}><Save size={16} />{operationState.savingScheduler ? "保存中" : "保存巡检配置"}</button>
+                <button disabled={operationBusy} onClick={() => saveScheduler({ ...schedulerForm, enabled: false })}>停止定时巡检</button>
+                <button disabled={operationBusy} onClick={() => runRetention(false)}>{operationState.retaining ? "清理中" : "执行保留期清理"}</button>
+                <button disabled={operationBusy} onClick={() => runRetention(true)}>{operationState.retaining ? "清理中" : "清理并压缩 SQLite"}</button>
               </div>
               <section className={`startup-watch ${startup?.enabled ? "enabled" : startup?.status ?? "unknown"}`}>
                 <div className="startup-watch-head">
@@ -1199,9 +1222,9 @@ export function App() {
         {selectedTab === "actions" && (
           <section className="action-layout">
             <div className="action-menu">
-              <button onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />生成检查命令</button>
-              <button onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />生成 Nginx 重载计划</button>
-              <button onClick={() => runDryAction("restart-compose-service")}><AlertTriangle size={17} />生成服务重启计划</button>
+              <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "生成检查命令"}</button>
+              <button disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />生成 Nginx 重载计划</button>
+              <button disabled={operationBusy} onClick={() => runDryAction("restart-compose-service")}><AlertTriangle size={17} />生成服务重启计划</button>
             </div>
             <div className="detail-panel">
               <h2>{dryRun?.title ?? "选择左侧操作，先生成计划"}</h2>

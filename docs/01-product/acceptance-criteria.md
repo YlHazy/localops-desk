@@ -34,6 +34,7 @@
 - Pet sync failures and light-check failures are distinct: a sync failure can retry the bounded status read, while an uncertain check failure preserves prior evidence and discourages duplicate submission.
 - Host configuration cannot be edited, deleted, or batch-cleared while an overlapping light check is active; the typed conflict identifies the in-memory run rather than creating orphan evidence.
 - A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
+- Check, host save/delete, scheduler save, retention cleanup, and action-plan generation expose distinct pending states; non-check work never changes refresh copy to “检查中”, and duplicate mutating controls remain disabled until completion.
 - Windows login-start requires a production build, a usable Node executable, Microsoft Edge, and an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
 - Startup enablement writes only one current-user LocalOps VBS entry; disablement removes it only when its exact managed content still matches. Unknown same-name entries fail closed.
 - Public startup API responses and Agent status expose no Startup directory, repository path, Node/Edge path, generated script, or other local filesystem identity.
