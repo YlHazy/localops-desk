@@ -4,7 +4,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { collectHost, demoHosts } from "./runtime.mjs";
+import { collectHost, demoHosts, readOnlySshPreview } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { configureStartupEntry, publicStartupState, startupEntrySnapshot } from "./windows-startup.mjs";
@@ -808,12 +808,7 @@ function dryRunAction(input) {
       safetyBoundary: practice
         ? "离线练习只展示命令结构，不包含可连接目标。"
         : "仅包含白名单只读命令；复制后仍由用户在独立终端决定是否运行。",
-      commands: [
-        `ssh ${ssh} 'uptime'`,
-        `ssh ${ssh} 'free -m'`,
-        `ssh ${ssh} 'df -h /'`,
-        `ssh ${ssh} 'docker compose ps'`
-      ],
+      commands: readOnlySshPreview(ssh),
       verification: ["确认命令只读。", "确认输出经过脱敏。", "确认不会读取 .env 或打印密钥。"],
       ...(practice ? { blockedReason: "离线练习没有 SSH 目标，因此只展示不可执行的命令结构。" } : {})
     },

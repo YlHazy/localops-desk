@@ -12,6 +12,7 @@
 - The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
 - Dry-run action output is visible and never executes a command; unknown action keys fail closed.
 - Only allow-listed read-only plans with a configured SSH alias are copyable. Practice plans and all mutating plans use explicit placeholders, never include the configured alias, and are not directly copyable.
+- Copyable read-only previews are generated from the executor's exact command allowlist, so UI instructions cannot silently drift from collected evidence.
 - Nginx reload is labeled medium risk and Compose service restart high risk; the UI keeps remote execution visibly off and presents blocked templates as an expected boundary rather than a runtime error.
 - The Agent API manifest lists supported local endpoints.
 - No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.

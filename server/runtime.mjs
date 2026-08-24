@@ -76,12 +76,22 @@ const offlineDemoProfiles = {
   }
 };
 
-const sshCommands = {
+export const readOnlySshCommands = Object.freeze({
   uptime: "uptime",
   memory: "free -m",
   disk: "df -P /",
   docker: "docker ps --format '{{.Names}} {{.Status}}'"
-};
+});
+
+export function readOnlySshPreview(sshAlias) {
+  const target = sshAlias === "<ssh-alias>"
+    ? sshAlias
+    : validateSshAlias(sshAlias, { allowEmpty: false });
+  return Object.values(readOnlySshCommands).map((command) => {
+    const remoteCommand = command.includes("'") ? `"${command}"` : command;
+    return `ssh ${target} ${remoteCommand}`;
+  });
+}
 
 function statusFromHttp(ok, statusCode) {
   if (ok) return "healthy";
@@ -147,7 +157,7 @@ function trimOutput(output, maxChars = 2000) {
 }
 
 async function runSshReadOnly(host, commandKey, timeoutMs = 5000) {
-  const command = sshCommands[commandKey];
+  const command = readOnlySshCommands[commandKey];
   if (!command) {
     throw new Error(`SSH command is not allowlisted: ${commandKey}`);
   }

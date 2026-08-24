@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import test from "node:test";
-import { collectHost } from "./runtime.mjs";
+import { collectHost, readOnlySshCommands, readOnlySshPreview } from "./runtime.mjs";
 
 async function closeTestServer(server) {
   if (!server.listening) return;
@@ -11,6 +11,19 @@ async function closeTestServer(server) {
   server.closeAllConnections?.();
   await closed;
 }
+
+test("copyable SSH preview is generated from the executor's exact read-only allowlist", () => {
+  const preview = readOnlySshPreview("safe-alias");
+  assert.deepEqual(preview, [
+    "ssh safe-alias uptime",
+    "ssh safe-alias free -m",
+    "ssh safe-alias df -P /",
+    "ssh safe-alias \"docker ps --format '{{.Names}} {{.Status}}'\""
+  ]);
+  assert.equal(preview.length, Object.keys(readOnlySshCommands).length);
+  assert.doesNotMatch(preview.join("\n"), /compose|sudo|restart|systemctl/i);
+  assert.throws(() => readOnlySshPreview("-oProxyCommand=bad"), /sshAlias/);
+});
 
 test("offline demo profile bypasses HTTP and SSH collectors even when targets are injected", async (t) => {
   let requestCount = 0;
