@@ -41,10 +41,14 @@ test("report sharing keeps internal and minimal-disclosure paths visibly separat
 
 test("the desk cannot keep a healthy headline after evidence expires", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   assert.match(appSource, /trustworthyDashboard\(dashboard, now\)/);
   assert.match(appSource, /EVIDENCE HOLD \/ 证据封条/);
   assert.match(appSource, /上次结果已过期，不能证明当前正常/);
   assert.match(appSource, /currentDashboard\.counts/);
+  assert.match(appSource, /<PetMode[\s\S]*now=\{now\}/);
+  assert.match(petSource, /dashboard: DashboardStatus;\s+now: number;/);
+  assert.doesNotMatch(petSource, /useState\(\(\) => Date\.now\(\)\)/);
   assert.doesNotMatch(appSource, /dashboard\.counts/);
 });
 

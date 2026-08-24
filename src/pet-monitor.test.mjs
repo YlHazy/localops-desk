@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { trustworthyDashboard } from "./desk-sync.mjs";
 import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 
 function dashboard(counts) {
@@ -63,4 +64,24 @@ test("pet snapshot trust never presents retained or expired evidence as current"
     label: "证据仍在有效期内",
     current: true
   });
+});
+
+test("evidence expiry reaches aggregate pet notifications exactly once", () => {
+  const observedAt = Date.parse("2026-08-24T00:00:00.000Z");
+  const dashboard = {
+    observedAt: new Date(observedAt).toISOString(),
+    staleAfterMs: 60_000,
+    counts: { healthy: 2, warning: 0, critical: 0, unknown: 0 },
+    hosts: [
+      { id: "one", name: "private-one", status: "healthy" },
+      { id: "two", name: "private-two", status: "healthy" }
+    ]
+  };
+  const fresh = monitorSignal(trustworthyDashboard(dashboard, observedAt + 60_000));
+  const expired = monitorSignal(trustworthyDashboard(dashboard, observedAt + 60_001));
+  const notice = worseningNotice(fresh, expired);
+  assert.equal(expired.level, "unknown");
+  assert.match(notice.body, /待确认 2/);
+  assert.doesNotMatch(notice.body, /private-one|private-two/);
+  assert.equal(worseningNotice(expired, expired), null);
 });

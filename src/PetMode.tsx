@@ -64,6 +64,7 @@ function hostSignal(host: HostState) {
 
 export function PetMode({
   dashboard,
+  now,
   loading,
   syncing,
   syncError,
@@ -74,6 +75,7 @@ export function PetMode({
   onDiscuss
 }: {
   dashboard: DashboardStatus;
+  now: number;
   loading: boolean;
   syncing: boolean;
   syncError: string;
@@ -85,7 +87,6 @@ export function PetMode({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
   const notificationsSupported = "Notification" in window;
   const notificationsBlocked = notificationsSupported && Notification.permission === "denied";
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationsSupported
@@ -118,10 +119,6 @@ export function PetMode({
     };
   }, [petSessionId]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
   const observedAt = dashboard.observedAt ? new Date(dashboard.observedAt).getTime() : Number.NaN;
   const stale = !Number.isFinite(observedAt) || now - observedAt > dashboard.staleAfterMs;
   const hosts = useMemo(

@@ -338,6 +338,7 @@ export function App() {
       if (!result.current) return false;
       const status = result.value;
       setDashboard(status);
+      setNow(Date.now());
       setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
       return true;
     }
@@ -416,10 +417,9 @@ export function App() {
   }, [petMode]);
 
   useEffect(() => {
-    if (petMode) return;
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
-  }, [petMode]);
+  }, []);
 
   function retryLoad() {
     setError("");
@@ -733,6 +733,7 @@ export function App() {
     return (
       <PetMode
         dashboard={currentDashboard}
+        now={now}
         loading={checking}
         syncing={petSyncing}
         syncError={petSyncError}
