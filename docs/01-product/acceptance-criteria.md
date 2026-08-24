@@ -16,6 +16,8 @@
 - Nginx reload is labeled medium risk and Compose service restart high risk; the UI keeps remote execution visibly off and presents blocked templates as an expected boundary rather than a runtime error.
 - The Agent API manifest lists supported local endpoints.
 - No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.
+- Editing an existing host round-trips its tags instead of silently clearing them; Agent status excludes tags alongside connection configuration and raw evidence.
+- Empty server names fail as a typed 400 input error, and the form prevents submission while explaining which optional fields cause HTTP access, gate SSH, or remain metadata-only.
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
 - The pet's expression, copy, and accent reflect the worst current host state.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.

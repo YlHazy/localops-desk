@@ -12,7 +12,7 @@ export function validateSshAlias(value, { allowEmpty = true } = {}) {
   const alias = String(value ?? "").trim();
   if (!alias && allowEmpty) return "";
   if (!SSH_ALIAS_PATTERN.test(alias)) {
-    throw new InputValidationError("sshAlias must contain only letters, numbers, '.', '_' or '-', and must not start with '-'.");
+    throw new InputValidationError("SSH alias 只能包含字母、数字、点、下划线或短横线，且不能以短横线开头。");
   }
   return alias;
 }

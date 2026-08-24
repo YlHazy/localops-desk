@@ -253,22 +253,31 @@ function HostForm({
   onCancel: () => void;
   editing: boolean;
 }) {
+  const hasHealthUrl = form.healthUrl.trim().length > 0;
+  const hasSshAlias = form.sshAlias.trim().length > 0;
   const update = (key: keyof HostConfigInput, value: string) => {
     setForm({ ...form, [key]: key === "tags" ? value.split(",").map((item) => item.trim()).filter(Boolean) : value });
   };
   return (
     <div className="host-form">
+      <div className="host-form-intro">
+        <div>
+          <strong>{editing ? "修改本机保存的服务器配置" : "先登记服务器，再选择证据来源"}</strong>
+          <small>只要求名称；Health URL 和 SSH alias 均为可选，不要填写密码、Token 或私钥。</small>
+        </div>
+        <span className={hasHealthUrl || hasSshAlias ? "ready" : "waiting"}>{hasHealthUrl || hasSshAlias ? "已有证据来源" : "保存后保持未检查"}</span>
+      </div>
       <div className="form-grid">
-        <label>名称<input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="my-server-01" /></label>
+        <label>名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：个人博客" /><small>显示名称，只保存在本机。</small></label>
         <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
         <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
-        <label>SSH Alias<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="~/.ssh/config Host" /></label>
-        <label className="wide">Health URL<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /></label>
-        <label>Compose 项目<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="compose project" /></label>
+        <label>SSH Alias · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>填写 SSH config 的 Host 名；默认不会启用 SSH。</small></label>
+        <label className="wide">Health URL · 可选<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>巡检会向这里发起 HTTP GET；不能含账号、查询参数或 # 片段。</small></label>
+        <label>Compose 项目 · 备注<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="例如：blog-stack" /><small>当前仅作本机标记，不会拼入命令。</small></label>
         <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
       </div>
       <div className="form-actions">
-        <button className="primary slim" onClick={onSubmit}><Save size={16} />{editing ? "保存配置" : "新增主机"}</button>
+        <button className="primary slim" disabled={!form.name.trim()} onClick={onSubmit}><Save size={16} />{editing ? "保存配置" : "新增主机"}</button>
         <button onClick={onCancel}><X size={16} />取消</button>
       </div>
     </div>
@@ -547,7 +556,7 @@ export function App() {
       sshAlias: host.sshAlias,
       healthUrl: host.healthUrl,
       composeProject: host.composeProject,
-      tags: []
+      tags: host.tags
     });
     setShowHostForm(true);
     setSelectedTab("hosts");

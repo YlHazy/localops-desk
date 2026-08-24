@@ -22,7 +22,7 @@ test("copyable SSH preview is generated from the executor's exact read-only allo
   ]);
   assert.equal(preview.length, Object.keys(readOnlySshCommands).length);
   assert.doesNotMatch(preview.join("\n"), /compose|sudo|restart|systemctl/i);
-  assert.throws(() => readOnlySshPreview("-oProxyCommand=bad"), /sshAlias/);
+  assert.throws(() => readOnlySshPreview("-oProxyCommand=bad"), /SSH alias/);
 });
 
 test("offline demo profile bypasses HTTP and SSH collectors even when targets are injected", async (t) => {

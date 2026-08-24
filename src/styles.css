@@ -1146,6 +1146,22 @@ th {
   margin-bottom: 18px;
 }
 
+.host-form-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e1e8ef;
+}
+
+.host-form-intro div { display: grid; gap: 5px; }
+.host-form-intro small, .form-grid label small { color: #6b7785; font-weight: 500; line-height: 1.45; }
+.host-form-intro > span { flex: 0 0 auto; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 800; }
+.host-form-intro > span.ready { color: #14633f; background: #dff7eb; }
+.host-form-intro > span.waiting { color: #725118; background: #fff0c7; }
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1447,6 +1463,7 @@ code {
   .practice-exit-confirm button, .practice-exit { width: 100%; }
   .setup-track { grid-template-columns: 1fr; }
   .action-contract { grid-template-columns: 1fr; }
+  .host-form-intro { flex-direction: column; }
 
   .main {
     padding: 18px;

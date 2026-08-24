@@ -272,6 +272,16 @@ test("legacy seed flag no longer inserts project-specific hosts", async (t) => {
 
 test("host input rejects unsafe SSH aliases with a 400 response", async (t) => {
   const api = await startApi(t);
+  const missingName = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "   " })
+  });
+  assert.equal(missingName.status, 400);
+  const missingNameBody = await missingName.json();
+  assert.equal(missingNameBody.error, "INVALID_INPUT");
+  assert.match(missingNameBody.message, /名称不能为空/);
+
   const response = await fetch(`${api.base}/api/hosts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -306,10 +316,12 @@ test("health URLs reject embedded secrets and agent payloads omit connection con
   const created = await fetch(`${api.base}/api/hosts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "safe-agent-host", environment: "test", role: "fixture", tags: [], ...secretMarkers })
+    body: JSON.stringify({ name: "safe-agent-host", environment: "test", role: "fixture", tags: ["private-tag-marker"], ...secretMarkers })
   });
   assert.equal(created.status, 201);
   const host = (await created.json()).host;
+  const dashboardStatus = await fetch(`${api.base}/api/status`).then((item) => item.json());
+  assert.deepEqual(dashboardStatus.hosts[0].tags, ["private-tag-marker"]);
   const check = await fetch(`${api.base}/api/checks/light/${encodeURIComponent(host.id)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -326,7 +338,7 @@ test("health URLs reject embedded secrets and agent payloads omit connection con
   const agentStatus = await fetch(`${api.base}/api/agent/status`);
   assert.equal(agentStatus.status, 200);
   const agentText = JSON.stringify(await agentStatus.json());
-  assert.doesNotMatch(agentText, /private-alias-marker|private-compose-marker|legacy-secret-marker|\/api\/agent\/manifest/);
+  assert.doesNotMatch(agentText, /private-alias-marker|private-compose-marker|private-tag-marker|legacy-secret-marker|\/api\/agent\/manifest/);
 });
 
 test("expired HTTP failures become unknown and are not reported as a current global outage", async (t) => {

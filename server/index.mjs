@@ -365,7 +365,7 @@ function normalizeHostInput(input, existing = {}) {
   const now = new Date().toISOString();
   const name = String(input.name ?? existing.name ?? "").trim();
   if (!name) {
-    throw new Error("Host name is required.");
+    throw new InputValidationError("服务器名称不能为空。");
   }
   const healthUrl = String(input.healthUrl ?? existing.healthUrl ?? "").trim();
   if (healthUrl) {
@@ -373,13 +373,13 @@ function normalizeHostInput(input, existing = {}) {
     try {
       parsed = new URL(healthUrl);
     } catch {
-      throw new InputValidationError("healthUrl must be a valid http:// or https:// URL.");
+      throw new InputValidationError("Health URL 必须是有效的 http:// 或 https:// 地址。");
     }
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      throw new InputValidationError("healthUrl must start with http:// or https://.");
+      throw new InputValidationError("Health URL 必须以 http:// 或 https:// 开头。");
     }
     if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-      throw new InputValidationError("healthUrl must not contain credentials, query parameters, or fragments.");
+      throw new InputValidationError("Health URL 不能包含账号密码、查询参数或 # 片段。");
     }
   }
   const sshAlias = validateSshAlias(input.sshAlias ?? existing.sshAlias ?? "");
@@ -465,6 +465,7 @@ function latestHostChecks() {
     sshAlias: row.sshAlias,
     healthUrl: row.healthUrl,
     composeProject: row.composeProject,
+    tags: JSON.parse(row.tags),
     isOfflineDemo: isManagedOfflineDemoHost({
       id: row.configuredHostId,
       name: row.name,
@@ -538,7 +539,7 @@ function statusSnapshot(hosts) {
 function agentSafeSnapshot(snapshot) {
   return {
     ...snapshot,
-    hosts: snapshot.hosts.map(({ healthUrl, sshAlias, composeProject, evidence, ...hostItem }) => hostItem)
+    hosts: snapshot.hosts.map(({ healthUrl, sshAlias, composeProject, tags, evidence, ...hostItem }) => hostItem)
   };
 }
 

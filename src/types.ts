@@ -8,6 +8,7 @@ export interface HostState {
   sshAlias: string;
   healthUrl: string;
   composeProject: string;
+  tags: string[];
   isOfflineDemo: boolean;
   status: Status;
   lastCheckedAt: string | null;
