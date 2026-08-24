@@ -31,5 +31,6 @@ export function deskSyncCopy(state: DeskSyncState, lastSyncedAt: number | null, 
 export function fetchDeskSnapshot(request: DeskReadRequest): Promise<DeskSnapshot>;
 export function fetchPetSnapshot(request: DeskReadRequest): Promise<import("./types").DashboardStatus>;
 export function collectionModeCopy(dashboard: import("./types").DashboardStatus): CollectionModeCopy;
+export function dashboardEvidenceIsFresh(dashboard: import("./types").DashboardStatus, now?: number): boolean;
 export function trustworthyDashboard(dashboard: import("./types").DashboardStatus, now?: number): import("./types").DashboardStatus;
 export function schedulerDraftAfterSync(currentDraft: SchedulerDraft, scheduler: import("./types").SchedulerState, preserveDraft: boolean): SchedulerDraft;

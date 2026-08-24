@@ -1,3 +1,5 @@
+import { dashboardEvidenceIsFresh } from "./desk-sync.mjs";
+
 const statusLabels = {
   healthy: "正常",
   warning: "需处理",
@@ -29,7 +31,7 @@ export function runtimeSignalStatus(host) {
 function freshnessLabel(dashboard, now) {
   if (!dashboard.observedAt) return "没有观测证据";
   const ageMs = now - new Date(dashboard.observedAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs > dashboard.staleAfterMs) return "证据已过期";
+  if (!dashboardEvidenceIsFresh(dashboard, now)) return "证据已过期";
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
   return minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据`;
 }
@@ -59,11 +61,12 @@ function shareableSignal(label, status) {
 }
 
 export function discussionBrief(dashboard, host, now = Date.now()) {
-  const status = statusLabels[host.status] ? host.status : "unknown";
+  const fresh = dashboardEvidenceIsFresh(dashboard, now);
+  const status = fresh && statusLabels[host.status] ? host.status : "unknown";
   const evidence = [
-    shareableSignal(signalLabels.http, httpSignalStatus(host)),
-    shareableSignal(signalLabels.ssh, sshSignalStatus(host)),
-    shareableSignal(signalLabels.runtime, runtimeSignalStatus(host))
+    shareableSignal(signalLabels.http, fresh ? httpSignalStatus(host) : "unknown"),
+    shareableSignal(signalLabels.ssh, fresh ? sshSignalStatus(host) : "unknown"),
+    shareableSignal(signalLabels.runtime, fresh ? runtimeSignalStatus(host) : "unknown")
   ].join("\n");
   return [
     "LocalOps 值守讨论摘要",

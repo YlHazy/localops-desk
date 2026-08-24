@@ -60,13 +60,16 @@ export function collectionModeCopy(dashboard) {
   };
 }
 
-export function trustworthyDashboard(dashboard, now = Date.now()) {
+export function dashboardEvidenceIsFresh(dashboard, now = Date.now()) {
   const observedAt = dashboard.observedAt ? new Date(dashboard.observedAt).getTime() : Number.NaN;
-  const fresh = Number.isFinite(observedAt)
+  return Number.isFinite(observedAt)
     && Number.isFinite(dashboard.staleAfterMs)
     && dashboard.staleAfterMs >= 0
     && now - observedAt <= dashboard.staleAfterMs;
-  if (fresh) return dashboard;
+}
+
+export function trustworthyDashboard(dashboard, now = Date.now()) {
+  if (dashboardEvidenceIsFresh(dashboard, now)) return dashboard;
   return {
     ...dashboard,
     counts: {

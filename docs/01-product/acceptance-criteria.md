@@ -25,7 +25,7 @@
 - A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
 - While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
 - System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
-- A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and cannot leave the discussion summary healthy.
+- A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, and runtime conclusions instead of retaining any healthy/failed category from expired evidence.
 - Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
 - Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
 - The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.

@@ -66,3 +66,21 @@ test("offline practice evidence uses the same healthy classifiers as the desk", 
   assert.equal(sshSignalStatus(practiceHost), "healthy");
   assert.equal(runtimeSignalStatus(practiceHost), "healthy");
 });
+
+test("expired discussion evidence downgrades every shareable signal atomically", () => {
+  const brief = discussionBrief({
+    observedAt: "2026-08-24T00:00:00.000Z",
+    staleAfterMs: 60_000
+  }, {
+    status: "healthy",
+    httpStatus: "HTTP 200 from private.example.test",
+    sshStatus: "ok",
+    dockerStatus: "docker checked"
+  }, Date.parse("2026-08-24T00:01:00.001Z"));
+
+  assert.match(brief, /状态：未知/);
+  assert.match(brief, /证据时效：证据已过期/);
+  assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 3);
+  assert.doesNotMatch(brief, /有效证据显示正常|有效证据显示失败|存在需要复核的信号/);
+  assert.match(brief, /未知状态不按正常处理/);
+});
