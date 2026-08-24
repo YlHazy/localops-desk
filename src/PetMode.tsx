@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy } from "./desk-sync.mjs";
+import { collectionModeCopy, localRecoveryCopy } from "./desk-sync.mjs";
 import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
@@ -66,6 +66,7 @@ function hostSignal(host: HostState) {
 export function PetMode({
   dashboard,
   now,
+  lastSyncedAt,
   loading,
   syncing,
   syncError,
@@ -77,6 +78,7 @@ export function PetMode({
 }: {
   dashboard: DashboardStatus;
   now: number;
+  lastSyncedAt: number | null;
   loading: boolean;
   syncing: boolean;
   syncError: string;
@@ -95,6 +97,7 @@ export function PetMode({
     && readNotificationPreference());
   const [notificationNote, setNotificationNote] = useState("");
   const previousSignal = useRef<MonitorSignal | null>(null);
+  const recovery = localRecoveryCopy(lastSyncedAt, now);
   const petSessionId = new URLSearchParams(window.location.search).get("session");
 
   useEffect(() => {
@@ -207,8 +210,10 @@ export function PetMode({
 
       {syncError ? (
         <section className="pet-recovery" aria-label="本地状态恢复">
-          <span>{snapshotTrust.label}</span>
-          <small title={syncError}>{syncError}</small>
+          <span>{recovery.label}</span>
+          <small>{recovery.detail}</small>
+          <em title={syncError}>原因：{syncError}</em>
+          <p>{recovery.boundary}</p>
           <button onClick={onRetrySync} disabled={syncing}>
             <RefreshCcw className={syncing ? "spin" : ""} size={15} />
             {syncing ? "正在重连" : "只重连本地状态"}

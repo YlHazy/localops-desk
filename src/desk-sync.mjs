@@ -1,20 +1,34 @@
+function syncAge(lastSyncedAt, now) {
+  const ageSeconds = Math.max(0, Math.floor((now - lastSyncedAt) / 1000));
+  return ageSeconds < 15
+    ? "刚刚"
+    : ageSeconds < 60
+      ? `${ageSeconds} 秒前`
+      : `${Math.floor(ageSeconds / 60)} 分钟前`;
+}
+
+export function localRecoveryCopy(lastSyncedAt, now = Date.now()) {
+  const retained = Number.isFinite(lastSyncedAt)
+    ? `保留上次成功读取（${syncAge(lastSyncedAt, now)}）`
+    : "尚未成功读取本地状态";
+  return {
+    label: "本地状态暂时断开",
+    detail: `${retained}；30 秒后自动重试`,
+    boundary: "立即重试只会读取本地状态，不会巡检或改动服务器"
+  };
+}
+
 export function deskSyncCopy(state, lastSyncedAt, now = Date.now()) {
   if (state === "syncing") {
     return { label: "正在同步本地状态", detail: "只读更新，不会触发巡检" };
   }
   if (state === "offline") {
-    return { label: "自动同步暂停", detail: "保留上次结果，可立即重试" };
+    return localRecoveryCopy(lastSyncedAt, now);
   }
   if (state !== "current" || !Number.isFinite(lastSyncedAt)) {
     return { label: "等待首次同步", detail: "连接本地 LocalOps API" };
   }
-  const ageSeconds = Math.max(0, Math.floor((now - lastSyncedAt) / 1000));
-  const age = ageSeconds < 15
-    ? "刚刚"
-    : ageSeconds < 60
-      ? `${ageSeconds} 秒前`
-      : `${Math.floor(ageSeconds / 60)} 分钟前`;
-  return { label: `自动同步 · ${age}`, detail: "每 30 秒只读更新" };
+  return { label: `自动同步 · ${syncAge(lastSyncedAt, now)}`, detail: "每 30 秒只读更新" };
 }
 
 export async function fetchDeskSnapshot(request) {

@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 
-test("desk sync copy distinguishes initial, running, and paused states", () => {
+test("desk sync copy distinguishes initial, running, and recovering states", () => {
   assert.match(deskSyncCopy("idle", null, 10_000).label, /首次同步/);
   assert.match(deskSyncCopy("syncing", null, 10_000).detail, /不会触发巡检/);
-  assert.match(deskSyncCopy("offline", 5_000, 10_000).detail, /保留上次结果/);
+  assert.match(deskSyncCopy("offline", 5_000, 10_000).detail, /30 秒后自动重试/);
+});
+
+test("connection recovery tells the truth about retained state, retry, and safety", () => {
+  const retained = localRecoveryCopy(10_000, 140_000);
+  assert.equal(retained.label, "本地状态暂时断开");
+  assert.match(retained.detail, /保留上次成功读取（2 分钟前）/);
+  assert.match(retained.detail, /30 秒后自动重试/);
+  assert.match(retained.boundary, /只会读取本地状态/);
+  assert.match(retained.boundary, /不会巡检或改动服务器/);
+
+  const firstLoad = localRecoveryCopy(null, 140_000);
+  assert.match(firstLoad.detail, /尚未成功读取/);
+  assert.doesNotMatch(firstLoad.detail, /保留/);
 });
 
 test("desk sync age is bounded and human readable", () => {

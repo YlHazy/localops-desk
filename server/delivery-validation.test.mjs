@@ -71,6 +71,21 @@ test("every desk-opened pet participates in anonymous presence", () => {
   assert.doesNotMatch(appSource, /window\.open\(`\$\{window\.location\.origin\}\/\?mode=pet`/);
 });
 
+test("desk and pet expose one truthful local-status recovery contract", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const syncSource = readFileSync(new URL("../src/desk-sync.mjs", import.meta.url), "utf8");
+  assert.match(syncSource, /30 秒后自动重试/);
+  assert.match(syncSource, /不会巡检或改动服务器/);
+  assert.doesNotMatch(syncSource, /自动同步暂停/);
+  assert.match(appSource, /setLastPetSyncAt\(syncedAt\)/);
+  assert.match(appSource, /lastSyncedAt=\{lastPetSyncAt\}/);
+  assert.match(appSource, /className="boot-recovery-card"/);
+  assert.match(appSource, /className="sync-recovery-card"/);
+  assert.match(petSource, /localRecoveryCopy\(lastSyncedAt, now\)/);
+  assert.match(petSource, /<p>\{recovery\.boundary\}<\/p>/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

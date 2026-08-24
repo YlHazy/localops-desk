@@ -3,6 +3,11 @@ export type DeskSyncState = "idle" | "syncing" | "current" | "offline";
 export interface DeskSyncCopy {
   label: string;
   detail: string;
+  boundary?: string;
+}
+
+export interface LocalRecoveryCopy extends DeskSyncCopy {
+  boundary: string;
 }
 
 export interface SchedulerDraft {
@@ -28,6 +33,7 @@ export interface CollectionModeCopy {
 export type DeskReadRequest = <T>(path: string) => Promise<T>;
 
 export function deskSyncCopy(state: DeskSyncState, lastSyncedAt: number | null, now?: number): DeskSyncCopy;
+export function localRecoveryCopy(lastSyncedAt: number | null, now?: number): LocalRecoveryCopy;
 export function fetchDeskSnapshot(request: DeskReadRequest): Promise<DeskSnapshot>;
 export function fetchPetSnapshot(request: DeskReadRequest): Promise<import("./types").DashboardStatus>;
 export function collectionModeCopy(dashboard: import("./types").DashboardStatus): CollectionModeCopy;

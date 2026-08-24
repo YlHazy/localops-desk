@@ -24,6 +24,7 @@
   - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
   - Operation-state tests prove that only a real check renders check-busy UI and that each supported operation exposes one truthful purpose flag.
   - Latest-request-gate tests prove that out-of-order and post-unmount responses cannot replace a newer desk or pet snapshot.
+  - Local-status recovery tests require desk and pet copy to retain the last successful read age, disclose the 30-second automatic retry, and state that immediate retry does not inspect or change a server.
   - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
   - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, and runtime categories to downgrade together and reject any expired healthy/failed wording.
 - Security smoke:

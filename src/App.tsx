@@ -23,7 +23,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 import { PetMode } from "./PetMode";
@@ -326,6 +326,7 @@ export function App() {
   const [now, setNow] = useState(() => Date.now());
   const [deskSyncState, setDeskSyncState] = useState<DeskSyncState>("idle");
   const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
+  const [lastPetSyncAt, setLastPetSyncAt] = useState<number | null>(null);
   const [deskSyncError, setDeskSyncError] = useState("");
   const [petSyncError, setPetSyncError] = useState("");
   const [practicePending, setPracticePending] = useState<"install" | "remove" | null>(null);
@@ -338,8 +339,10 @@ export function App() {
       const result = await resolveLatestRequest(loadGate.current, requestToken, fetchPetSnapshot(api));
       if (!result.current) return false;
       const status = result.value;
+      const syncedAt = Date.now();
       setDashboard(status);
-      setNow(Date.now());
+      setNow(syncedAt);
+      setLastPetSyncAt(syncedAt);
       setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
       return true;
     }
@@ -661,11 +664,24 @@ export function App() {
   }
 
   if (!dashboard) {
+    const recovery = localRecoveryCopy(null, now);
     return (
       <main className={`boot ${petMode ? "pet-boot" : ""}`} role={error ? "alert" : undefined}>
-        {error ? <AlertTriangle /> : <Activity className="spin" />}
-        <span>{error ? `无法连接本地 LocalOps API：${error}` : "正在连接本地 LocalOps API..."}</span>
-        {error ? <button onClick={retryLoad}>重试</button> : null}
+        {error ? (
+          <section className="boot-recovery-card">
+            <AlertTriangle size={22} aria-hidden="true" />
+            <div>
+              <span>LOCAL STATUS / 本地状态</span>
+              <h1>{recovery.label}</h1>
+              <p title={error}>原因：{error}</p>
+              <small>{recovery.detail}</small>
+              <em>{recovery.boundary}</em>
+            </div>
+            <button onClick={retryLoad}><RefreshCcw size={15} />立即重试</button>
+          </section>
+        ) : (
+          <div className="boot-loading"><Activity className="spin" /><span>正在连接本地 LocalOps API...</span></div>
+        )}
       </main>
     );
   }
@@ -735,6 +751,7 @@ export function App() {
       <PetMode
         dashboard={currentDashboard}
         now={now}
+        lastSyncedAt={lastPetSyncAt}
         loading={checking}
         syncing={petSyncing}
         syncError={petSyncError}
@@ -859,13 +876,24 @@ export function App() {
             <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
             <h1>先看结论，再决定要不要动</h1>
             <p>页面刷新：{formatTime(dashboard.generatedAt)} · {freshness.label}</p>
-            <div className={`sync-rail ${deskSyncState}`} aria-live="polite">
-              <span className="sync-pulse" aria-hidden="true" />
-              <strong>{deskSync.label}</strong>
-              <small>{deskSync.detail}</small>
-              {deskSyncState === "offline" ? <button onClick={retryDeskSync}>重试同步</button> : null}
-            </div>
-            {deskSyncError ? <p className="sync-error">本地 API 暂时没有响应：{deskSyncError}</p> : null}
+            {deskSyncState === "offline" ? (
+              <section className="sync-recovery-card" aria-live="polite" aria-label="本地状态恢复">
+                <AlertTriangle size={17} aria-hidden="true" />
+                <div>
+                  <strong>{deskSync.label}</strong>
+                  <small>{deskSync.detail}</small>
+                  <span>{deskSync.boundary}</span>
+                  {deskSyncError ? <em title={deskSyncError}>原因：{deskSyncError}</em> : null}
+                </div>
+                <button onClick={retryDeskSync}><RefreshCcw size={14} />立即重试</button>
+              </section>
+            ) : (
+              <div className={`sync-rail ${deskSyncState}`} aria-live="polite">
+                <span className="sync-pulse" aria-hidden="true" />
+                <strong>{deskSync.label}</strong>
+                <small>{deskSync.detail}</small>
+              </div>
+            )}
           </div>
           <div className="topbar-actions">
             <button className="primary" onClick={() => runLightCheck()} disabled={operationBusy}>
