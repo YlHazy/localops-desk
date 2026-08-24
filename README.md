@@ -14,6 +14,7 @@ It is intentionally not a SaaS product. The app runs on `127.0.0.1`, stores summ
 - First Watch onboarding makes the zero-target, zero-connection default visible before the first host is saved; connection evidence stays opt-in.
 - After the first host is saved, the desk returns to the overview and shows a four-stage Watch Path: register a server, obtain evidence, enable automatic checks, then optionally add the desktop/login companion.
 - A categorized discussion summary and Codex deep link that only prefill reviewable text; they never auto-send or execute an action.
+- Reports are explicitly split into identity-bearing internal diagnostics and a minimal-disclosure discussion summary; copying the internal report requires confirmation.
 - Local API surface intended for future Codex operations agents.
 - Secret-safe defaults: no passwords, private keys, `.env` contents, or cloud AccessKey secrets are stored or printed.
 

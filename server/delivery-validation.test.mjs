@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { inspectPetPng, scanPrivateIdentityText, validateDelivery } from "../scripts/validate-delivery.mjs";
 
@@ -27,6 +28,15 @@ test("private identity scanner recognizes former project infrastructure without 
     "former product domain",
   ]);
   assert.deepEqual(scanPrivateIdentityText("sample-service localhost"), []);
+});
+
+test("report sharing keeps internal and minimal-disclosure paths visibly separate", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /INTERNAL \/ 仅内部/);
+  assert.match(appSource, /确认复制包含服务器身份的内部材料/);
+  assert.match(appSource, /MINIMAL \/ 可讨论/);
+  assert.match(appSource, /selectedBrief/);
+  assert.doesNotMatch(appSource, /适合复制给同事|请打开文本报告并手动复制/);
 });
 
 function pngFixture({ width, height, colorType }) {

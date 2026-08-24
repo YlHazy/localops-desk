@@ -314,6 +314,8 @@ export function App() {
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
+  const [reportCopyPending, setReportCopyPending] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [deskSyncState, setDeskSyncState] = useState<DeskSyncState>("idle");
   const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
@@ -482,7 +484,20 @@ export function App() {
       setBriefCopied(true);
       window.setTimeout(() => setBriefCopied(false), 2_000);
     } catch {
-      setError("复制失败。请打开文本报告并手动复制。");
+      setError("最小披露摘要复制失败，请检查剪贴板权限；不要用包含服务器名称的内部报告代替。");
+    }
+  }
+
+  async function copyInternalReport() {
+    if (!report) return;
+    setError("");
+    try {
+      await navigator.clipboard.writeText(report);
+      setReportCopyPending(false);
+      setReportCopied(true);
+      window.setTimeout(() => setReportCopied(false), 2_000);
+    } catch {
+      setError("内部报告复制失败，请检查系统剪贴板权限。");
     }
   }
 
@@ -802,7 +817,7 @@ export function App() {
             ["scheduler", Clock3, "自动检查"],
             ["checks", History, "检查记录"],
             ["actions", TerminalSquare, "操作预案"],
-            ["reports", FileText, "文本报告"],
+            ["reports", FileText, "报告与分享"],
             ["agent", Bot, "给 Agent 用"]
           ].map(([key, Icon, label]) => (
             <button key={key as string} className={selectedTab === key ? "active" : ""} onClick={() => setSelectedTab(key as string)}>
@@ -1274,11 +1289,52 @@ export function App() {
             <div className="report-head">
               <FileText />
               <div>
-                <h2>当前文本报告</h2>
-                <p>基于最近一次检查生成，适合复制给同事或后续排查任务。</p>
+                <h2>报告与安全分享</h2>
+                <p>内部诊断保留现场细节；对外讨论只使用最小披露摘要。</p>
               </div>
             </div>
-            <pre>{report}</pre>
+            <div className="report-share-grid">
+              <section className="internal-report-card" aria-label="内部诊断报告">
+                <div className="share-card-head">
+                  <div>
+                    <span className="disclosure-badge internal">INTERNAL / 仅内部</span>
+                    <h3>完整诊断报告</h3>
+                  </div>
+                  <ShieldCheck size={20} />
+                </div>
+                <p className="share-boundary">包含服务器名称、逐机状态和诊断摘要。用于本机或受控内部排查，不应直接发到群聊、公开 Issue 或外部 AI。</p>
+                <pre>{report}</pre>
+                {reportCopyPending ? (
+                  <div className="report-copy-confirm" role="group" aria-label="确认复制内部诊断报告">
+                    <strong>确认复制包含服务器身份的内部材料？</strong>
+                    <small>请只粘贴到受控内部位置；需要讨论时优先使用右侧安全摘要。</small>
+                    <div>
+                      <button className="primary slim" onClick={copyInternalReport}><Copy size={16} />确认复制</button>
+                      <button className="secondary slim" onClick={() => setReportCopyPending(false)}>取消</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="secondary slim" onClick={() => setReportCopyPending(true)}>
+                    {reportCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{reportCopied ? "已复制" : "复制内部报告"}
+                  </button>
+                )}
+              </section>
+              <section className="safe-share-card" aria-label="最小披露安全分享">
+                <div className="share-card-head">
+                  <div>
+                    <span className="disclosure-badge safe">MINIMAL / 可讨论</span>
+                    <h3>当前焦点的安全摘要</h3>
+                  </div>
+                  <MessageCircle size={20} />
+                </div>
+                <p className="share-boundary">已省略名称、环境、角色、地址、SSH alias、命令、原始证据和现场摘要；只保留分类状态、时效与安全下一步。</p>
+                <pre>{selectedBrief}</pre>
+                <div className="safe-share-actions">
+                  <button className="primary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制安全摘要"}</button>
+                  <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
+                </div>
+              </section>
+            </div>
           </section>
         )}
 

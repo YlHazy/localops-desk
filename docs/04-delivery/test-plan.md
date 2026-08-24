@@ -16,6 +16,7 @@
   - Dry-run actions reject unknown keys, allow copying only configured read-only commands, and keep practice/mutating plans placeholder-only and non-copyable.
   - Copyable SSH commands exactly match the runtime allowlist and contain no Compose, sudo, restart, or systemctl mutation path.
   - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
+  - The report surface separates the identity-bearing internal report from the tested minimal-disclosure summary and gates internal copy behind confirmation.
   - Host tags survive the desk status/edit round trip but remain absent from Agent status.
   - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
   - Operation-state tests prove that only a real check renders check-busy UI and that each supported operation exposes one truthful purpose flag.

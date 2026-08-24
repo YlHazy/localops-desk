@@ -45,6 +45,7 @@
 - Saving the first host returns the user to the overview and presents the next safe steps in order: choose evidence, obtain a first observation, enable local scheduling, and optionally enable the desktop/login companion.
 - The first-run path explains LocalOps' product difference in plain language: unknown is not healthy, evidence has freshness, risky actions remain dry-run, and Codex discussion receives a minimal-disclosure summary only.
 - Codex discussion text structurally excludes server name, environment, role, URL, SSH alias, Compose project, commands, summaries, and raw evidence; only status, freshness, categorized signals, and a fixed safe next step may cross the app boundary.
+- The report page labels the full identity-bearing report as internal, never recommends it as a fallback for failed safe-copy, and requires a second confirmation before copying; the adjacent safe-share path reuses the tested minimal-disclosure summary.
 - Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.

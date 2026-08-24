@@ -925,6 +925,43 @@ tr.pending-delete td { background: #fff8f6; }
   margin: 12px 0 18px;
 }
 
+.report-share-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.internal-report-card, .safe-share-card {
+  min-width: 0;
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fbfcfd;
+}
+
+.safe-share-card {
+  border-color: #bcdccc;
+  background: linear-gradient(145deg, #f1faf6, #ffffff);
+}
+
+.share-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-card-head h3 { margin: 8px 0 0; }
+.disclosure-badge { display: inline-flex; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900; letter-spacing: .05em; }
+.disclosure-badge.internal { color: #7a4d00; background: #fff0c7; }
+.disclosure-badge.safe { color: #14633f; background: #dff7eb; }
+.share-boundary { color: #526171; font-size: 13px; line-height: 1.6; }
+.report-copy-confirm { display: grid; gap: 7px; padding: 12px; border: 1px solid #e5c584; border-radius: 8px; background: #fffaf0; }
+.report-copy-confirm small { color: #725118; line-height: 1.5; }
+.report-copy-confirm > div, .safe-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.internal-report-card > button, .safe-share-actions { margin-top: 12px; }
+
 .proof-path {
   position: relative;
   display: grid;
@@ -1412,7 +1449,7 @@ code {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .workspace, .dashboard-grid, .home-grid, .action-layout, .scheduler-layout, .guardian-brief, .setup-runway {
+  .workspace, .dashboard-grid, .home-grid, .action-layout, .scheduler-layout, .guardian-brief, .setup-runway, .report-share-grid {
     grid-template-columns: 1fr;
   }
 
