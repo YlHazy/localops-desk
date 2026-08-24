@@ -542,7 +542,7 @@ export function App() {
   }
 
   function openPetWindow() {
-    const pet = window.open(petModePath(crypto.randomUUID()), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
+    const pet = window.open(petModePath(crypto.randomUUID(), "existing"), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
 

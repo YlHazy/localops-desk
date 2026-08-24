@@ -9,13 +9,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHost = "127.0.0.1";
 const defaultPort = 4317;
 
-export function petUrl({ host = defaultHost, port = defaultPort, sessionId = null } = {}) {
+export function petUrl({ host = defaultHost, port = defaultPort, sessionId = null, runtimeMode = null } = {}) {
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
     throw new Error("Pet window only supports a loopback LocalOps host.");
   }
   const authority = host === "::1" ? `[${host}]:${port}` : `${host}:${port}`;
   if (sessionId != null && !isPetSessionId(sessionId)) throw new Error("Pet window session must be a UUID.");
-  return new URL(petModePath(sessionId), `http://${authority}`).toString();
+  return new URL(petModePath(sessionId, runtimeMode), `http://${authority}`).toString();
 }
 
 export function edgeCandidates(environment = process.env) {
@@ -37,6 +37,10 @@ export async function firstExistingPath(candidates, canAccess = access) {
     }
   }
   return null;
+}
+
+export function petRuntimeModeForApi(alreadyRunning) {
+  return alreadyRunning ? "existing" : "owned";
 }
 
 export function assertSupportedNodeVersion(version = process.versions.node) {
@@ -147,6 +151,7 @@ export async function monitorPetPresence(url, {
 export function launcherSummary(result) {
   const visibleUrl = new URL(result.url);
   visibleUrl.searchParams.delete("session");
+  visibleUrl.searchParams.delete("runtime");
   const lines = [
     `${result.checkOnly ? "LocalOps pet check passed" : "LocalOps pet ready"}: ${visibleUrl.toString()}`,
     `Browser: ${result.browserPath}`,
@@ -170,6 +175,37 @@ async function waitUntilReady(url, attempts = 30) {
   throw new Error("LocalOps API did not become ready within 7.5 seconds.");
 }
 
+export async function waitForOwnedApiReady(url, child, readyImpl = waitUntilReady) {
+  if (!child?.once || !child?.removeListener) throw new Error("LocalOps owned API process could not be observed.");
+  return new Promise((resolveReady, rejectReady) => {
+    const cleanup = () => {
+      child.removeListener("error", onError);
+      child.removeListener("exit", onExit);
+    };
+    const fail = (message) => {
+      cleanup();
+      rejectReady(new Error(message));
+    };
+    const onError = () => fail("LocalOps owned API process could not start.");
+    const onExit = () => fail("LocalOps owned API process stopped before the pet opened.");
+    child.once("error", onError);
+    child.once("exit", onExit);
+    Promise.resolve()
+      .then(() => readyImpl(url))
+      .then(() => {
+        if (child.exitCode != null || child.killed) {
+          fail("LocalOps owned API process stopped before the pet opened.");
+          return;
+        }
+        cleanup();
+        resolveReady();
+      }, (error) => {
+        cleanup();
+        rejectReady(error);
+      });
+  });
+}
+
 function stopOwnedProcess(child) {
   if (!child || child.exitCode != null || child.killed) return;
   child.kill();
@@ -189,7 +225,7 @@ export async function launchPet({ checkOnly = false, sessionId = randomUUID() } 
     return { browserPath, url: baseUrl, apiAlreadyRunning: alreadyRunning, activePresence, checkOnly: true };
   }
 
-  const url = petUrl({ sessionId });
+  const url = petUrl({ sessionId, runtimeMode: petRuntimeModeForApi(alreadyRunning) });
 
   let apiProcess = null;
   if (!alreadyRunning) {
@@ -200,7 +236,7 @@ export async function launchPet({ checkOnly = false, sessionId = randomUUID() } 
       windowsHide: true
     });
     try {
-      await waitUntilReady(url);
+      await waitForOwnedApiReady(url, apiProcess);
     } catch (error) {
       stopOwnedProcess(apiProcess);
       throw error;

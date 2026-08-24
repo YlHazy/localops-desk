@@ -72,8 +72,20 @@ test("the desk cannot keep a healthy headline after evidence expires", () => {
 
 test("every desk-opened pet participates in anonymous presence", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(appSource, /window\.open\(petModePath\(crypto\.randomUUID\(\)\)/);
+  assert.match(appSource, /window\.open\(petModePath\(crypto\.randomUUID\(\), "existing"\)/);
   assert.doesNotMatch(appSource, /window\.open\(`\$\{window\.location\.origin\}\/\?mode=pet`/);
+});
+
+test("pet close behavior distinguishes a launcher-owned API from an existing LocalOps service", () => {
+  const launcherSource = readFileSync(new URL("../scripts/launch-pet.mjs", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const lifecycleSource = readFileSync(new URL("../src/pet-lifecycle.mjs", import.meta.url), "utf8");
+  assert.match(launcherSource, /runtimeMode: petRuntimeModeForApi\(alreadyRunning\)/);
+  assert.match(launcherSource, /await waitForOwnedApiReady\(url, apiProcess\)/);
+  assert.match(petSource, /petLifecycleCopy\(petRuntimeMode\(window\.location\.search\)\)/);
+  assert.match(lifecycleSource, /关闭桌宠后，它启动的本地值守约 10 秒内结束/);
+  assert.match(lifecycleSource, /已有 LocalOps 服务继续运行/);
+  assert.doesNotMatch(lifecycleSource, /healthUrl|sshAlias|composeProject|evidence/);
 });
 
 test("pet alerts support a quiet receipt and open the focused desk without sending identity to the API", () => {

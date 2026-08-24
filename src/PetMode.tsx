@@ -4,6 +4,7 @@ import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthy
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
+import { petLifecycleCopy, petRuntimeMode } from "./pet-lifecycle.mjs";
 import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
@@ -133,6 +134,7 @@ export function PetMode({
   const previousSignal = useRef<MonitorSignal | null>(null);
   const recovery = localRecoveryCopy(lastSyncedAt, now);
   const petSessionId = new URLSearchParams(window.location.search).get("session");
+  const lifecycle = petLifecycleCopy(petRuntimeMode(window.location.search));
   const topmostSupported = isPetSessionId(petSessionId);
   const [topmostActive, setTopmostActive] = useState(false);
   const [topmostPending, setTopmostPending] = useState(false);
@@ -298,6 +300,9 @@ export function PetMode({
   return (
     <main className={`pet-window ${overallStatus}`}>
       <div className="pet-window-bar">
+        <span className={`pet-runtime ${lifecycle.tone}`} title={lifecycle.detail}>
+          <i aria-hidden="true" />{lifecycle.label}
+        </span>
         <div className="pet-grab" aria-hidden="true" />
         <button
           className={`pet-pin ${topmostActive ? "active" : ""}`}
@@ -310,7 +315,10 @@ export function PetMode({
           {topmostPending ? "确认中" : topmostActive ? "取消置顶" : "桌面置顶"}
         </button>
       </div>
-      <p className={`pet-pin-note ${topmostActive ? "active" : ""}`} aria-live="polite">{topmostNote}</p>
+      <div className="pet-window-context" aria-live="polite">
+        <p className="pet-runtime-note">{lifecycle.detail}</p>
+        <p className={`pet-pin-note ${topmostActive ? "active" : ""}`}>{topmostNote}</p>
+      </div>
       <section className="pet-identity" aria-label={`LocalOps 守护宠物：${visibleCopy.label}`}>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />

@@ -8,7 +8,9 @@ test("pet presence accepts UUID sessions and creates one bounded API path", () =
   assert.equal(petPresencePath(sessionId), `/api/pet-presence/${sessionId}`);
   assert.equal(petModePath(), "/?mode=pet");
   assert.equal(petModePath(sessionId), `/?mode=pet&session=${sessionId}`);
+  assert.equal(petModePath(sessionId, "owned"), `/?mode=pet&session=${sessionId}&runtime=owned`);
   assert.equal(isPetSessionId("../api/status"), false);
   assert.throws(() => petPresencePath("not-a-session"), /Invalid LocalOps pet session/);
   assert.throws(() => petModePath("not-a-session"), /Invalid LocalOps pet session/);
+  assert.throws(() => petModePath(null, "owned"), /runtime mode/);
 });

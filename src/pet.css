@@ -39,6 +39,10 @@ body:has(.pet-window) {
 .pet-window.healthy { --pet-mood: var(--pet-teal); }
 
 .pet-window-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 28px; margin-bottom: 4px; }
+.pet-runtime { grid-column: 1; display: inline-flex; align-items: center; gap: 5px; justify-self: start; color: var(--pet-muted); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.pet-runtime i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent); }
+.pet-runtime.attached { color: #9a6721; }
+.pet-runtime.independent { color: var(--pet-teal); }
 .pet-grab {
   grid-column: 2;
   width: 36px;
@@ -50,7 +54,9 @@ body:has(.pet-window) {
 .pet-pin { grid-column: 3; display: inline-flex; align-items: center; justify-content: center; gap: 4px; justify-self: end; padding: 6px 8px; color: var(--pet-muted); border: 1px solid rgba(25, 51, 60, .12); border-radius: 999px; background: rgba(255, 255, 255, .7); font-size: 9px; font-weight: 800; }
 .pet-pin.active { color: var(--pet-teal); border-color: rgba(36, 121, 111, .28); background: rgba(142, 217, 194, .14); }
 .pet-pin:disabled { cursor: not-allowed; opacity: .55; }
-.pet-pin-note { margin: 0 2px 5px; color: var(--pet-muted); font-size: 9px; line-height: 1.35; text-align: right; }
+.pet-window-context { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 0 2px 5px; }
+.pet-window-context p { margin: 0; color: var(--pet-muted); font-size: 9px; line-height: 1.35; }
+.pet-pin-note { text-align: right; }
 .pet-pin-note.active { color: var(--pet-teal); }
 
 .pet-identity {
@@ -226,4 +232,6 @@ body:has(.pet-window) {
   .pet-recovery button { grid-column: 1; grid-row: auto; justify-content: center; }
   .pet-watch-controls { grid-template-columns: 1fr; }
   .pet-quiet-toggle { min-height: 34px; }
+  .pet-window-context { grid-template-columns: 1fr; gap: 3px; }
+  .pet-pin-note { text-align: left; }
 }

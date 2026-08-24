@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { activePetPresence, assertNoActivePet, assertPetBuildAvailable, assertSupportedNodeVersion, edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, monitorPetPresence, petSessionPresent, petUrl, waitForPetPresence } from "./launch-pet.mjs";
+import { activePetPresence, assertNoActivePet, assertPetBuildAvailable, assertSupportedNodeVersion, edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, monitorPetPresence, petRuntimeModeForApi, petSessionPresent, petUrl, waitForOwnedApiReady, waitForPetPresence } from "./launch-pet.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -29,8 +30,31 @@ test("pet URL is fixed to the loopback app surface", () => {
   assert.equal(petUrl(), "http://127.0.0.1:4317/?mode=pet");
   assert.equal(petUrl({ host: "::1", port: 9443 }), "http://[::1]:9443/?mode=pet");
   assert.equal(petUrl({ sessionId }), `http://127.0.0.1:4317/?mode=pet&session=${sessionId}`);
+  assert.equal(petUrl({ sessionId, runtimeMode: "owned" }), `http://127.0.0.1:4317/?mode=pet&session=${sessionId}&runtime=owned`);
   assert.throws(() => petUrl({ host: "example.com" }), /loopback/);
   assert.throws(() => petUrl({ sessionId: "../status" }), /UUID/);
+  assert.throws(() => petUrl({ sessionId, runtimeMode: "service" }), /runtime mode/);
+});
+
+test("launcher tells the pet whether closing it ends the owned API", () => {
+  assert.equal(petRuntimeModeForApi(false), "owned");
+  assert.equal(petRuntimeModeForApi(true), "existing");
+});
+
+test("owned runtime is claimed only while the launcher child survives readiness", async () => {
+  const alive = new EventEmitter();
+  alive.exitCode = null;
+  alive.killed = false;
+  await waitForOwnedApiReady("http://127.0.0.1:4317", alive, async () => undefined);
+  assert.equal(alive.listenerCount("exit"), 0);
+
+  const exited = new EventEmitter();
+  exited.exitCode = null;
+  exited.killed = false;
+  await assert.rejects(() => waitForOwnedApiReady("http://127.0.0.1:4317", exited, async () => {
+    exited.exitCode = 1;
+    exited.emit("exit", 1);
+  }), /stopped before the pet opened/);
 });
 
 test("pet presence waits for a real page heartbeat and tolerates brief misses", async () => {
