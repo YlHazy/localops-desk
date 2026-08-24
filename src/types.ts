@@ -59,6 +59,29 @@ export interface CheckRun {
   summary: string;
 }
 
+export interface CheckHostEvidence {
+  hostId: string;
+  hostName: string;
+  environment: string;
+  role: string;
+  identitySnapshot: boolean;
+  status: Status;
+  summary: string;
+  httpStatus: string;
+  httpLatencyMs: number | null;
+  sshStatus: string;
+  cpuPercent: number | null;
+  memoryPercent: number | null;
+  diskPercent: number | null;
+  dockerStatus: string;
+  evidence: string[];
+}
+
+export interface CheckDetail {
+  check: CheckRun;
+  hosts: CheckHostEvidence[];
+}
+
 export interface SchedulerState {
   enabled: boolean;
   lightIntervalMinutes: number;

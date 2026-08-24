@@ -133,6 +133,46 @@ test("offline demo hosts require explicit opt-in and contain no connection targe
   assert.doesNotMatch(report.report, /N\/A%/);
 });
 
+test("check receipt explains host evidence without exposing connection configuration", async (t) => {
+  const api = await startApi(t, { LOCALOPS_SEED_DEMO: "1" });
+  const checked = await fetch(`${api.base}/api/checks/light/localops-sample-warning`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(checked.status, 200);
+  const checkId = (await checked.json()).id;
+
+  const database = new DatabaseSync(join(api.dataDir, "localops.sqlite"));
+  database.prepare("UPDATE host_checks SET evidenceJson = ?, sanitizedError = ?, httpStatus = ? WHERE runId = ?").run(
+    JSON.stringify(["legacy https://example.test/health?token=legacy-secret-marker", "Bearer legacy-bearer-marker"]),
+    "password=legacy-password-marker",
+    "500 https://user:legacy-url-password@example.test",
+    checkId
+  );
+  database.prepare("UPDATE hosts SET name = ? WHERE id = ?").run("后来修改的当前名称", "localops-sample-warning");
+  database.close();
+
+  const response = await fetch(`${api.base}/api/checks/${checkId}`);
+  assert.equal(response.status, 200);
+  const detail = (await response.json()).detail;
+  assert.equal(detail.check.id, checkId);
+  assert.equal(detail.check.trigger, "manual-host");
+  assert.equal(detail.hosts.length, 1);
+  assert.equal(detail.hosts[0].hostName, "示例 · 需要关注");
+  assert.equal(detail.hosts[0].identitySnapshot, true);
+  assert.equal(detail.hosts[0].status, "warning");
+  assert.equal(detail.hosts[0].diskPercent, 76);
+  const detailText = JSON.stringify(detail);
+  assert.doesNotMatch(detailText, /healthUrl|sshAlias|composeProject|tags/);
+  assert.doesNotMatch(detailText, /legacy-secret-marker|legacy-bearer-marker|legacy-password-marker|legacy-url-password/);
+  assert.match(detailText, /<redacted>/);
+
+  const missing = await fetch(`${api.base}/api/checks/999999`);
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).error, "CHECK_RUN_NOT_FOUND");
+});
+
 test("offline practice is explicit, exclusive, network-free, and fully removable", async (t) => {
   const api = await startApi(t);
   const install = await fetch(`${api.base}/api/practice/offline`, {

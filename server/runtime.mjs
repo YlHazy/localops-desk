@@ -172,7 +172,7 @@ async function collectHttp(host, timeoutMs = 5000) {
   }
 }
 
-function sanitizeError(message) {
+export function sanitizeError(message) {
   return String(message)
     .replace(/(password|passwd|pwd|token|secret|access[_-]?key|key)=([^&\s]+)/gi, "$1=<redacted>")
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer <redacted>")

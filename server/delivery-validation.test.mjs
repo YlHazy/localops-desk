@@ -162,6 +162,20 @@ test("scheduler outcomes are persisted by the server and rendered with an explic
   assert.doesNotMatch(serverSource, /schedulerLastMessage[^\n]*error\?\.message/);
 });
 
+test("check history renders a local-only evidence receipt instead of raw internal fields", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  const historySource = readFileSync(new URL("../src/check-history.mjs", import.meta.url), "utf8");
+  assert.match(serverSource, /GET.*\/api\/checks\/:id/);
+  assert.match(serverSource, /safeEvidenceList/);
+  assert.match(serverSource, /CHECK_RUN_NOT_FOUND/);
+  assert.doesNotMatch(serverSource.match(/function checkDetail[\s\S]*?\n}\n/)?.[0] || "", /sshAlias|healthUrl|composeProject|tags/);
+  assert.match(appSource, /WATCH LOG \/ 值守航迹/);
+  assert.match(appSource, /不会发起服务器检查/);
+  assert.match(appSource, /为什么这样判断/);
+  assert.match(historySource, /不能把服务器当作正常/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

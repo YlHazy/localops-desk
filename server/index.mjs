@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
-import { collectHost, demoHosts, readOnlySshPreview } from "./runtime.mjs";
+import { collectHost, demoHosts, readOnlySshPreview, sanitizeError } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { configureStartupEntry, publicStartupState, startupEntrySnapshot } from "./windows-startup.mjs";
@@ -56,6 +56,9 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     runId INTEGER NOT NULL,
     hostId TEXT NOT NULL,
+    hostName TEXT NOT NULL DEFAULT '',
+    hostEnvironment TEXT NOT NULL DEFAULT '',
+    hostRole TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     httpStatus TEXT NOT NULL,
     httpLatencyMs INTEGER,
@@ -85,6 +88,9 @@ function ensureColumn(table, column, definition) {
 }
 
 ensureColumn("host_checks", "httpLatencyMs", "INTEGER");
+ensureColumn("host_checks", "hostName", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("host_checks", "hostEnvironment", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("host_checks", "hostRole", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("check_runs", "trigger", "TEXT NOT NULL DEFAULT 'manual'");
 ensureColumn("check_runs", "hostScope", "TEXT");
 
@@ -619,6 +625,7 @@ async function runLightCheck(options = {}) {
     const summary = coverage.blocked > 0
       ? `${hostResults.length} 台已取得证据，${coverage.blocked} 台因证据来源不可用而跳过；总体状态：${status}。`
       : `${hostResults.length} 台已取得证据；总体状态：${status}。`;
+    const hostSnapshots = new Map(hosts.map((hostItem) => [hostItem.id, hostItem]));
 
     let run;
     db.exec("BEGIN IMMEDIATE");
@@ -629,13 +636,17 @@ async function runLightCheck(options = {}) {
       `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
 
       const insertHostCheck = db.prepare(`
-        INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO host_checks (runId, hostId, hostName, hostEnvironment, hostRole, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const result of hostResults) {
+        const hostSnapshot = hostSnapshots.get(result.hostId);
         insertHostCheck.run(
           run.lastInsertRowid,
           result.hostId,
+          hostSnapshot?.name || result.hostId,
+          hostSnapshot?.environment || "unknown",
+          hostSnapshot?.role || "server",
           result.status,
           result.httpStatus,
           result.httpLatencyMs,
@@ -667,6 +678,60 @@ function recentChecks() {
     ORDER BY id DESC
     LIMIT 20
   `).all();
+}
+
+function safeEvidenceList(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    if (!Array.isArray(parsed) || parsed.length === 0) return ["本次没有保存可展示的证据。"];
+    return parsed.slice(0, 20).map((item) => sanitizeError(String(item)).slice(0, 2000));
+  } catch {
+    return ["保存的证据格式无法读取；原始内容未展示。"];
+  }
+}
+
+function checkDetail(id) {
+  const check = db.prepare(`
+    SELECT id, kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary
+    FROM check_runs
+    WHERE id = ?
+  `).get(id);
+  if (!check) {
+    const error = new Error("这条检查记录不存在，可能已被本地保留策略清理。");
+    error.code = "CHECK_RUN_NOT_FOUND";
+    error.httpStatus = 404;
+    throw error;
+  }
+  const rows = db.prepare(`
+    SELECT hc.hostId, hc.hostName, hc.hostEnvironment, hc.hostRole, h.name, h.environment, h.role, hc.status, hc.httpStatus, hc.httpLatencyMs,
+      hc.sshStatus, hc.cpuPercent, hc.memoryPercent, hc.diskPercent, hc.dockerStatus,
+      hc.evidenceJson, hc.sanitizedError
+    FROM host_checks hc
+    LEFT JOIN hosts h ON h.id = hc.hostId
+    WHERE hc.runId = ?
+    ORDER BY CASE hc.status WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 WHEN 'unknown' THEN 2 ELSE 3 END,
+      COALESCE(NULLIF(hc.hostName, ''), h.name, hc.hostId)
+  `).all(id);
+  return {
+    check,
+    hosts: rows.map((row) => ({
+      hostId: row.hostId,
+      hostName: row.hostName || row.name || row.hostId,
+      environment: row.hostEnvironment || row.environment || "已移除",
+      role: row.hostRole || row.role || "server",
+      identitySnapshot: Boolean(row.hostName),
+      status: row.status,
+      summary: sanitizeError(row.sanitizedError || summarizeStatus(row.status)),
+      httpStatus: sanitizeError(row.httpStatus || "not checked"),
+      httpLatencyMs: row.httpLatencyMs ?? null,
+      sshStatus: sanitizeError(row.sshStatus || "not checked"),
+      cpuPercent: row.cpuPercent ?? null,
+      memoryPercent: row.memoryPercent ?? null,
+      diskPercent: row.diskPercent ?? null,
+      dockerStatus: sanitizeError(row.dockerStatus || "not checked"),
+      evidence: safeEvidenceList(row.evidenceJson)
+    }))
+  };
 }
 
 function runRetention(options = {}) {
@@ -1003,6 +1068,7 @@ function agentManifest() {
       { method: "DELETE", path: "/api/hosts/:id", description: "Delete a local host configuration." },
       { method: "POST", path: "/api/checks/light", description: "Run a bounded light check." },
       { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
+      { method: "GET", path: "/api/checks/:id", description: "Read one sanitized local check receipt and its host evidence." },
       { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
       { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
       { method: "POST", path: "/api/scheduler/run-now", description: "Run one scheduler-owned verification cycle now." },
@@ -1064,6 +1130,10 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/api/checks") {
       return json(res, { checks: recentChecks() });
+    }
+    const checkDetailMatch = url.pathname.match(/^\/api\/checks\/(\d+)$/);
+    if (checkDetailMatch && req.method === "GET") {
+      return json(res, { detail: checkDetail(Number(checkDetailMatch[1])) });
     }
     if (req.method === "POST" && url.pathname === "/api/checks/light") {
       return json(res, await runLightCheck(await readBody(req)));

@@ -25,6 +25,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
+import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, retainCheckSelection } from "./check-history.mjs";
+import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
@@ -35,7 +37,7 @@ import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
 import { petModePath } from "./pet-presence.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
-import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
+import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
@@ -324,6 +326,11 @@ export function App() {
   const petMode = new URLSearchParams(window.location.search).get("mode") === "pet";
   const [dashboard, setDashboard] = useState<DashboardStatus | null>(null);
   const [checks, setChecks] = useState<CheckRun[]>([]);
+  const [checkFilter, setCheckFilter] = useState<CheckHistoryFilter>("all");
+  const [selectedCheckId, setSelectedCheckId] = useState<number | null>(null);
+  const [checkDetail, setCheckDetail] = useState<CheckDetail | null>(null);
+  const [checkDetailState, setCheckDetailState] = useState<"idle" | "loading" | "current" | "error">("idle");
+  const [checkDetailError, setCheckDetailError] = useState("");
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState("overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
@@ -355,6 +362,7 @@ export function App() {
   const [practicePending, setPracticePending] = useState<"install" | "remove" | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const loadGate = useRef(createLatestRequestGate());
+  const checkDetailGate = useRef(createLatestRequestGate());
 
   async function load({ preserveSchedulerForm = false } = {}) {
     const requestToken = loadGate.current.begin();
@@ -374,6 +382,7 @@ export function App() {
     const snapshot = result.value;
     setDashboard(snapshot.status);
     setChecks(snapshot.checks);
+    setSelectedCheckId((previous) => retainCheckSelection(snapshot.checks, previous));
     setReport(snapshot.report);
     setScheduler(snapshot.scheduler);
     setStartup(snapshot.startup);
@@ -387,7 +396,40 @@ export function App() {
     return true;
   }
 
-  useEffect(() => () => loadGate.current.invalidate(), []);
+  useEffect(() => () => {
+    loadGate.current.invalidate();
+    checkDetailGate.current.invalidate();
+  }, []);
+
+  async function loadCheckDetail(id: number) {
+    const requestToken = checkDetailGate.current.begin();
+    setCheckDetailState("loading");
+    setCheckDetailError("");
+    setCheckDetail(null);
+    try {
+      const result = await resolveLatestRequest(
+        checkDetailGate.current,
+        requestToken,
+        api<{ detail: CheckDetail }>(`/api/checks/${id}`)
+      );
+      if (!result.current) return;
+      setCheckDetail(result.value.detail);
+      setCheckDetailState("current");
+    } catch (err) {
+      if (!checkDetailGate.current.isLatest(requestToken)) return;
+      setCheckDetail(null);
+      setCheckDetailState("error");
+      setCheckDetailError(err instanceof Error ? err.message : "读取检查证据失败");
+    }
+  }
+
+  useEffect(() => {
+    if (petMode || selectedTab !== "checks" || selectedCheckId == null) {
+      checkDetailGate.current.invalidate();
+      return;
+    }
+    loadCheckDetail(selectedCheckId);
+  }, [petMode, selectedTab, selectedCheckId]);
 
   useEffect(() => {
     if (!petMode) setDeskSyncState("syncing");
@@ -493,6 +535,8 @@ export function App() {
     [dashboard, now]
   );
   const incidentHosts = useMemo(() => displayDashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [displayDashboard]);
+  const filteredChecks = useMemo(() => filterChecks(checks, checkFilter), [checks, checkFilter]);
+  const selectedCheck = useMemo(() => checks.find((check) => check.id === selectedCheckId) ?? null, [checks, selectedCheckId]);
   const priorityHosts = useMemo(() => prioritizeHosts(displayDashboard?.hosts ?? []), [displayDashboard]);
   const selectedHost = useMemo(() => selectFocusHost(priorityHosts, selectedHostId), [priorityHosts, selectedHostId]);
   const manuallyFocused = Boolean(selectedHostId && selectedHost?.id === selectedHostId && selectedHost.id !== priorityHosts[0]?.id);
@@ -540,6 +584,12 @@ export function App() {
 
   function chooseFocusHost(hostId: string) {
     setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
+  }
+
+  function chooseCheckFilter(nextFilter: CheckHistoryFilter) {
+    const nextChecks = filterChecks(checks, nextFilter);
+    setCheckFilter(nextFilter);
+    setSelectedCheckId((previous) => retainCheckSelection(nextChecks, previous));
   }
 
   function runOrConfigureSelected() {
@@ -1273,27 +1323,108 @@ export function App() {
         )}
 
         {selectedTab === "checks" && (
-          <section className="table-panel">
-            <h2>检查历史</h2>
-            <div className="table-scroll" tabIndex={0} role="region" aria-label="检查历史表，可横向滚动">
-              <table>
-                <thead><tr><th>ID</th><th>类型</th><th>触发</th><th>范围</th><th>开始</th><th>耗时</th><th>状态</th><th>摘要</th></tr></thead>
-                <tbody>
-                  {checks.map((check) => (
-                    <tr key={check.id}>
-                      <td>#{check.id}</td>
-                      <td>{check.kind}</td>
-                      <td>{check.trigger}</td>
-                      <td>{check.hostScope ?? "all"}</td>
-                      <td>{formatTime(check.startedAt)}</td>
-                      <td>{check.durationMs}ms</td>
-                      <td><StatusPill status={check.overallStatus} /></td>
-                      <td>{check.summary}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <section className="history-workbench">
+            <header className="history-heading">
+              <div>
+                <span>WATCH LOG / 值守航迹</span>
+                <h2>每次判断，都能回到当时的证据</h2>
+                <p>这里只读取本机最近 20 次检查记录；打开详情不会重新连接服务器。</p>
+              </div>
+              <div className="history-retention"><History size={18} /><span>本地保留</span><strong>{scheduler?.retentionDays ?? 7} 天</strong></div>
+            </header>
+
+            <div className="history-filters" role="group" aria-label="筛选检查历史">
+              {checkHistoryFilters.map((filter) => (
+                <button
+                  key={filter.id}
+                  className={checkFilter === filter.id ? "active" : ""}
+                  aria-pressed={checkFilter === filter.id}
+                  onClick={() => chooseCheckFilter(filter.id)}
+                >
+                  {filter.label}<span>{filterChecks(checks, filter.id).length}</span>
+                </button>
+              ))}
             </div>
+
+            {checks.length === 0 ? (
+              <div className="history-empty">
+                <ClipboardCheck size={26} />
+                <strong>还没有检查记录</strong>
+                <p>先登记证据来源并主动检查一次。LocalOps 不会因为打开此页面就扫描网络。</p>
+                <button className="primary slim" onClick={() => setSelectedTab("overview")}><Play size={15} />回到值守台</button>
+              </div>
+            ) : (
+              <div className="history-layout">
+                <aside className="history-timeline" aria-label="检查记录列表">
+                  {filteredChecks.length ? filteredChecks.map((check) => {
+                    const trigger = checkTriggerCopy(check.trigger);
+                    return (
+                      <button
+                        key={check.id}
+                        className={selectedCheckId === check.id ? "selected" : ""}
+                        aria-current={selectedCheckId === check.id ? "true" : undefined}
+                        onClick={() => setSelectedCheckId(check.id)}
+                      >
+                        <span className={`history-node ${check.overallStatus}`} aria-hidden="true" />
+                        <span className="history-card-head"><b>{trigger.label}</b><StatusPill status={check.overallStatus} /></span>
+                        <small>{formatTime(check.finishedAt)} · {check.durationMs}ms</small>
+                        <strong>{check.summary}</strong>
+                        <em>{checkKindCopy(check.kind)} · {checkScopeCopy(check.hostScope)}</em>
+                      </button>
+                    );
+                  }) : (
+                    <div className="history-filter-empty"><strong>这个筛选下没有记录</strong><span>切换到“全部”查看最近检查。</span></div>
+                  )}
+                </aside>
+
+                <article className="history-receipt" aria-live="polite">
+                  {selectedCheck && checkDetailState === "loading" ? (
+                    <div className="history-detail-state"><RefreshCcw className="spin" size={20} /><strong>正在读取本地证据账本</strong><span>不会发起服务器检查</span></div>
+                  ) : checkDetailState === "error" ? (
+                    <div className="history-detail-state warning"><AlertTriangle size={20} /><strong>这份本地证据暂时无法读取</strong><span>{checkDetailError}</span><button onClick={() => selectedCheckId != null && loadCheckDetail(selectedCheckId)}><RefreshCcw size={15} />重新读取</button></div>
+                  ) : selectedCheck && checkDetail ? (
+                    <>
+                      <div className="history-receipt-head">
+                        <div>
+                          <span>CHECK RECEIPT #{checkDetail.check.id}</span>
+                          <h3>{checkTriggerCopy(checkDetail.check.trigger).label}</h3>
+                          <p>{checkTriggerCopy(checkDetail.check.trigger).detail}</p>
+                        </div>
+                        <StatusPill status={checkDetail.check.overallStatus} />
+                      </div>
+                      <div className="history-receipt-facts">
+                        <span>完成时间<strong>{formatTime(checkDetail.check.finishedAt)}</strong></span>
+                        <span>检查范围<strong>{checkScopeCopy(checkDetail.check.hostScope)}</strong></span>
+                        <span>证据对象<strong>{checkDetail.hosts.length} 台</strong></span>
+                      </div>
+                      <section className={`history-decision ${checkDetail.check.overallStatus}`}>
+                        <span>为什么这样判断</span>
+                        <strong>{checkDecisionCopy(checkDetail.check.overallStatus)}</strong>
+                        <p>{checkDetail.check.summary}</p>
+                      </section>
+                      <div className="history-host-evidence">
+                        {checkDetail.hosts.map((hostEvidence) => (
+                          <section className="history-host-card" key={hostEvidence.hostId}>
+                            <header><div><strong>{hostEvidence.hostName}</strong><span>{hostEvidence.environment} · {hostEvidence.role} · {hostEvidence.identitySnapshot ? "检查时记录" : "当前配置回填"}</span></div><StatusPill status={hostEvidence.status} /></header>
+                            <p>{hostEvidence.summary}</p>
+                            <div className="history-signal-ledger">
+                              <span>网页/API<strong>{shortSignal(hostEvidence.httpStatus)}{hostEvidence.httpLatencyMs == null ? "" : ` · ${hostEvidence.httpLatencyMs}ms`}</strong></span>
+                              <span>只读 SSH<strong>{friendlySshStatus(hostEvidence.sshStatus)}</strong></span>
+                              <span>Docker<strong>{friendlyDockerStatus(hostEvidence.dockerStatus)}</strong></span>
+                              <span>资源<strong>CPU {hostEvidence.cpuPercent == null ? "未采集" : `${hostEvidence.cpuPercent}%`} · 内存 {hostEvidence.memoryPercent == null ? "未采集" : `${hostEvidence.memoryPercent}%`} · 磁盘 {hostEvidence.diskPercent == null ? "未采集" : `${hostEvidence.diskPercent}%`}</strong></span>
+                            </div>
+                            <div className="history-evidence-list"><span>本次依据</span><ul>{hostEvidence.evidence.map((item, index) => <li key={`${hostEvidence.hostId}-${index}`}>{friendlyEvidence(item)}</li>)}</ul></div>
+                          </section>
+                        ))}
+                      </div>
+                      <footer className="history-boundary"><ShieldCheck size={16} /><span>详情来自本机已保存的脱敏结果；不含 Health URL、SSH alias、Compose 名称或标签，也不会触发新检查。</span></footer>
+                    </>
+                  ) : (
+                    <div className="history-detail-state"><History size={20} /><strong>选择一条检查记录</strong><span>右侧会解释当时看到了什么、为什么这样判断。</span></div>
+                  )}
+                </article>
+              </div>
+            )}
           </section>
         )}
 
