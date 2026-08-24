@@ -39,6 +39,15 @@ test("report sharing keeps internal and minimal-disclosure paths visibly separat
   assert.doesNotMatch(appSource, /适合复制给同事|请打开文本报告并手动复制/);
 });
 
+test("the desk cannot keep a healthy headline after evidence expires", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /trustworthyDashboard\(dashboard, now\)/);
+  assert.match(appSource, /EVIDENCE HOLD \/ 证据封条/);
+  assert.match(appSource, /上次结果已过期，不能证明当前正常/);
+  assert.match(appSource, /currentDashboard\.counts/);
+  assert.doesNotMatch(appSource, /dashboard\.counts/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

@@ -22,6 +22,7 @@
   - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
   - Operation-state tests prove that only a real check renders check-busy UI and that each supported operation exposes one truthful purpose flag.
   - Latest-request-gate tests prove that out-of-order and post-unmount responses cannot replace a newer desk or pet snapshot.
+  - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
 - Security smoke:
   - Search outputs for obvious secret placeholders.
   - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.

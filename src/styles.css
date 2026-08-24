@@ -543,6 +543,7 @@ h3 {
 
 .guardian-brief.warning::before { background: var(--watch-amber); }
 .guardian-brief.critical::before { background: var(--watch-red); }
+.guardian-brief.unknown::before { background: #8295a1; }
 
 .guardian-brief-copy,
 .guardian-decision {
@@ -636,6 +637,32 @@ h3 {
   font-size: 11px;
   line-height: 1.5;
 }
+
+.guardian-brief.unknown {
+  background: #1a3037;
+}
+
+.evidence-expiry-seal {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  color: #4b3511;
+  border-bottom: 1px solid rgba(91, 62, 17, 0.18);
+  background: #f6d99d;
+}
+
+.evidence-expiry-seal > svg { color: #8a5810; }
+.evidence-expiry-seal span,
+.evidence-expiry-seal strong,
+.evidence-expiry-seal small { display: block; }
+.evidence-expiry-seal span { font: 800 9px/1.2 Consolas, monospace; letter-spacing: 0.1em; }
+.evidence-expiry-seal strong { margin-top: 3px; font-size: 13px; }
+.evidence-expiry-seal small { margin-top: 2px; color: #725624; font-size: 10px; line-height: 1.4; }
+.evidence-expiry-seal button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; color: #4b3511; border: 1px solid rgba(75, 53, 17, 0.28); border-radius: 8px; background: rgba(255, 255, 255, 0.72); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.evidence-expiry-seal button:disabled { cursor: wait; opacity: 0.65; }
 
 .status-strip {
   display: grid;
@@ -1484,6 +1511,8 @@ code {
 }
 
 @media (max-width: 620px) {
+  .evidence-expiry-seal { grid-template-columns: auto minmax(0, 1fr); }
+  .evidence-expiry-seal button { grid-column: 1 / -1; justify-content: center; }
   .sync-rail { align-items: flex-start; flex-wrap: wrap; border-radius: 12px; }
   .sync-rail small { flex-basis: calc(100% - 15px); margin-left: 15px; }
   .topbar-actions { flex-direction: column; }

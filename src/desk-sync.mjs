@@ -60,6 +60,25 @@ export function collectionModeCopy(dashboard) {
   };
 }
 
+export function trustworthyDashboard(dashboard, now = Date.now()) {
+  const observedAt = dashboard.observedAt ? new Date(dashboard.observedAt).getTime() : Number.NaN;
+  const fresh = Number.isFinite(observedAt)
+    && Number.isFinite(dashboard.staleAfterMs)
+    && dashboard.staleAfterMs >= 0
+    && now - observedAt <= dashboard.staleAfterMs;
+  if (fresh) return dashboard;
+  return {
+    ...dashboard,
+    counts: {
+      healthy: 0,
+      warning: 0,
+      critical: 0,
+      unknown: dashboard.hosts.length
+    },
+    hosts: dashboard.hosts.map((host) => ({ ...host, status: "unknown" }))
+  };
+}
+
 export function schedulerDraftAfterSync(currentDraft, scheduler, preserveDraft) {
   if (preserveDraft) return currentDraft;
   return {

@@ -23,7 +23,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 import { PetMode } from "./PetMode";
@@ -36,7 +36,7 @@ const statusLabels: Record<Status, string> = {
   healthy: "正常",
   warning: "需处理",
   critical: "故障",
-  unknown: "未检查"
+  unknown: "未知"
 };
 
 const statusOrder: Status[] = ["critical", "warning", "unknown", "healthy"];
@@ -92,7 +92,13 @@ function formatTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function overallMessage(counts: Record<Status, number>) {
+function overallMessage(counts: Record<Status, number>, evidenceExpired = false) {
+  if (evidenceExpired) {
+    return {
+      title: `${counts.unknown ?? 0} 台服务器需要重新取证`,
+      description: "上次结果已超过可信时效，当前统一按未知处理；先刷新证据再判断。"
+    };
+  }
   if ((counts.critical ?? 0) > 0) {
     return {
       title: `${counts.critical} 台服务器故障`,
@@ -455,24 +461,35 @@ export function App() {
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
 
+  const displayDashboard = useMemo(
+    () => dashboard ? trustworthyDashboard(dashboard, now) : null,
+    [dashboard, now]
+  );
   const selectedHost = useMemo(
-    () => dashboard?.hosts.find((host) => host.id === selectedHostId) ?? dashboard?.hosts[0] ?? null,
-    [dashboard, selectedHostId]
+    () => displayDashboard?.hosts.find((host) => host.id === selectedHostId) ?? displayDashboard?.hosts[0] ?? null,
+    [displayDashboard, selectedHostId]
   );
 
-  const incidentHosts = useMemo(() => dashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [dashboard]);
+  const incidentHosts = useMemo(() => displayDashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [displayDashboard]);
   const priorityHosts = useMemo(() => {
     const rank: Record<Status, number> = { critical: 0, warning: 1, unknown: 2, healthy: 3 };
-    return [...(dashboard?.hosts ?? [])].sort((left, right) => rank[left.status] - rank[right.status] || left.name.localeCompare(right.name));
-  }, [dashboard]);
-  const currentMessage = useMemo(() => overallMessage(dashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 }), [dashboard]);
+    return [...(displayDashboard?.hosts ?? [])].sort((left, right) => rank[left.status] - rank[right.status] || left.name.localeCompare(right.name));
+  }, [displayDashboard]);
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
+  const currentMessage = useMemo(
+    () => overallMessage(
+      displayDashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 },
+      freshness.state === "unknown" && Boolean(dashboard?.observedAt)
+    ),
+    [displayDashboard, freshness.state, dashboard?.observedAt]
+  );
   const selectedNextStep = useMemo(() => selectedHost ? nextStepFor(selectedHost) : null, [selectedHost]);
-  const selectedBrief = useMemo(() => dashboard && selectedHost ? discussionBrief(dashboard, selectedHost, now) : "", [dashboard, selectedHost, now]);
+  const selectedBrief = useMemo(() => displayDashboard && selectedHost ? discussionBrief(displayDashboard, selectedHost, now) : "", [displayDashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
   const collectionMode = useMemo(() => dashboard ? collectionModeCopy(dashboard) : null, [dashboard]);
   const hasConnectionEvidence = dashboard?.hosts.some((host) => Boolean(host.healthUrl || host.sshAlias)) ?? false;
+  const canCollectEvidence = Boolean(dashboard?.practiceMode) || hasConnectionEvidence;
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
@@ -651,6 +668,7 @@ export function App() {
       </main>
     );
   }
+  const currentDashboard = displayDashboard ?? dashboard;
 
   async function copyDryRunCommands() {
     if (!dryRun?.copyAllowed) return;
@@ -714,7 +732,7 @@ export function App() {
   if (petMode) {
     return (
       <PetMode
-        dashboard={dashboard}
+        dashboard={currentDashboard}
         loading={checking}
         syncing={petSyncing}
         syncError={petSyncError}
@@ -726,8 +744,8 @@ export function App() {
           if (!desk) window.location.assign("/");
         }}
         onDiscuss={(hostId) => {
-          const host = dashboard.hosts.find((item) => item.id === hostId);
-          if (host) window.location.assign(codexDiscussionLink(discussionBrief(dashboard, host)));
+          const host = currentDashboard.hosts.find((item) => item.id === hostId);
+          if (host) window.location.assign(codexDiscussionLink(discussionBrief(currentDashboard, host)));
         }}
       />
     );
@@ -884,7 +902,20 @@ export function App() {
           </section>
         ) : null}
 
-        <section className={`guardian-brief ${dashboard.counts.critical ? "critical" : dashboard.counts.warning ? "warning" : "healthy"}`}>
+        <section className={`guardian-brief ${currentDashboard.counts.critical ? "critical" : currentDashboard.counts.warning ? "warning" : currentDashboard.counts.unknown ? "unknown" : "healthy"}`}>
+          {freshness.state === "unknown" && dashboard.observedAt ? (
+            <div className="evidence-expiry-seal" role="status">
+              <AlertTriangle size={19} />
+              <div>
+                <span>EVIDENCE HOLD / 证据封条</span>
+                <strong>上次结果已过期，不能证明当前正常</strong>
+                <small>数值与说明仍保留供比较；当前状态已统一降级为“未知”。</small>
+              </div>
+              <button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}>
+                <RefreshCcw className={checking ? "spin" : undefined} size={15} />{checking ? "正在取证" : "重新取得证据"}
+              </button>
+            </div>
+          ) : null}
           <div className="guardian-brief-copy">
             <span className="brief-index">GUARDIAN BRIEF · {freshness.state === "fresh" ? "LIVE" : "STALE"}</span>
             <h2>{currentMessage.title}</h2>
@@ -892,7 +923,7 @@ export function App() {
             <div className="brief-focus">
               <span>当前焦点</span>
               <strong>{selectedHost.name}</strong>
-              <em>{selectedHost.summary}</em>
+              <em>{freshness.state === "unknown" && dashboard.observedAt ? `上次结果（已过期）：${selectedHost.summary}` : selectedHost.summary}</em>
             </div>
           </div>
           <div className="guardian-decision">
@@ -915,7 +946,7 @@ export function App() {
               if (target) setSelectedHostId(target.id);
             }}>
               <span>{statusLabels[status]}</span>
-              <strong>{dashboard.counts[status] ?? 0}</strong>
+              <strong>{currentDashboard.counts[status] ?? 0}</strong>
             </button>
           ))}
         </section>
@@ -936,11 +967,11 @@ export function App() {
                   <span>01</span><CheckCircle2 size={18} /><strong>服务器已登记</strong><small>{dashboard.hosts.length} 台对象，只保存明确提交的配置</small>
                 </button>
                 <button
-                  className={dashboard.observedAt ? "complete" : "current"}
+                  className={freshness.state === "fresh" ? "complete" : "current"}
                   disabled={operationBusy}
-                  onClick={() => hasConnectionEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
+                  onClick={() => canCollectEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
                 >
-                  <span>02</span>{dashboard.observedAt ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{dashboard.observedAt ? "已有观测证据" : hasConnectionEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
+                  <span>02</span>{freshness.state === "fresh" ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{freshness.state === "fresh" ? "已有当前证据" : dashboard.observedAt ? "重新取得证据" : canCollectEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{dashboard.practiceMode ? "纯离线生成练习证据" : hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
                 </button>
                 <button className={scheduler?.enabled ? "complete" : ""} onClick={() => setSelectedTab("scheduler")}>
                   <span>03</span>{scheduler?.enabled ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<strong>{scheduler?.enabled ? "自动巡检已开启" : "开启自动巡检"}</strong><small>本地调度，可随时暂停与调整频率</small>
@@ -1031,7 +1062,7 @@ export function App() {
                 <MetricBar label="磁盘" value={selectedHost.diskPercent} />
               </div>
               <div className="evidence">
-                <h3>检查说明</h3>
+                <h3>{freshness.state === "unknown" && dashboard.observedAt ? "上次检查说明（已过期）" : "检查说明"}</h3>
                 {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
               </div>
               <div className="quick-actions">
@@ -1087,7 +1118,7 @@ export function App() {
               <table>
                 <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
                 <tbody>
-                  {dashboard.hosts.map((host) => (
+                  {currentDashboard.hosts.map((host) => (
                     <tr key={host.id} className={pendingHostDeleteId === host.id ? "pending-delete" : ""}>
                       <td>{host.name}</td>
                       <td>{host.environment}</td>

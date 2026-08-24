@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 
 test("desk sync copy distinguishes initial, running, and paused states", () => {
   assert.match(deskSyncCopy("idle", null, 10_000).label, /首次同步/);
@@ -66,4 +66,32 @@ test("collection copy never mistakes ordinary HTTP mode for zero-network practic
   const ssh = collectionModeCopy({ practiceMode: false, mode: "ssh-enabled" });
   assert.equal(ssh.label, "HTTP + 只读 SSH");
   assert.match(ssh.detail, /允许的读取命令/);
+});
+
+test("expired evidence cannot remain green in the desk view", () => {
+  const dashboard = {
+    observedAt: "2026-08-24T00:00:00.000Z",
+    staleAfterMs: 60_000,
+    counts: { healthy: 1, warning: 1, critical: 0, unknown: 0 },
+    hosts: [
+      { id: "healthy", status: "healthy", summary: "last check passed" },
+      { id: "warning", status: "warning", summary: "last check warned" }
+    ]
+  };
+  const view = trustworthyDashboard(dashboard, Date.parse("2026-08-24T00:01:00.001Z"));
+  assert.notEqual(view, dashboard);
+  assert.deepEqual(view.counts, { healthy: 0, warning: 0, critical: 0, unknown: 2 });
+  assert.deepEqual(view.hosts.map((host) => host.status), ["unknown", "unknown"]);
+  assert.equal(view.hosts[0].summary, "last check passed");
+  assert.equal(dashboard.hosts[0].status, "healthy");
+});
+
+test("fresh evidence keeps the authoritative dashboard unchanged", () => {
+  const dashboard = {
+    observedAt: "2026-08-24T00:00:00.000Z",
+    staleAfterMs: 60_000,
+    counts: { healthy: 1, warning: 0, critical: 0, unknown: 0 },
+    hosts: [{ id: "healthy", status: "healthy" }]
+  };
+  assert.equal(trustworthyDashboard(dashboard, Date.parse("2026-08-24T00:01:00.000Z")), dashboard);
 });

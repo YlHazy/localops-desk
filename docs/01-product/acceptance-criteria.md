@@ -55,7 +55,7 @@
 - After the first production build, Windows users can double-click the checked-in desktop entry to open the same bounded pet launcher without a console window; it performs no install, elevation, service, or login-start mutation and shows a visible prerequisite checklist on failure.
 - The Windows Node 24 CI job publishes a 14-day portable artifact containing the built UI and only allow-listed standard-library runtime files; manifest verification rejects added, missing, changed, secret, dependency, log, database, or local-data files before upload.
 - Portable verification starts the API from the packaged directory with a fresh temporary data directory and proves the built home page, empty default state, and recognizable fail-closed Agent manifest.
-- Evidence older than the configured freshness window is shown as unknown, and the footer uses observation time rather than response generation time.
+- Evidence older than the configured freshness window is shown as unknown across the full desk and pet: headline, aggregate counts, host pills, setup progress, and Codex discussion cannot retain a healthy claim. Prior readings remain visibly labeled as expired reference only, with an explicit action to obtain new evidence. The footer uses observation time rather than response generation time.
 - A pet or Codex-triggered light check refreshes exactly one host.
 - Motion respects `prefers-reduced-motion`; keyboard focus remains visible.
 - Full-desk keyboard users can skip the sidebar, interactive focus has an explicit high-contrast ring, and asynchronous errors are announced as alerts.
