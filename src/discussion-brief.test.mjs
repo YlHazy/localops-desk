@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
+import { codexDiscussionLink, discussionBrief, httpSignalStatus, resourceSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 
 test("discussion brief structurally excludes local identity and raw evidence", () => {
   const privateMarkers = [
@@ -37,6 +37,7 @@ test("discussion brief structurally excludes local identity and raw evidence", (
   assert.match(brief, /本地名称、环境和角色已省略/);
   assert.match(brief, /网页\/API：有效证据显示正常/);
   assert.match(brief, /SSH 管理通道：存在需要复核的信号/);
+  assert.match(brief, /资源压力：没有足够的新鲜证据/);
   assert.match(brief, /隐私：未包含服务器名称/);
 });
 
@@ -60,11 +61,34 @@ test("offline practice evidence uses the same healthy classifiers as the desk", 
   const practiceHost = {
     httpStatus: "simulated 200 ready",
     sshStatus: "simulated ok",
-    dockerStatus: "compose healthy"
+    dockerStatus: "compose healthy",
+    cpuPercent: 31,
+    memoryPercent: 68,
+    diskPercent: 51
   };
   assert.equal(httpSignalStatus(practiceHost), "healthy");
   assert.equal(sshSignalStatus(practiceHost), "healthy");
   assert.equal(runtimeSignalStatus(practiceHost), "healthy");
+  assert.equal(resourceSignalStatus(practiceHost), "healthy");
+});
+
+test("resource pressure explains an otherwise healthy offline warning", () => {
+  const brief = discussionBrief({
+    observedAt: "2026-08-24T00:00:00.000Z",
+    staleAfterMs: 30 * 60 * 1000
+  }, {
+    status: "warning",
+    httpStatus: "simulated 200 ready",
+    sshStatus: "simulated ok",
+    dockerStatus: "compose healthy",
+    cpuPercent: 31,
+    memoryPercent: 68,
+    diskPercent: 76
+  }, Date.parse("2026-08-24T00:05:00.000Z"));
+
+  assert.match(brief, /资源压力：存在需要复核的信号/);
+  assert.match(brief, /资源占用接近关注阈值/);
+  assert.match(brief, /不要因为黄色状态就直接重启服务/);
 });
 
 test("expired discussion evidence downgrades every shareable signal atomically", () => {
@@ -80,7 +104,7 @@ test("expired discussion evidence downgrades every shareable signal atomically",
 
   assert.match(brief, /状态：未知/);
   assert.match(brief, /证据时效：证据已过期/);
-  assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 3);
+  assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 4);
   assert.doesNotMatch(brief, /有效证据显示正常|有效证据显示失败|存在需要复核的信号/);
   assert.match(brief, /未知状态不按正常处理/);
 });

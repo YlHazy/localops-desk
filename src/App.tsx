@@ -25,13 +25,15 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
-import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
+import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
+import { hostGuidance } from "./guardian-guidance.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
 import { petModePath } from "./pet-presence.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
+import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
@@ -46,7 +48,7 @@ const signalLabels = {
   http: "入口信号",
   ssh: "管理通道",
   runtime: "运行时",
-  advice: "安全下一步"
+  resource: "资源压力"
 };
 
 const emptyHostForm: HostConfigInput = {
@@ -163,13 +165,6 @@ function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
   }
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
   return { state: "fresh", label: minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据` };
-}
-
-function nextStepFor(host: HostState) {
-  if (host.status === "critical") return { title: "先生成只读检查预案", detail: "不要直接重启。先确认失败层和验证命令。" };
-  if (host.status === "warning") return { title: "复核异常信号", detail: "刷新这台服务器，再比较 HTTP、SSH 与运行时证据。" };
-  if (host.status === "unknown") return { title: "取得一份新证据", detail: "运行单机轻巡检；未知状态不按正常处理。" };
-  return { title: "保持值守", detail: "当前没有操作理由；等待下一次巡检即可。" };
 }
 
 function StatusPill({ status }: { status: Status }) {
@@ -487,7 +482,10 @@ export function App() {
     ),
     [displayDashboard, freshness.state, dashboard?.observedAt]
   );
-  const selectedNextStep = useMemo(() => selectedHost ? nextStepFor(selectedHost) : null, [selectedHost]);
+  const selectedGuidance = useMemo(
+    () => selectedHost ? hostGuidance(selectedHost, freshness.state === "fresh") : null,
+    [selectedHost, freshness.state]
+  );
   const selectedBrief = useMemo(() => displayDashboard && selectedHost ? discussionBrief(displayDashboard, selectedHost, now) : "", [displayDashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
@@ -958,8 +956,10 @@ export function App() {
           </div>
           <div className="guardian-decision">
             <span>建议</span>
-            <strong>{selectedNextStep?.title}</strong>
-            <p>{selectedNextStep?.detail}</p>
+            <strong>{selectedGuidance?.title}</strong>
+            <p className="guardian-why"><b>为什么：</b>{selectedGuidance?.reason}</p>
+            <p>{selectedGuidance?.detail}</p>
+            <em className="guardian-avoid">安全边界：{selectedGuidance?.avoid}</em>
             <div className="guardian-actions">
               <button className="primary slim" onClick={() => runLightCheck(selectedHost.id)} disabled={operationBusy}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "刷新证据"}</button>
               <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制最小披露摘要"}</button>
@@ -1080,10 +1080,10 @@ export function App() {
                   <small>{signalLabels.runtime}</small>
                   <strong>{friendlyDockerStatus(selectedHost.dockerStatus)}</strong>
                 </div>
-                <div className={`proof-node advice ${selectedHost.status}`}>
+                <div className={`proof-node ${resourceSignalStatus(selectedHost)}`}>
                   <span>04</span>
-                  <small>{signalLabels.advice}</small>
-                  <strong>{selectedNextStep?.title}</strong>
+                  <small>{signalLabels.resource}</small>
+                  <strong>{resourceSignalSummary(selectedHost)}</strong>
                 </div>
               </div>
               <div className="metrics-grid compact-metrics">

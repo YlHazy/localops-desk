@@ -9,7 +9,9 @@
 - Collection-mode copy distinguishes zero-network practice, configured HTTP checks, and explicitly enabled read-only SSH; ordinary HTTP mode never claims that no real target can be contacted.
 - Manual light check updates last-run timestamps and history.
 - At least one host can show green, one yellow, and one gray/unknown state in safe simulation.
-- The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
+- The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, resource pressure, and unknown collector state.
+- Backend collection, the full desk, pet copy, and minimal-disclosure Codex summary use one shared resource judgment: disk enters warning/critical at 75%/90%, while CPU and memory enter warning/critical at 85%/95%; absent values remain unknown rather than becoming a false healthy zero.
+- A reachable service cannot retain a green overall judgment when current runtime or resource evidence is warning/critical. The fixed guardian advice explains why, proposes a read-only next step, and states what not to mutate.
 - Dry-run action output is visible and never executes a command; unknown action keys fail closed.
 - Only allow-listed read-only plans with a configured SSH alias are copyable. Practice plans and all mutating plans use explicit placeholders, never include the configured alias, and are not directly copyable.
 - Copyable read-only previews are generated from the executor's exact command allowlist, so UI instructions cannot silently drift from collected evidence.
@@ -26,7 +28,7 @@
 - A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
 - While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
 - System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
-- A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, and runtime conclusions instead of retaining any healthy/failed category from expired evidence.
+- A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, runtime, and resource conclusions instead of retaining any healthy/failed category from expired evidence.
 - Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
 - Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
 - The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.

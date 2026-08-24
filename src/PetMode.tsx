@@ -1,10 +1,11 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, localRecoveryCopy } from "./desk-sync.mjs";
+import { hostGuidance } from "./guardian-guidance.mjs";
 import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
-import type { DashboardStatus, HostState, Status } from "./types";
+import type { DashboardStatus, Status } from "./types";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
@@ -54,13 +55,6 @@ function latestTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
-}
-
-function hostSignal(host: HostState) {
-  if (host.status === "critical") return host.summary || "服务检查失败";
-  if (host.status === "warning") return host.summary || "存在需要确认的信号";
-  if (host.status === "unknown") return "还没有运行过检查";
-  return "HTTP、SSH 与资源信号正常";
 }
 
 export function PetMode({
@@ -133,6 +127,8 @@ export function PetMode({
   );
   const priorityHost = hosts[0];
   const focusHost = selectFocusHost(hosts, selectedHostId);
+  const priorityGuidance = priorityHost ? hostGuidance(priorityHost, !stale) : null;
+  const focusGuidance = focusHost ? hostGuidance(focusHost, !stale) : null;
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
@@ -205,7 +201,7 @@ export function PetMode({
             ? "尚未配置服务器，请先打开控制台添加一台。"
             : stale
               ? "检查结果已过期，先刷新最需要关注的一台。"
-              : copy.line}</p>
+              : priorityGuidance?.reason ?? copy.line}</p>
       </section>
 
       {syncError ? (
@@ -234,7 +230,7 @@ export function PetMode({
             <span className={`pet-status-dot ${focusHost.status}`} />
             <span className="pet-focus-copy">
               <strong>{focusHost.name}{manuallyFocused ? <em>手动查看</em> : null}</strong>
-              <small>{hostSignal(focusHost)}</small>
+              <small>{focusGuidance?.reason}</small>
             </span>
             <ChevronDown className={expanded ? "is-expanded" : ""} size={18} />
           </button>

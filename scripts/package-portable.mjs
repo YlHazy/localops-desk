@@ -9,6 +9,7 @@ export const portableRoot = join(artifactRoot, "localops-guardian-windows-portab
 
 const sources = [
   ["dist", "dist"],
+  ["shared/evidence-judgment.mjs", "shared/evidence-judgment.mjs"],
   ["server/index.mjs", "server/index.mjs"],
   ["server/input-validation.mjs", "server/input-validation.mjs"],
   ["server/pet-presence.mjs", "server/pet-presence.mjs"],
@@ -22,6 +23,7 @@ const sources = [
 
 const requiredFiles = new Set([
   "dist/index.html",
+  "shared/evidence-judgment.mjs",
   "server/index.mjs",
   "scripts/launch-pet.mjs",
   "src/pet-presence.mjs",

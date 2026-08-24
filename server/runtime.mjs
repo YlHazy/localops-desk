@@ -1,8 +1,19 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { classifyCollectedStatus, resourceSignalStatus } from "../shared/evidence-judgment.mjs";
 import { validateSshAlias } from "./input-validation.mjs";
 
 const execFileAsync = promisify(execFile);
+
+export function collectedSummary(status, httpStatus, resourceStatus) {
+  if (status === "healthy") return "HTTP 与 SSH 只读检查正常。";
+  if (httpStatus === "critical") return "HTTP 健康检查明确失败，需要先定位入口或上游依赖。";
+  if (httpStatus === "warning") return "HTTP 健康检查返回非成功状态，需要先复核入口证据。";
+  if (resourceStatus === "critical") return "HTTP 可用，但资源使用率进入高风险区间。";
+  if (resourceStatus === "warning") return "HTTP 可用，但资源使用率接近关注阈值。";
+  if (status === "warning") return "HTTP 正常但 SSH 管理通道或资源检查需要关注。";
+  return "HTTP 或 SSH 检查异常，需要结合证据排查。";
+}
 
 export const demoHosts = [
   {
@@ -248,13 +259,8 @@ export async function collectHost(host, options) {
 
   if (options.mode === "ssh-enabled") {
     const ssh = await collectSshReadOnly(host);
-    const status = http.status === "critical"
-      ? "critical"
-      : ssh.sshStatus === "ok"
-        ? http.status
-        : http.status === "healthy"
-          ? "warning"
-          : "unknown";
+    const resourceStatus = resourceSignalStatus(ssh);
+    const status = classifyCollectedStatus(http.status, ssh);
     return {
       hostId: host.id,
       status,
@@ -265,14 +271,11 @@ export async function collectHost(host, options) {
       memoryPercent: ssh.memoryPercent,
       diskPercent: ssh.diskPercent,
       dockerStatus: ssh.dockerStatus,
-      summary: status === "healthy"
-        ? "HTTP 与 SSH 只读检查正常。"
-        : status === "warning"
-          ? "HTTP 正常但 SSH 管理通道或资源检查需要关注。"
-          : "HTTP 或 SSH 检查异常，需要结合证据排查。",
+      summary: collectedSummary(status, http.status, resourceStatus),
       evidence: [
         ...http.evidence,
         ...ssh.evidence,
+        ...(resourceStatus === "unknown" ? [] : ["资源分级使用固定阈值：磁盘 75%/90%，CPU 与内存 85%/95%（关注/高风险）。"]),
         "SSH collector 使用固定 allowlist 命令、BatchMode、超时和输出脱敏。"
       ]
     };

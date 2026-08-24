@@ -86,6 +86,18 @@ test("desk and pet expose one truthful local-status recovery contract", () => {
   assert.match(petSource, /<p>\{recovery\.boundary\}<\/p>/);
 });
 
+test("desk, pet, runtime, and portable build share one resource judgment contract", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const runtimeSource = readFileSync(new URL("./runtime.mjs", import.meta.url), "utf8");
+  const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /resourceSignalStatus\(selectedHost\)/);
+  assert.match(appSource, /resourceSignalSummary\(selectedHost\)/);
+  assert.match(petSource, /hostGuidance\(priorityHost, !stale\)/);
+  assert.match(runtimeSource, /classifyCollectedStatus\(http\.status, ssh\)/);
+  assert.match(portableSource, /shared\/evidence-judgment\.mjs/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

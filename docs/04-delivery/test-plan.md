@@ -2,7 +2,7 @@
 
 - TypeScript typecheck.
 - Production build.
-- Portable package manifest, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and Windows Edge launcher check.
+- Portable package manifest, shared evidence-judgment module integrity, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and Windows Edge launcher check.
 - Desktop launcher tests cover identity-free aggregate presence, duplicate-window refusal, malformed presence responses, and session expiry.
 - Shared pet-path tests prove the launcher and full desk construct the same validated session route; source delivery checks require desk-opened pets to use a fresh UUID rather than an untracked pet URL.
 - Companion-asset validation checks genuine PNG alpha, bounded file size, expected portrait dimensions, production UI wiring, and removal of the former CSS cat-face parts; official files under `pets/` retain the stricter 1536 × 1872 gate.
@@ -19,6 +19,8 @@
   - Dry-run actions reject unknown keys, allow copying only configured read-only commands, and keep practice/mutating plans placeholder-only and non-copyable.
   - Copyable SSH commands exactly match the runtime allowlist and contain no Compose, sudo, restart, or systemctl mutation path.
   - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
+  - Evidence-judgment tests keep HTTP, SSH, runtime, and resource classifications shared across backend and UI; null resource fields remain unknown, and disk 75%/90% plus CPU/memory 85%/95% boundaries cannot drift silently.
+  - Guardian guidance tests prove that a reachable-but-resource-warning host explains the yellow state, recommends refreshing/read-only diagnosis, and explicitly discourages restart or configuration mutation.
   - The report surface separates the identity-bearing internal report from the tested minimal-disclosure summary and gates internal copy behind confirmation.
   - Host tags survive the desk status/edit round trip but remain absent from Agent status.
   - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
@@ -26,7 +28,7 @@
   - Latest-request-gate tests prove that out-of-order and post-unmount responses cannot replace a newer desk or pet snapshot.
   - Local-status recovery tests require desk and pet copy to retain the last successful read age, disclose the 30-second automatic retry, and state that immediate retry does not inspect or change a server.
   - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
-  - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, and runtime categories to downgrade together and reject any expired healthy/failed wording.
+  - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, runtime, and resource categories to downgrade together and reject any expired healthy/failed wording.
 - Security smoke:
   - Search outputs for obvious secret placeholders.
   - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.

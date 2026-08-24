@@ -654,6 +654,17 @@ h3 {
   font-size: 19px;
 }
 
+.guardian-why {
+  margin: 8px 0 0;
+  padding: 9px 10px;
+  border-left: 3px solid var(--watch-amber);
+  border-radius: 0 8px 8px 0;
+  background: rgba(255, 255, 255, 0.055);
+  line-height: 1.5;
+}
+.guardian-why b { color: #f4d89c; }
+.guardian-avoid { margin-top: 8px; color: #9cdfd0; font-size: 11px; font-style: normal; line-height: 1.5; }
+
 .guardian-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1101,10 +1112,6 @@ tr.pending-delete td { background: #fff8f6; }
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.proof-node.advice strong {
-  white-space: normal;
 }
 
 .metric {
