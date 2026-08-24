@@ -610,6 +610,14 @@ test("pet presence is session-scoped, validated, and closeable", async (t) => {
   const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
   const path = `${api.base}/api/pet-presence/${sessionId}`;
 
+  const inactiveWindow = await fetch(`${api.base}/api/pet-window/${sessionId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ topmost: true })
+  });
+  assert.equal(inactiveWindow.status, 409);
+  assert.equal((await inactiveWindow.json()).error, "PET_WINDOW_SESSION_INACTIVE");
+
   assert.deepEqual(await fetch(`${api.base}/api/pet-presence`).then((item) => item.json()), { presence: { present: false, activeCount: 0 } });
   assert.deepEqual(await fetch(path).then((item) => item.json()), { presence: { present: false, lastSeenAt: null } });
   const opened = await fetch(path, {
@@ -619,6 +627,13 @@ test("pet presence is session-scoped, validated, and closeable", async (t) => {
   });
   assert.equal(opened.status, 200);
   assert.equal((await opened.json()).presence.present, true);
+  const invalidWindow = await fetch(`${api.base}/api/pet-window/${sessionId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ topmost: "yes" })
+  });
+  assert.equal(invalidWindow.status, 400);
+  assert.equal((await invalidWindow.json()).error, "INVALID_INPUT");
   assert.equal((await fetch(path).then((item) => item.json())).presence.present, true);
   const aggregateText = await fetch(`${api.base}/api/pet-presence`).then((item) => item.text());
   assert.deepEqual(JSON.parse(aggregateText), { presence: { present: true, activeCount: 1 } });

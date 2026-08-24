@@ -8,6 +8,7 @@ import { collectionCoverage, hostCollectionPlan } from "../shared/collection-cov
 import { collectHost, demoHosts, readOnlySshPreview, sanitizeError } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
+import { petWindowCapability, setPetWindowTopmost } from "./pet-window.mjs";
 import { configureStartupEntry, publicStartupState, startupEntrySnapshot } from "./windows-startup.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -1074,6 +1075,7 @@ function agentManifest() {
       { method: "POST", path: "/api/scheduler/run-now", description: "Run one scheduler-owned verification cycle now." },
       { method: "GET", path: "/api/startup", description: "Read current-user LocalOps startup state without filesystem paths." },
       { method: "PUT", path: "/api/startup", description: "Explicitly enable or disable the owned current-user LocalOps startup entry." },
+      { method: "PUT", path: "/api/pet-window/:sessionId", description: "Explicitly keep the active Windows Edge pet above other windows or restore it." },
       { method: "POST", path: "/api/maintenance/retention", description: "Apply local SQLite retention cleanup." },
       { method: "POST", path: "/api/actions/dry-run", description: "Generate a non-mutating action plan." },
       { method: "GET", path: "/api/reports/current", description: "Read current diagnostic report." },
@@ -1106,6 +1108,18 @@ const server = createServer(async (req, res) => {
     if (petPresenceMatch && req.method === "PUT") {
       const input = await readBody(req);
       return json(res, { presence: petPresence.update(decodeURIComponent(petPresenceMatch[1]), input.state) });
+    }
+    const petWindowMatch = url.pathname.match(/^\/api\/pet-window\/([^/]+)$/);
+    if (petWindowMatch && req.method === "PUT") {
+      const sessionId = decodeURIComponent(petWindowMatch[1]);
+      if (!petPresence.read(sessionId).present) {
+        return json(res, { error: "PET_WINDOW_SESSION_INACTIVE", message: "The LocalOps pet session is not active." }, 409);
+      }
+      const input = await readBody(req);
+      if (typeof input.topmost !== "boolean") throw new InputValidationError("topmost must be a boolean.");
+      const capability = petWindowCapability();
+      if (!capability.supported) return json(res, { window: { ...capability, topmost: false } }, 400);
+      return json(res, { window: await setPetWindowTopmost({ root, topmost: input.topmost }) });
     }
     if (req.method === "GET" && url.pathname === "/api/hosts") {
       return json(res, { hosts: getHosts() });

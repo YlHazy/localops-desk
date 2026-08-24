@@ -90,6 +90,20 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   assert.doesNotMatch(navigationSource, /healthUrl|sshAlias|composeProject|evidence/);
 });
 
+test("desktop pinning is session-scoped, reversible, and bounded to one exact Edge title", () => {
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./pet-window.mjs", import.meta.url), "utf8");
+  const helperSource = readFileSync(new URL("../scripts/set-pet-topmost.ps1", import.meta.url), "utf8");
+  assert.match(petSource, /requestPetWindowTopmost\(petSessionId, enabled\)/);
+  assert.match(petSource, /取消置顶/);
+  assert.match(readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8"), /await requestPetWindowTopmost\(sessionId, false\)/);
+  assert.match(serverSource, /set-pet-topmost\.ps1/);
+  assert.match(helperSource, /Get-Process -Name "msedge"/);
+  assert.match(helperSource, /MainWindowTitle -ceq \$WindowTitle/);
+  assert.match(helperSource, /SetWindowPos/);
+  assert.doesNotMatch(helperSource, /\bregistry\b|\bservice\b|\bschtasks\b|Invoke-Expression|Start-Process/i);
+});
+
 test("desk and pet expose one truthful local-status recovery contract", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");

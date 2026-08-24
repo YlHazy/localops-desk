@@ -15,6 +15,7 @@ body:has(.pet-window) {
 }
 
 .pet-window {
+  position: relative;
   box-sizing: border-box;
   width: min(100vw, 380px);
   min-height: 100vh;
@@ -37,13 +38,20 @@ body:has(.pet-window) {
 .pet-window.unknown { --pet-mood: var(--pet-muted); }
 .pet-window.healthy { --pet-mood: var(--pet-teal); }
 
+.pet-window-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 28px; margin-bottom: 4px; }
 .pet-grab {
+  grid-column: 2;
   width: 36px;
   height: 4px;
-  margin: 0 auto 13px;
+  margin: 0 auto;
   border-radius: 999px;
   background: rgba(25, 51, 60, 0.16);
 }
+.pet-pin { grid-column: 3; display: inline-flex; align-items: center; justify-content: center; gap: 4px; justify-self: end; padding: 6px 8px; color: var(--pet-muted); border: 1px solid rgba(25, 51, 60, .12); border-radius: 999px; background: rgba(255, 255, 255, .7); font-size: 9px; font-weight: 800; }
+.pet-pin.active { color: var(--pet-teal); border-color: rgba(36, 121, 111, .28); background: rgba(142, 217, 194, .14); }
+.pet-pin:disabled { cursor: not-allowed; opacity: .55; }
+.pet-pin-note { margin: 0 2px 5px; color: var(--pet-muted); font-size: 9px; line-height: 1.35; text-align: right; }
+.pet-pin-note.active { color: var(--pet-teal); }
 
 .pet-identity {
   display: flex;

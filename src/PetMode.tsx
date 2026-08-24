@@ -1,5 +1,5 @@
-import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, RefreshCcw, Server } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, Pin, PinOff, RefreshCcw, Server } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
@@ -9,6 +9,7 @@ import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import { notificationDecision, petQuietDurationMs, readQuietUntil, watchModeCopy, writeQuietUntil } from "./pet-watch.mjs";
+import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, Status } from "./types";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 
@@ -62,6 +63,22 @@ function writeQuietPreference(value: number) {
   }
 }
 
+function readPinnedPreference() {
+  try {
+    return readTopmostPreference(window.localStorage);
+  } catch {
+    return true;
+  }
+}
+
+function writePinnedPreference(enabled: boolean) {
+  try {
+    return writeTopmostPreference(window.localStorage, enabled);
+  } catch {
+    return false;
+  }
+}
+
 function showSystemNotification(title: string, options: NotificationOptions) {
   try {
     return new Notification(title, options);
@@ -100,7 +117,7 @@ export function PetMode({
   actionError: string;
   onRefresh: (hostId: string) => void;
   onRetrySync: () => void;
-  onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void;
+  onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void | Promise<void>;
   onDiscuss: (hostId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -116,29 +133,61 @@ export function PetMode({
   const previousSignal = useRef<MonitorSignal | null>(null);
   const recovery = localRecoveryCopy(lastSyncedAt, now);
   const petSessionId = new URLSearchParams(window.location.search).get("session");
+  const topmostSupported = isPetSessionId(petSessionId);
+  const [topmostActive, setTopmostActive] = useState(false);
+  const [topmostPending, setTopmostPending] = useState(false);
+  const [topmostNote, setTopmostNote] = useState(topmostSupported ? "正在确认桌面置顶状态。" : "从 Windows 启动器打开后可使用桌面置顶。");
+
+  const applyTopmost = useCallback(async (enabled: boolean, persistPreference = true) => {
+    if (!isPetSessionId(petSessionId)) return;
+    setTopmostPending(true);
+    try {
+      const state = await requestPetWindowTopmost(petSessionId, enabled);
+      setTopmostActive(state.topmost);
+      setTopmostNote(state.message);
+      if (persistPreference) {
+        const saved = writePinnedPreference(enabled);
+        if (!saved) setTopmostNote(`${state.message} 浏览器没有保存下次偏好。`);
+      }
+    } catch (error) {
+      setTopmostActive(false);
+      setTopmostNote(`${error instanceof Error ? error.message : "桌宠窗口置顶没有成功。"} 当前仍是普通窗口。`);
+    } finally {
+      setTopmostPending(false);
+    }
+  }, [petSessionId]);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = "LocalOps Guardian";
+    return () => { document.title = previousTitle; };
+  }, []);
 
   useEffect(() => {
     if (!isPetSessionId(petSessionId)) return;
     const path = petPresencePath(petSessionId);
     const sendPresence = (state: "open" | "closing", keepalive = false) => {
-      void fetch(path, {
+      return fetch(path, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ state }),
         keepalive,
         signal: keepalive ? undefined : AbortSignal.timeout(1_500)
-      }).catch(() => undefined);
+      }).then((response) => response.ok).catch(() => false);
     };
-    sendPresence("open");
-    const timer = window.setInterval(() => sendPresence("open"), 15_000);
-    const closePresence = () => sendPresence("closing", true);
+    void sendPresence("open").then((opened) => {
+      if (opened && readPinnedPreference()) void applyTopmost(true, false);
+      else if (opened) setTopmostNote("桌宠按上次设置保持普通窗口；可随时重新置顶。");
+    });
+    const timer = window.setInterval(() => { void sendPresence("open"); }, 15_000);
+    const closePresence = () => { void sendPresence("closing", true); };
     window.addEventListener("pagehide", closePresence);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("pagehide", closePresence);
       closePresence();
     };
-  }, [petSessionId]);
+  }, [petSessionId, applyTopmost]);
 
   const trustedDashboard = useMemo(() => trustworthyDashboard(dashboard, now), [dashboard, now]);
   const hosts = useMemo(() => prioritizeHosts(trustedDashboard.hosts), [trustedDashboard]);
@@ -248,7 +297,20 @@ export function PetMode({
 
   return (
     <main className={`pet-window ${overallStatus}`}>
-      <div className="pet-grab" aria-hidden="true" />
+      <div className="pet-window-bar">
+        <div className="pet-grab" aria-hidden="true" />
+        <button
+          className={`pet-pin ${topmostActive ? "active" : ""}`}
+          onClick={() => void applyTopmost(!topmostActive)}
+          disabled={!topmostSupported || topmostPending}
+          aria-pressed={topmostActive}
+          title={topmostNote}
+        >
+          {topmostActive ? <PinOff size={13} /> : <Pin size={13} />}
+          {topmostPending ? "确认中" : topmostActive ? "取消置顶" : "桌面置顶"}
+        </button>
+      </div>
+      <p className={`pet-pin-note ${topmostActive ? "active" : ""}`} aria-live="polite">{topmostNote}</p>
       <section className="pet-identity" aria-label={`LocalOps 守护宠物：${visibleCopy.label}`}>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />

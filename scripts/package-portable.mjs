@@ -14,9 +14,11 @@ const sources = [
   ["server/index.mjs", "server/index.mjs"],
   ["server/input-validation.mjs", "server/input-validation.mjs"],
   ["server/pet-presence.mjs", "server/pet-presence.mjs"],
+  ["server/pet-window.mjs", "server/pet-window.mjs"],
   ["server/runtime.mjs", "server/runtime.mjs"],
   ["server/windows-startup.mjs", "server/windows-startup.mjs"],
   ["scripts/launch-pet.mjs", "scripts/launch-pet.mjs"],
+  ["scripts/set-pet-topmost.ps1", "scripts/set-pet-topmost.ps1"],
   ["src/pet-presence.mjs", "src/pet-presence.mjs"],
   ["Start LocalOps Guardian.vbs", "Start LocalOps Guardian.vbs"],
   ["portable/README.txt", "README.txt"]
@@ -27,7 +29,9 @@ const requiredFiles = new Set([
   "shared/collection-coverage.mjs",
   "shared/evidence-judgment.mjs",
   "server/index.mjs",
+  "server/pet-window.mjs",
   "scripts/launch-pet.mjs",
+  "scripts/set-pet-topmost.ps1",
   "src/pet-presence.mjs",
   "Start LocalOps Guardian.vbs",
   "README.txt"

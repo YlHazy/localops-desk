@@ -37,7 +37,8 @@ import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
 import { petDeskIntent, petDeskPath } from "./pet-navigation.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
-import { petModePath } from "./pet-presence.mjs";
+import { isPetSessionId, petModePath } from "./pet-presence.mjs";
+import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
@@ -545,10 +546,20 @@ export function App() {
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
 
-  const openDeskFromPet = useCallback((hostId?: string, tab: PetDeskTab = "overview", source: "pet" | "pet-alert" = "pet") => {
+  const openDeskFromPet = useCallback(async (hostId?: string, tab: PetDeskTab = "overview", source: "pet" | "pet-alert" = "pet") => {
     const path = petDeskPath({ hostId, tab, source, revision: source === "pet-alert" ? Date.now() : null });
     const desk = window.open(path, "localops-desk");
-    if (!desk) window.location.assign(path);
+    if (!desk) {
+      const sessionId = new URLSearchParams(window.location.search).get("session");
+      if (isPetSessionId(sessionId)) {
+        try {
+          await requestPetWindowTopmost(sessionId, false);
+        } catch {
+          // Navigation remains available even when the native helper cannot restore Z-order.
+        }
+      }
+      window.location.assign(path);
+    }
   }, []);
 
   const displayDashboard = useMemo(
