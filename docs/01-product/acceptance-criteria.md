@@ -30,6 +30,7 @@
 - The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.
 - Full-desk sync exposes syncing, current, and paused states; failure preserves the last trustworthy result and offers retry rather than replacing it with a spinner.
 - Background sync does not overwrite unsaved scheduler form values and does not call a check, mutation, retention, or action endpoint.
+- Overlapping desktop or pet status reads apply only the newest requested snapshot; a slower earlier response and an unmounted view cannot overwrite current evidence.
 - After pet sync failure, retained evidence is labeled as non-current and a dedicated local-status retry is available; that retry performs no server check and creates no check-history row.
 - Pet sync failures and light-check failures are distinct: a sync failure can retry the bounded status read, while an uncertain check failure preserves prior evidence and discourages duplicate submission.
 - Host configuration cannot be edited, deleted, or batch-cleared while an overlapping light check is active; the typed conflict identifies the in-memory run rather than creating orphan evidence.

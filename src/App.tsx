@@ -22,11 +22,12 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, schedulerDraftAfterSync } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief, httpSignalStatus, runtimeSignalStatus, sshSignalStatus } from "./discussion-brief.mjs";
 import { PetMode } from "./PetMode";
+import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
@@ -320,15 +321,21 @@ export function App() {
   const [petSyncError, setPetSyncError] = useState("");
   const [practicePending, setPracticePending] = useState<"install" | "remove" | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
+  const loadGate = useRef(createLatestRequestGate());
 
   async function load({ preserveSchedulerForm = false } = {}) {
+    const requestToken = loadGate.current.begin();
     if (petMode) {
-      const status = await fetchPetSnapshot(api);
+      const result = await resolveLatestRequest(loadGate.current, requestToken, fetchPetSnapshot(api));
+      if (!result.current) return false;
+      const status = result.value;
       setDashboard(status);
       setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
-      return;
+      return true;
     }
-    const snapshot = await fetchDeskSnapshot(api);
+    const result = await resolveLatestRequest(loadGate.current, requestToken, fetchDeskSnapshot(api));
+    if (!result.current) return false;
+    const snapshot = result.value;
     setDashboard(snapshot.status);
     setChecks(snapshot.checks);
     setReport(snapshot.report);
@@ -341,7 +348,10 @@ export function App() {
     setNow(syncedAt);
     setDeskSyncState("current");
     setDeskSyncError("");
+    return true;
   }
+
+  useEffect(() => () => loadGate.current.invalidate(), []);
 
   useEffect(() => {
     if (!petMode) setDeskSyncState("syncing");
@@ -357,8 +367,8 @@ export function App() {
     let timer = window.setTimeout(poll, 30_000);
     async function poll() {
       try {
-        await load();
-        if (!stopped) {
+        const applied = await load();
+        if (!stopped && applied) {
           setPetSyncError("");
           setError("");
         }
@@ -426,9 +436,11 @@ export function App() {
   async function retryPetSync() {
     setPetSyncing(true);
     try {
-      await load();
-      setPetSyncError("");
-      setError("");
+      const applied = await load();
+      if (applied) {
+        setPetSyncError("");
+        setError("");
+      }
     } catch (err) {
       setPetSyncError(err instanceof Error ? err.message : "本地监控没有响应");
     } finally {

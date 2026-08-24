@@ -19,6 +19,7 @@
   - Host tags survive the desk status/edit round trip but remain absent from Agent status.
   - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
   - Operation-state tests prove that only a real check renders check-busy UI and that each supported operation exposes one truthful purpose flag.
+  - Latest-request-gate tests prove that out-of-order and post-unmount responses cannot replace a newer desk or pet snapshot.
 - Security smoke:
   - Search outputs for obvious secret placeholders.
   - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.
