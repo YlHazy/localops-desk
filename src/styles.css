@@ -1502,6 +1502,29 @@ th {
 .coverage-stats b { float: right; color: #1d2b35; }
 .coverage-ledger p { margin: 0; color: #596875; font-size: 12px; line-height: 1.55; }
 
+.scheduler-outcome-card {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0 16px;
+  padding: 15px;
+  border: 1px solid #d2dce4;
+  border-top: 4px solid #7b8e9a;
+  border-radius: 10px;
+  background: #f8fafb;
+}
+.scheduler-outcome-card.healthy { border-color: #b7dece; border-top-color: #1b7f73; background: #f2faf7; }
+.scheduler-outcome-card.warning { border-color: #ead3a5; border-top-color: #cf8731; background: #fff9ef; }
+.scheduler-outcome-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.scheduler-outcome-head span { padding: 4px 7px; border-radius: 999px; background: white; color: #526271; font-size: 10px; font-weight: 900; }
+.scheduler-outcome-head small { color: #74818c; }
+.scheduler-outcome-card > strong { font-size: 16px; }
+.scheduler-outcome-card > p { margin: 0; color: #586775; font-size: 12px; line-height: 1.55; }
+.scheduler-outcome-card > button { justify-self: start; margin-top: 2px; }
+.scheduler-outcome-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.scheduler-outcome-facts span { padding: 7px 8px; border-radius: 7px; background: rgba(255,255,255,0.78); color: #657383; font-size: 10px; }
+.scheduler-outcome-facts b { float: right; color: #1e2c36; }
+.scheduler-error-code { color: #795c2c; font: 10px/1.4 Consolas, monospace; overflow-wrap: anywhere; }
+
 .table-scroll {
   max-width: 100%;
   overflow-x: auto;
@@ -1676,6 +1699,8 @@ code {
   }
   .coverage-ledger-head { flex-direction: column; }
   .coverage-stats { grid-template-columns: 1fr; }
+  .scheduler-outcome-head { align-items: flex-start; flex-direction: column; }
+  .scheduler-outcome-facts { grid-template-columns: 1fr; }
 
   .guardian-brief-copy,
   .guardian-decision {

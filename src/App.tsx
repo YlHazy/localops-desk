@@ -34,6 +34,7 @@ import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
 import { petModePath } from "./pet-presence.mjs";
+import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
@@ -532,6 +533,7 @@ export function App() {
     () => scheduler?.coverage ?? (dashboard ? collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode }) : collectionCoverage("safe-simulated")),
     [scheduler, dashboard]
   );
+  const schedulerOutcome = useMemo(() => schedulerOutcomeCopy(scheduler), [scheduler]);
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
@@ -734,6 +736,21 @@ export function App() {
         )}
       </main>
     );
+  }
+
+  async function verifySchedulerNow() {
+    if (pendingOperation) return;
+    setPendingOperation("check");
+    setError("");
+    try {
+      const result = await api<{ scheduler: SchedulerState }>("/api/scheduler/run-now", { method: "POST", body: "{}" });
+      setScheduler(result.scheduler);
+      await load({ preserveSchedulerForm: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "立即验证自动巡检失败");
+    } finally {
+      setPendingOperation(null);
+    }
   }
   const currentDashboard = displayDashboard ?? dashboard;
 
@@ -1374,10 +1391,32 @@ export function App() {
             </div>
             <div className="table-panel">
               <h2>调度状态</h2>
+              <section className={`scheduler-outcome-card ${schedulerOutcome.tone}`} aria-live="polite">
+                <div className="scheduler-outcome-head">
+                  <span>{schedulerOutcome.label}</span>
+                  <small>{scheduler?.lastEventAt ? formatTime(scheduler.lastEventAt) : "等待第一条调度事件"}</small>
+                </div>
+                <strong>{schedulerOutcome.title}</strong>
+                <p>{schedulerOutcome.detail}</p>
+                {scheduler?.lastOutcome !== "never" ? (
+                  <div className="scheduler-outcome-facts">
+                    <span>已检查 <b>{scheduler?.lastCheckedHosts ?? 0}</b></span>
+                    <span>已跳过 <b>{scheduler?.lastSkippedHosts ?? 0}</b></span>
+                    <span>耗时 <b>{scheduler?.lastDurationMs == null ? "—" : `${scheduler.lastDurationMs}ms`}</b></span>
+                  </div>
+                ) : null}
+                {scheduler?.lastErrorCode ? <small className="scheduler-error-code">恢复代码：{scheduler.lastErrorCode}</small> : null}
+                {schedulerOutcome.action === "run-now" ? (
+                  <button className="primary slim" disabled={operationBusy} onClick={verifySchedulerNow}><RefreshCcw className={checking ? "spin" : undefined} size={15} />{checking ? "验证中" : "立即验证一次"}</button>
+                ) : schedulerOutcome.action === "configure-hosts" ? (
+                  <button className="primary slim" onClick={() => setSelectedTab("hosts")}><Pencil size={15} />补充证据来源</button>
+                ) : null}
+              </section>
               <div className="state-grid">
                 <div><span>当前状态</span><strong>{scheduler?.enabled ? "运行中" : "已停止"}</strong></div>
                 <div><span>下次运行</span><strong>{formatTime(scheduler?.nextRunAt ?? null)}</strong></div>
-                <div><span>上次运行</span><strong>{formatTime(scheduler?.lastRunAt ?? null)}</strong></div>
+                <div><span>上次尝试</span><strong>{formatTime(scheduler?.lastRunAt ?? null)}</strong></div>
+                <div><span>最近结果</span><strong>{schedulerOutcome.label}</strong></div>
                 <div><span>连续失败</span><strong>{scheduler?.consecutiveFailures ?? 0}</strong></div>
               </div>
               {retentionResult ? (

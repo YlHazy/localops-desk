@@ -147,6 +147,21 @@ test("batch checks, scheduler, desk, pet, and portable build share collection co
   assert.match(portableSource, /shared\/collection-coverage\.mjs/);
 });
 
+test("scheduler outcomes are persisted by the server and rendered with an explicit recovery action", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  const outcomeSource = readFileSync(new URL("../src/scheduler-outcome.mjs", import.meta.url), "utf8");
+  assert.match(serverSource, /schedulerLastOutcome/);
+  assert.match(serverSource, /scheduled-manual/);
+  assert.match(serverSource, /SCHEDULER_RUNTIME_FAILURE/);
+  assert.match(serverSource, /BEGIN IMMEDIATE/);
+  assert.match(serverSource, /maintenance-warning/);
+  assert.match(appSource, /\/api\/scheduler\/run-now/);
+  assert.match(appSource, /立即验证一次/);
+  assert.match(outcomeSource, /stopped-no-evidence/);
+  assert.doesNotMatch(serverSource, /schedulerLastMessage[^\n]*error\?\.message/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

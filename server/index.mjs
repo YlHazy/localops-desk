@@ -106,7 +106,14 @@ const defaultSettings = {
   retentionDays: "7",
   schedulerConsecutiveFailures: "0",
   schedulerLastRunAt: "",
-  schedulerNextRunAt: ""
+  schedulerNextRunAt: "",
+  schedulerLastOutcome: "never",
+  schedulerLastEventAt: "",
+  schedulerLastMessage: "尚未运行自动巡检。",
+  schedulerLastErrorCode: "",
+  schedulerLastDurationMs: "",
+  schedulerLastCheckedHosts: "0",
+  schedulerLastSkippedHosts: "0"
 };
 
 function getSetting(key, fallback = "") {
@@ -613,31 +620,38 @@ async function runLightCheck(options = {}) {
       ? `${hostResults.length} 台已取得证据，${coverage.blocked} 台因证据来源不可用而跳过；总体状态：${status}。`
       : `${hostResults.length} 台已取得证据；总体状态：${status}。`;
 
-    const run = db.prepare(`
-      INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
+    let run;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      run = db.prepare(`
+        INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
 
-    const insertHostCheck = db.prepare(`
-      INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const result of hostResults) {
-      insertHostCheck.run(
-        run.lastInsertRowid,
-        result.hostId,
-        result.status,
-        result.httpStatus,
-        result.httpLatencyMs,
-        result.sshStatus,
-        result.cpuPercent,
-        result.memoryPercent,
-        result.diskPercent,
-        result.dockerStatus,
-        JSON.stringify(result.evidence),
-        result.summary
-      );
+      const insertHostCheck = db.prepare(`
+        INSERT INTO host_checks (runId, hostId, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const result of hostResults) {
+        insertHostCheck.run(
+          run.lastInsertRowid,
+          result.hostId,
+          result.status,
+          result.httpStatus,
+          result.httpLatencyMs,
+          result.sshStatus,
+          result.cpuPercent,
+          result.memoryPercent,
+          result.diskPercent,
+          result.dockerStatus,
+          JSON.stringify(result.evidence),
+          result.summary
+        );
+      }
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
     }
 
     return { id: Number(run.lastInsertRowid), runId: activeRun.runId, status, summary, durationMs, coverage, hostResults };
@@ -698,8 +712,38 @@ function schedulerSnapshot() {
     consecutiveFailures: settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }),
     lastRunAt: getSetting("schedulerLastRunAt", "") || null,
     nextRunAt: getSetting("schedulerNextRunAt", "") || null,
+    lastOutcome: getSetting("schedulerLastOutcome", "never"),
+    lastEventAt: getSetting("schedulerLastEventAt", "") || null,
+    lastMessage: getSetting("schedulerLastMessage", "尚未运行自动巡检。"),
+    lastErrorCode: getSetting("schedulerLastErrorCode", "") || null,
+    lastDurationMs: getSetting("schedulerLastDurationMs", "") === "" ? null : settingNumber("schedulerLastDurationMs", 0, { min: 0, max: 86_400_000 }),
+    lastCheckedHosts: settingNumber("schedulerLastCheckedHosts", 0, { min: 0, max: 100_000 }),
+    lastSkippedHosts: settingNumber("schedulerLastSkippedHosts", 0, { min: 0, max: 100_000 }),
     coverage
   };
+}
+
+function recordSchedulerOutcome({ outcome, message, errorCode = "", durationMs = null, checkedHosts = 0, skippedHosts = 0, attemptedAt = null }) {
+  const eventAt = new Date().toISOString();
+  setSetting("schedulerLastOutcome", outcome);
+  setSetting("schedulerLastEventAt", eventAt);
+  setSetting("schedulerLastMessage", message);
+  setSetting("schedulerLastErrorCode", errorCode);
+  setSetting("schedulerLastDurationMs", durationMs == null ? "" : Math.max(0, Math.trunc(durationMs)));
+  setSetting("schedulerLastCheckedHosts", checkedHosts);
+  setSetting("schedulerLastSkippedHosts", skippedHosts);
+  if (attemptedAt) setSetting("schedulerLastRunAt", attemptedAt);
+}
+
+function safeSchedulerFailure(error) {
+  const value = String(error?.code || error?.message || "");
+  if (/ENOSPC|disk full/i.test(value)) {
+    return { code: "LOCAL_STORAGE_FULL", message: "本机存储空间不足，自动巡检无法保存结果；释放本机空间后立即验证一次。" };
+  }
+  if (/SQLITE_BUSY|database is locked/i.test(value)) {
+    return { code: "LOCAL_HISTORY_BUSY", message: "本地检查记录暂时被占用；确认没有重复运行 LocalOps 后立即验证一次。" };
+  }
+  return { code: "SCHEDULER_RUNTIME_FAILURE", message: "自动巡检流程未完成；本次没有写入不完整结果，下一次会按退避间隔重试。" };
 }
 
 function stopScheduler() {
@@ -710,6 +754,61 @@ function stopScheduler() {
   setSetting("schedulerNextRunAt", "");
 }
 
+async function executeSchedulerCycle(trigger = "scheduled") {
+  const attemptedAt = new Date().toISOString();
+  try {
+    const previousFailures = settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 });
+    const result = await runLightCheck({ trigger });
+    setSetting("schedulerConsecutiveFailures", "0");
+    let maintenanceWarning = null;
+    try {
+      runRetention();
+    } catch (error) {
+      maintenanceWarning = safeSchedulerFailure(error);
+      console.error(`Scheduled retention failed: ${error?.message || error}`);
+    }
+    recordSchedulerOutcome({
+      outcome: maintenanceWarning ? "maintenance-warning" : previousFailures > 0 ? "recovered" : "succeeded",
+      message: maintenanceWarning
+        ? `${result.summary} 但本地历史清理未完成；巡检证据仍有效。${maintenanceWarning.message}`
+        : previousFailures > 0 ? `自动巡检已恢复。${result.summary}` : result.summary,
+      errorCode: maintenanceWarning ? "LOCAL_HISTORY_MAINTENANCE" : "",
+      durationMs: result.durationMs,
+      checkedHosts: result.coverage.collectible,
+      skippedHosts: result.coverage.blocked,
+      attemptedAt
+    });
+  } catch (error) {
+    if (error?.code === "CHECK_ALREADY_RUNNING") {
+      recordSchedulerOutcome({
+        outcome: "deferred",
+        message: "已有巡检正在运行，本次自动巡检已安全顺延；没有重复发起网络请求。",
+        errorCode: "CHECK_ALREADY_RUNNING",
+        attemptedAt
+      });
+      return schedulerSnapshot();
+    }
+    if (error?.code === "NO_COLLECTIBLE_EVIDENCE") {
+      setSetting("schedulerEnabled", "0");
+      setSetting("schedulerConsecutiveFailures", "0");
+      recordSchedulerOutcome({
+        outcome: "stopped-no-evidence",
+        message: "没有可用证据来源，自动巡检已停止；补充 Health URL 或显式启用只读 SSH 后再开启。",
+        errorCode: "NO_COLLECTIBLE_EVIDENCE",
+        attemptedAt
+      });
+      stopScheduler();
+      return schedulerSnapshot();
+    }
+    const failures = settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }) + 1;
+    const safeFailure = safeSchedulerFailure(error);
+    setSetting("schedulerConsecutiveFailures", String(failures));
+    recordSchedulerOutcome({ outcome: "failed", message: safeFailure.message, errorCode: safeFailure.code, attemptedAt });
+    console.error(`Scheduled light check failed: ${error?.message || error}`);
+  }
+  return schedulerSnapshot();
+}
+
 function scheduleNextLightCheck(delayMs) {
   if (schedulerTimer) {
     clearTimeout(schedulerTimer);
@@ -718,24 +817,7 @@ function scheduleNextLightCheck(delayMs) {
   setSetting("schedulerNextRunAt", nextRunAt);
   schedulerTimer = setTimeout(async () => {
     schedulerTimer = null;
-    try {
-      await runLightCheck({ trigger: "scheduled" });
-      setSetting("schedulerConsecutiveFailures", "0");
-      setSetting("schedulerLastRunAt", new Date().toISOString());
-      runRetention();
-    } catch (error) {
-      if (error?.code === "CHECK_ALREADY_RUNNING") {
-        if (getSetting("schedulerEnabled", "0") === "1") {
-          const snapshot = schedulerSnapshot();
-          scheduleNextLightCheck(snapshot.lightIntervalMinutes * 60 * 1000);
-        }
-        return;
-      }
-      const failures = settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }) + 1;
-      setSetting("schedulerConsecutiveFailures", String(failures));
-      setSetting("schedulerLastRunAt", new Date().toISOString());
-      console.error(`Scheduled light check failed: ${error?.message || error}`);
-    }
+    await executeSchedulerCycle("scheduled");
     if (getSetting("schedulerEnabled", "0") === "1") {
       const snapshot = schedulerSnapshot();
       const backoff = Math.min(Math.max(snapshot.consecutiveFailures, 1), 3);
@@ -768,11 +850,34 @@ function configureScheduler(input = {}) {
   return schedulerSnapshot();
 }
 
+async function runSchedulerNow() {
+  const snapshot = schedulerSnapshot();
+  if (!snapshot.enabled) {
+    const error = new Error("自动巡检尚未启用。请先确认频率与证据覆盖，再保存巡检配置。");
+    error.code = "SCHEDULER_NOT_ENABLED";
+    error.httpStatus = 409;
+    throw error;
+  }
+  stopScheduler();
+  await executeSchedulerCycle("scheduled-manual");
+  const result = schedulerSnapshot();
+  if (result.enabled) {
+    const backoff = Math.min(Math.max(result.consecutiveFailures, 1), 3);
+    return scheduleNextLightCheck(result.lightIntervalMinutes * backoff * 60 * 1000);
+  }
+  return result;
+}
+
 function reconcileSchedulerCoverage() {
   const snapshot = schedulerSnapshot();
   if (!snapshot.enabled || snapshot.coverage.collectible > 0) return snapshot;
   setSetting("schedulerEnabled", "0");
   setSetting("schedulerConsecutiveFailures", "0");
+  recordSchedulerOutcome({
+    outcome: "stopped-no-evidence",
+    message: "最后一个可用证据来源已移除，自动巡检已停止；原有检查结果保持不变。",
+    errorCode: "NO_COLLECTIBLE_EVIDENCE"
+  });
   stopScheduler();
   return schedulerSnapshot();
 }
@@ -900,6 +1005,7 @@ function agentManifest() {
       { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
       { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
       { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
+      { method: "POST", path: "/api/scheduler/run-now", description: "Run one scheduler-owned verification cycle now." },
       { method: "GET", path: "/api/startup", description: "Read current-user LocalOps startup state without filesystem paths." },
       { method: "PUT", path: "/api/startup", description: "Explicitly enable or disable the owned current-user LocalOps startup entry." },
       { method: "POST", path: "/api/maintenance/retention", description: "Apply local SQLite retention cleanup." },
@@ -981,6 +1087,10 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "PUT" && url.pathname === "/api/scheduler") {
       return json(res, { scheduler: configureScheduler(await readBody(req)) });
+    }
+    if (req.method === "POST" && url.pathname === "/api/scheduler/run-now") {
+      await readBody(req);
+      return json(res, { scheduler: await runSchedulerNow() });
     }
     if (req.method === "GET" && url.pathname === "/api/startup") {
       return json(res, { startup: publicStartupState(await startupEntrySnapshot({ root })) });

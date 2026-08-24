@@ -66,6 +66,13 @@ export interface SchedulerState {
   consecutiveFailures: number;
   lastRunAt: string | null;
   nextRunAt: string | null;
+  lastOutcome: "never" | "succeeded" | "recovered" | "maintenance-warning" | "failed" | "deferred" | "stopped-no-evidence";
+  lastEventAt: string | null;
+  lastMessage: string;
+  lastErrorCode: string | null;
+  lastDurationMs: number | null;
+  lastCheckedHosts: number;
+  lastSkippedHosts: number;
   coverage: CollectionCoverage;
 }
 

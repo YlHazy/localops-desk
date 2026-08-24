@@ -260,8 +260,49 @@ test("batch checks collect only usable hosts and report skipped coverage honestl
   assert.equal(blockedBody.coverage.collectible, 0);
 });
 
+test("check run and host evidence are committed atomically", async (t) => {
+  const api = await startApi(t);
+  await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "atomic-host", healthUrl: `${api.base}/api/status`, sshAlias: "" })
+  });
+  const database = new DatabaseSync(join(api.dataDir, "localops.sqlite"));
+  database.exec(`
+    CREATE TRIGGER reject_test_host_check
+    BEFORE INSERT ON host_checks
+    BEGIN
+      SELECT RAISE(FAIL, 'forced atomicity test failure');
+    END;
+  `);
+  database.close();
+
+  const failed = await fetch(`${api.base}/api/checks/light`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(failed.status, 500);
+  const checks = (await fetch(`${api.base}/api/checks`).then((item) => item.json())).checks;
+  const status = await fetch(`${api.base}/api/status`).then((item) => item.json());
+  assert.deepEqual(checks, []);
+  assert.equal(status.hosts[0].lastCheckedAt, null);
+  assert.equal(status.hosts[0].status, "unknown");
+});
+
 test("scheduler refuses zero coverage and stops when the last source is removed", async (t) => {
   const api = await startApi(t);
+  const initial = (await fetch(`${api.base}/api/scheduler`).then((item) => item.json())).scheduler;
+  assert.equal(initial.lastOutcome, "never");
+  assert.equal(initial.lastEventAt, null);
+  assert.equal(initial.lastMessage, "尚未运行自动巡检。");
+  const disabledRun = await fetch(`${api.base}/api/scheduler/run-now`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(disabledRun.status, 409);
+  assert.equal((await disabledRun.json()).error, "SCHEDULER_NOT_ENABLED");
   const created = await fetch(`${api.base}/api/hosts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -292,6 +333,24 @@ test("scheduler refuses zero coverage and stops when the last source is removed"
   assert.equal(enabledState.enabled, true);
   assert.equal(enabledState.coverage.collectible, 1);
 
+  const runNow = await fetch(`${api.base}/api/scheduler/run-now`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(runNow.status, 200);
+  const verified = (await runNow.json()).scheduler;
+  assert.equal(verified.lastOutcome, "succeeded");
+  assert.equal(verified.lastCheckedHosts, 1);
+  assert.equal(verified.lastSkippedHosts, 0);
+  assert.ok(verified.lastEventAt);
+  assert.ok(verified.lastRunAt);
+  assert.ok(verified.nextRunAt);
+  assert.match(verified.lastMessage, /1 台已取得证据/);
+  assert.equal(verified.lastErrorCode, null);
+  const schedulerCheck = (await fetch(`${api.base}/api/checks`).then((item) => item.json())).checks[0];
+  assert.equal(schedulerCheck.trigger, "scheduled-manual");
+
   await fetch(`${api.base}/api/hosts/${encodeURIComponent(created.host.id)}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -301,6 +360,9 @@ test("scheduler refuses zero coverage and stops when the last source is removed"
   assert.equal(stopped.enabled, false);
   assert.equal(stopped.nextRunAt, null);
   assert.equal(stopped.coverage.collectible, 0);
+  assert.equal(stopped.lastOutcome, "stopped-no-evidence");
+  assert.equal(stopped.lastErrorCode, "NO_COLLECTIBLE_EVIDENCE");
+  assert.match(stopped.lastMessage, /自动巡检已停止/);
 });
 
 test("offline practice never overwrites or deletes colliding user data", async (t) => {
