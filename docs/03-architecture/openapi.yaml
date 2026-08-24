@@ -5,6 +5,12 @@ info:
 servers:
   - url: http://127.0.0.1:4317
 paths:
+  /api/pet-presence:
+    get:
+      summary: Read aggregate active desktop-pet presence
+      responses:
+        "200":
+          description: Presence boolean and active count without session IDs
   /api/pet-presence/{sessionId}:
     parameters:
       - name: sessionId

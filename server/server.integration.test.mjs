@@ -410,6 +410,7 @@ test("pet presence is session-scoped, validated, and closeable", async (t) => {
   const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
   const path = `${api.base}/api/pet-presence/${sessionId}`;
 
+  assert.deepEqual(await fetch(`${api.base}/api/pet-presence`).then((item) => item.json()), { presence: { present: false, activeCount: 0 } });
   assert.deepEqual(await fetch(path).then((item) => item.json()), { presence: { present: false, lastSeenAt: null } });
   const opened = await fetch(path, {
     method: "PUT",
@@ -419,6 +420,9 @@ test("pet presence is session-scoped, validated, and closeable", async (t) => {
   assert.equal(opened.status, 200);
   assert.equal((await opened.json()).presence.present, true);
   assert.equal((await fetch(path).then((item) => item.json())).presence.present, true);
+  const aggregateText = await fetch(`${api.base}/api/pet-presence`).then((item) => item.text());
+  assert.deepEqual(JSON.parse(aggregateText), { presence: { present: true, activeCount: 1 } });
+  assert.doesNotMatch(aggregateText, new RegExp(sessionId));
 
   const closed = await fetch(path, {
     method: "PUT",
@@ -426,6 +430,7 @@ test("pet presence is session-scoped, validated, and closeable", async (t) => {
     body: JSON.stringify({ state: "closing" })
   });
   assert.deepEqual(await closed.json(), { presence: { present: false, lastSeenAt: null } });
+  assert.deepEqual(await fetch(`${api.base}/api/pet-presence`).then((item) => item.json()), { presence: { present: false, activeCount: 0 } });
 
   const invalid = await fetch(`${api.base}/api/pet-presence/not-a-uuid`);
   assert.equal(invalid.status, 400);

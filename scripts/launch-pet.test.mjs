@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { assertPetBuildAvailable, assertSupportedNodeVersion, edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, monitorPetPresence, petSessionPresent, petUrl, waitForPetPresence } from "./launch-pet.mjs";
+import { activePetPresence, assertNoActivePet, assertPetBuildAvailable, assertSupportedNodeVersion, edgeCandidates, firstExistingPath, launcherSummary, localOpsReady, monitorPetPresence, petSessionPresent, petUrl, waitForPetPresence } from "./launch-pet.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -59,6 +59,26 @@ test("pet presence waits for a real page heartbeat and tolerates brief misses", 
   assert.equal(reads, 6);
 });
 
+test("active pet discovery accepts only aggregate identity-free state", async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    async json() { return { presence: { present: true, activeCount: 1 } }; }
+  });
+  assert.deepEqual(await activePetPresence(petUrl(), fetchImpl), { present: true, activeCount: 1 });
+  await assert.rejects(() => activePetPresence(petUrl(), async () => ({ ok: false })), /状态接口不可用/);
+  await assert.rejects(() => activePetPresence(petUrl(), async () => { throw new Error("offline"); }), /无法确认/);
+  await assert.rejects(() => activePetPresence(petUrl(), async () => ({
+    ok: true,
+    async json() { throw new SyntaxError("invalid JSON"); }
+  })), /状态响应无法识别/);
+  await assert.rejects(() => activePetPresence(petUrl(), async () => ({
+    ok: true,
+    async json() { return { presence: { present: false, activeCount: 2, sessionId } }; }
+  })), /状态响应无法识别/);
+  assert.doesNotThrow(() => assertNoActivePet({ present: false, activeCount: 0 }));
+  assert.throws(() => assertNoActivePet({ present: true, activeCount: 2 }), /已经打开（2 个活动窗口）/);
+});
+
 test("pet presence wait fails closed when the page never loads", async () => {
   await assert.rejects(() => waitForPetPresence(petUrl({ sessionId }), {
     fetchImpl: async () => ({ ok: true, async json() { return { presence: { present: false } }; } }),
@@ -111,12 +131,21 @@ test("check mode reports intent without claiming a process was started", () => {
   const lines = launcherSummary({
     checkOnly: true,
     apiAlreadyRunning: false,
+    activePresence: { present: false, activeCount: 0 },
     browserPath: "approved.exe",
     url: petUrl()
   });
   assert.match(lines.join("\n"), /check passed/);
   assert.match(lines.join("\n"), /would start a task-owned process/);
   assert.doesNotMatch(lines.join("\n"), /API: task-owned process started/);
+  const alreadyOpen = launcherSummary({
+    checkOnly: true,
+    apiAlreadyRunning: true,
+    activePresence: { present: true, activeCount: 1 },
+    browserPath: "approved.exe",
+    url: petUrl()
+  });
+  assert.match(alreadyOpen.join("\n"), /Pet: already open \(1 active\)/);
 });
 
 test("live launcher summary identifies only the child processes it owns", () => {

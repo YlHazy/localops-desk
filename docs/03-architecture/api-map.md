@@ -8,6 +8,10 @@ Returns latest host states, last check time, and dashboard aggregates.
 
 ## Pet Presence
 
+`GET /api/pet-presence`
+
+Returns only whether any unexpired pet heartbeat exists and the aggregate active count. It never returns session IDs and lets the Windows launcher avoid opening an ordinary duplicate window.
+
 `GET /api/pet-presence/:sessionId`
 
 Returns presence and last-seen time for one random desktop-launch session.

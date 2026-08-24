@@ -17,6 +17,13 @@ export function createPetPresenceTracker({ now = Date.now } = {}) {
     }
   }
 
+  function pruneExpired() {
+    const currentTime = now();
+    for (const [sessionId, lastSeenAt] of sessions) {
+      if (currentTime - lastSeenAt > petPresenceTtlMs) sessions.delete(sessionId);
+    }
+  }
+
   return {
     update(sessionId, state) {
       validate(sessionId);
@@ -31,12 +38,16 @@ export function createPetPresenceTracker({ now = Date.now } = {}) {
     },
     read(sessionId) {
       validate(sessionId);
+      pruneExpired();
       const lastSeenAt = sessions.get(sessionId);
-      if (lastSeenAt == null || now() - lastSeenAt > petPresenceTtlMs) {
-        sessions.delete(sessionId);
+      if (lastSeenAt == null) {
         return { present: false, lastSeenAt: null };
       }
       return { present: true, lastSeenAt: new Date(lastSeenAt).toISOString() };
+    },
+    summary() {
+      pruneExpired();
+      return { present: sessions.size > 0, activeCount: sessions.size };
     }
   };
 }

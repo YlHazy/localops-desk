@@ -91,6 +91,34 @@ export async function petSessionPresent(url, fetchImpl = fetch) {
   }
 }
 
+export async function activePetPresence(url, fetchImpl = fetch) {
+  let response;
+  try {
+    response = await fetchImpl(new URL("/api/pet-presence", url), {
+      signal: AbortSignal.timeout(1_500)
+    });
+  } catch {
+    throw new Error("无法确认 LocalOps 桌宠是否已打开，已停止启动新窗口。");
+  }
+  if (!response.ok) throw new Error("LocalOps 桌宠状态接口不可用，已停止启动新窗口。");
+  let payload;
+  try {
+    payload = (await response.json())?.presence;
+  } catch {
+    throw new Error("LocalOps 桌宠状态响应无法识别，已停止启动新窗口。");
+  }
+  if (typeof payload?.present !== "boolean" || !Number.isInteger(payload?.activeCount) || payload.activeCount < 0 || payload.present !== (payload.activeCount > 0)) {
+    throw new Error("LocalOps 桌宠状态响应无法识别，已停止启动新窗口。");
+  }
+  return payload;
+}
+
+export function assertNoActivePet(presence) {
+  if (presence.present) {
+    throw new Error(`LocalOps 桌宠已经打开（${presence.activeCount} 个活动窗口），请使用现有窗口。`);
+  }
+}
+
 function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
@@ -135,6 +163,7 @@ export function launcherSummary(result) {
   ];
   if (result.browser?.pid) lines.push(`Pet window PID: ${result.browser.pid}`);
   if (result.apiProcess?.pid) lines.push(`Owned API PID: ${result.apiProcess.pid}`);
+  if (result.activePresence?.present) lines.push(`Pet: already open (${result.activePresence.activeCount} active)`);
   return lines;
 }
 
@@ -160,7 +189,10 @@ export async function launchPet({ checkOnly = false, sessionId = randomUUID() } 
 
   const baseUrl = petUrl();
   const alreadyRunning = await localOpsReady(baseUrl);
-  if (checkOnly) return { browserPath, url: baseUrl, apiAlreadyRunning: alreadyRunning, checkOnly: true };
+  if (checkOnly) {
+    const activePresence = alreadyRunning ? await activePetPresence(baseUrl) : { present: false, activeCount: 0 };
+    return { browserPath, url: baseUrl, apiAlreadyRunning: alreadyRunning, activePresence, checkOnly: true };
+  }
 
   const url = petUrl({ sessionId });
 
@@ -178,6 +210,20 @@ export async function launchPet({ checkOnly = false, sessionId = randomUUID() } 
       stopOwnedProcess(apiProcess);
       throw error;
     }
+  }
+
+  let activePresence;
+  try {
+    activePresence = await activePetPresence(url);
+  } catch (error) {
+    stopOwnedProcess(apiProcess);
+    throw error;
+  }
+  try {
+    assertNoActivePet(activePresence);
+  } catch (error) {
+    stopOwnedProcess(apiProcess);
+    throw error;
   }
 
   const profileDir = join(root, "data", "pet-browser-profile");

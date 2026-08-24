@@ -51,6 +51,7 @@
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
 - Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
 - Launcher-owned API lifetime follows a random, memory-only pet presence session rather than the short-lived Edge bootstrap PID; missing initial presence fails within 10 seconds and stale presence expires automatically.
+- A normal repeated Windows launch detects aggregate unexpired pet presence before spawning Edge, opens no duplicate window, and exposes no session ID; an unavailable or malformed aggregate response fails closed.
 - After the first production build, Windows users can double-click the checked-in desktop entry to open the same bounded pet launcher without a console window; it performs no install, elevation, service, or login-start mutation and shows a visible prerequisite checklist on failure.
 - The Windows Node 24 CI job publishes a 14-day portable artifact containing the built UI and only allow-listed standard-library runtime files; manifest verification rejects added, missing, changed, secret, dependency, log, database, or local-data files before upload.
 - Portable verification starts the API from the packaged directory with a fresh temporary data directory and proves the built home page, empty default state, and recognizable fail-closed Agent manifest.

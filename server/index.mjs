@@ -888,6 +888,9 @@ const server = createServer(async (req, res) => {
       const hosts = latestHostChecks();
       return json(res, statusSnapshot(hosts));
     }
+    if (req.method === "GET" && url.pathname === "/api/pet-presence") {
+      return json(res, { presence: petPresence.summary() });
+    }
     const petPresenceMatch = url.pathname.match(/^\/api\/pet-presence\/([^/]+)$/);
     if (petPresenceMatch && req.method === "GET") {
       return json(res, { presence: petPresence.read(decodeURIComponent(petPresenceMatch[1])) });

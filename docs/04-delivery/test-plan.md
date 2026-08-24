@@ -3,6 +3,7 @@
 - TypeScript typecheck.
 - Production build.
 - Portable package manifest, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and Windows Edge launcher check.
+- Desktop launcher tests cover identity-free aggregate presence, duplicate-window refusal, malformed presence responses, and session expiry.
 - API smoke:
   - `GET /api/status`
   - `POST /api/checks/light`
