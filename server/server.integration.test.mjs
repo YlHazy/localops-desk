@@ -55,25 +55,40 @@ async function startApi(t, extraEnv = {}) {
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   const lines = createInterface({ input: child.stdout, terminal: false });
-  const deadline = Date.now() + 5000;
-  let port = null;
-  while (Date.now() < deadline && port == null) {
-    const winner = await Promise.race([
-      once(lines, "line").then(([line]) => ({ line })),
-      once(child, "exit").then(([code]) => ({ code })),
-      new Promise((resolve) => setTimeout(() => resolve({}), 100))
-    ]);
-    const match = winner.line?.match(/127\.0\.0\.1:(\d+)/);
-    if (match) port = Number(match[1]);
-    if (winner.code != null) throw new Error(`LocalOps API exited with ${winner.code}: ${stderr}`);
-  }
-  if (port == null) throw new Error(`Timed out starting LocalOps API: ${stderr}`);
   t.after(async () => {
-    if (child.exitCode == null) {
+    if (child.exitCode == null && child.signalCode == null) {
+      const exited = once(child, "exit");
       child.kill();
-      await once(child, "exit");
+      await exited;
     }
+    lines.close();
     rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  const port = await new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      lines.off("line", onLine);
+      child.off("exit", onExit);
+      child.off("error", onError);
+    };
+    const settle = (callback, value) => {
+      cleanup();
+      callback(value);
+    };
+    const onLine = (line) => {
+      const match = line.match(/127\.0\.0\.1:(\d+)/);
+      if (match) settle(resolve, Number(match[1]));
+    };
+    const onExit = (code) => settle(reject, new Error(`LocalOps API exited with ${code}: ${stderr}`));
+    const onError = (error) => settle(reject, new Error(`Failed to start LocalOps API: ${error.message}`));
+    const timeout = setTimeout(() => {
+      settle(reject, new Error(`Timed out starting LocalOps API: ${stderr}`));
+    }, 15_000);
+
+    lines.on("line", onLine);
+    child.once("exit", onExit);
+    child.once("error", onError);
   });
   return { child, base: `http://127.0.0.1:${port}`, dataDir };
 }
