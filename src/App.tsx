@@ -27,6 +27,7 @@ import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, 
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
+import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
@@ -338,7 +339,7 @@ export function App() {
       setDashboard(status);
       setNow(syncedAt);
       setLastPetSyncAt(syncedAt);
-      setSelectedHostId((prev) => prev ?? status.hosts[0]?.id ?? null);
+      setSelectedHostId((previous) => retainFocusSelection(status.hosts, previous));
       return true;
     }
     const result = await resolveLatestRequest(loadGate.current, requestToken, fetchDeskSnapshot(api));
@@ -350,7 +351,7 @@ export function App() {
     setScheduler(snapshot.scheduler);
     setStartup(snapshot.startup);
     setSchedulerForm((currentDraft) => schedulerDraftAfterSync(currentDraft, snapshot.scheduler, preserveSchedulerForm));
-    setSelectedHostId((prev) => prev ?? snapshot.status.hosts[0]?.id ?? null);
+    setSelectedHostId((previous) => retainFocusSelection(snapshot.status.hosts, previous));
     const syncedAt = Date.now();
     setLastDeskSyncAt(syncedAt);
     setNow(syncedAt);
@@ -464,16 +465,10 @@ export function App() {
     () => dashboard ? trustworthyDashboard(dashboard, now) : null,
     [dashboard, now]
   );
-  const selectedHost = useMemo(
-    () => displayDashboard?.hosts.find((host) => host.id === selectedHostId) ?? displayDashboard?.hosts[0] ?? null,
-    [displayDashboard, selectedHostId]
-  );
-
   const incidentHosts = useMemo(() => displayDashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [displayDashboard]);
-  const priorityHosts = useMemo(() => {
-    const rank: Record<Status, number> = { critical: 0, warning: 1, unknown: 2, healthy: 3 };
-    return [...(displayDashboard?.hosts ?? [])].sort((left, right) => rank[left.status] - rank[right.status] || left.name.localeCompare(right.name));
-  }, [displayDashboard]);
+  const priorityHosts = useMemo(() => prioritizeHosts(displayDashboard?.hosts ?? []), [displayDashboard]);
+  const selectedHost = useMemo(() => selectFocusHost(priorityHosts, selectedHostId), [priorityHosts, selectedHostId]);
+  const manuallyFocused = Boolean(selectedHostId && selectedHost?.id === selectedHostId && selectedHost.id !== priorityHosts[0]?.id);
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
   const currentMessage = useMemo(
     () => overallMessage(
@@ -495,6 +490,10 @@ export function App() {
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
+
+  function chooseFocusHost(hostId: string) {
+    setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
+  }
 
   async function copyBrief() {
     if (!selectedBrief) return;
@@ -949,9 +948,14 @@ export function App() {
             <h2>{currentMessage.title}</h2>
             <p>{currentMessage.description}</p>
             <div className="brief-focus">
-              <span>当前焦点</span>
+              <span>{manuallyFocused ? "手动查看 · 全局优先级未改变" : "自动焦点 · 跟随最高优先级"}</span>
               <strong>{selectedHost.name}</strong>
               <em>{freshness.state === "unknown" && dashboard.observedAt ? `上次结果（已过期）：${selectedHost.summary}` : selectedHost.summary}</em>
+              {manuallyFocused ? (
+                <button className="brief-focus-return" onClick={() => setSelectedHostId(null)}>
+                  回到最高优先级 · {priorityHosts[0]?.name}
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="guardian-decision">
@@ -973,7 +977,7 @@ export function App() {
           {statusOrder.map((status) => (
             <button className={`status-tile ${status}`} key={status} onClick={() => {
               const target = priorityHosts.find((host) => host.status === status);
-              if (target) setSelectedHostId(target.id);
+              if (target) chooseFocusHost(target.id);
             }}>
               <span>{statusLabels[status]}</span>
               <strong>{currentDashboard.counts[status] ?? 0}</strong>
@@ -1024,7 +1028,7 @@ export function App() {
               </div>
               {incidentHosts.length ? (
                 priorityHosts.filter((host) => host.status !== "healthy").map((host) => (
-                  <button key={host.id} className={host.id === selectedHost.id ? "selected" : ""} onClick={() => setSelectedHostId(host.id)}>
+                  <button key={host.id} className={host.id === selectedHost.id ? "selected" : ""} onClick={() => chooseFocusHost(host.id)}>
                     <div>
                       <strong>{host.name}</strong>
                       <span>{host.environment} · {host.role}</span>
@@ -1115,7 +1119,7 @@ export function App() {
                     key={host.id}
                     host={host}
                     selected={host.id === selectedHost.id}
-                    onSelect={() => setSelectedHostId(host.id)}
+                    onSelect={() => chooseFocusHost(host.id)}
                   />
                 ))}
               </div>

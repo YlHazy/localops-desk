@@ -640,6 +640,18 @@ h3 {
 .brief-focus > span { grid-column: 1 / -1; }
 .brief-focus strong { color: #fff; }
 .brief-focus em { overflow: hidden; color: #b9c8ca; font-size: 13px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.brief-focus-return {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 6px 9px;
+  color: #d9f2eb;
+  border: 1px solid rgba(142, 217, 194, 0.26);
+  border-radius: 7px;
+  background: rgba(142, 217, 194, 0.08);
+  font-size: 11px;
+  font-weight: 800;
+}
+.brief-focus-return:hover { background: rgba(142, 217, 194, 0.16); }
 
 .guardian-decision {
   display: flex;

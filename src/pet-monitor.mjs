@@ -37,12 +37,6 @@ export function worseningNotice(previous, current) {
   };
 }
 
-export function selectFocusHost(hosts, selectedHostId) {
-  if (!Array.isArray(hosts) || hosts.length === 0) return null;
-  if (!selectedHostId) return hosts[0];
-  return hosts.find((host) => host.id === selectedHostId) ?? hosts[0];
-}
-
 export function petSnapshotTrust(hasError, stale, hasObservation) {
   if (hasError) {
     return {

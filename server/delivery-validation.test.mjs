@@ -98,6 +98,19 @@ test("desk, pet, runtime, and portable build share one resource judgment contrac
   assert.match(portableSource, /shared\/evidence-judgment\.mjs/);
 });
 
+test("desk and pet share automatic priority focus instead of trusting API row order", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const prioritySource = readFileSync(new URL("../src/host-priority.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /prioritizeHosts\(displayDashboard\?\.hosts \?\? \[\]\)/);
+  assert.match(appSource, /selectFocusHost\(priorityHosts, selectedHostId\)/);
+  assert.match(appSource, /手动查看 · 全局优先级未改变/);
+  assert.match(appSource, /回到最高优先级/);
+  assert.match(petSource, /prioritizeHosts\(dashboard\.hosts/);
+  assert.match(prioritySource, /critical: 0, warning: 1, unknown: 2, healthy: 3/);
+  assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

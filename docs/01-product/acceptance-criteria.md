@@ -23,9 +23,11 @@
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
 - The compact companion uses the transparent Sentry Otter cutout as a stable product identity while live health remains encoded by explicit evidence copy and the separate status signal; the UI asset is never presented as an installable Codex sprite.
 - The pet's evidence signal, copy, and accent reflect the worst current host state while the character identity remains visually stable.
+- The full desk and pet derive their automatic focus from one shared severity order—critical, warning, unknown, healthy—rather than API row order. With no deliberate selection, a newly worse host becomes the focus after the next read.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.
 - Selecting a non-priority host changes only the target for refresh and discussion; the pet's mood and headline continue to represent the worst current global state.
 - A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
+- The full desk uses the same explicit manual-focus contract: deliberate non-priority selection is labeled without changing the global headline, and one action restores automatic highest-priority focus. A removed selection falls back safely after refresh.
 - While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
 - System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
 - A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, runtime, and resource conclusions instead of retaining any healthy/failed category from expired evidence.

@@ -2,7 +2,8 @@ import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Message
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, localRecoveryCopy } from "./desk-sync.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
-import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
+import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
+import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import type { DashboardStatus, Status } from "./types";
@@ -12,13 +13,6 @@ const statusCopy: Record<Status, { label: string; line: string }> = {
   warning: { label: "有事要看", line: "有一处信号不太对，最高优先级已排在列表顶部。" },
   critical: { label: "需要处理", line: "发现明确故障，最高优先级已排在列表顶部。" },
   unknown: { label: "等待检查", line: "还没有足够证据，先让我巡检一次。" }
-};
-
-const statusRank: Record<Status, number> = {
-  critical: 0,
-  warning: 1,
-  unknown: 2,
-  healthy: 3
 };
 
 const notificationPreferenceKey = "localops.pet.notifications";
@@ -120,9 +114,8 @@ export function PetMode({
   const observedAt = dashboard.observedAt ? new Date(dashboard.observedAt).getTime() : Number.NaN;
   const stale = !Number.isFinite(observedAt) || now - observedAt > dashboard.staleAfterMs;
   const hosts = useMemo(
-    () => dashboard.hosts
-      .map((host) => stale ? { ...host, status: "unknown" as const } : host)
-      .sort((left, right) => statusRank[left.status] - statusRank[right.status] || left.name.localeCompare(right.name)),
+    () => prioritizeHosts(dashboard.hosts
+      .map((host) => stale ? { ...host, status: "unknown" as const } : host)),
     [dashboard.hosts, stale]
   );
   const priorityHost = hosts[0];
@@ -250,7 +243,7 @@ export function PetMode({
               key={host.id}
               aria-current={host.id === focusHost?.id ? "true" : undefined}
               onClick={() => {
-                setSelectedHostId(host.id === priorityHost?.id ? null : host.id);
+                setSelectedHostId(manualFocusSelection(hosts, host.id));
                 setExpanded(false);
               }}
             >

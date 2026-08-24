@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { trustworthyDashboard } from "./desk-sync.mjs";
-import { monitorSignal, petSnapshotTrust, selectFocusHost, worseningNotice } from "./pet-monitor.mjs";
+import { selectFocusHost } from "./host-priority.mjs";
+import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.mjs";
 
 function dashboard(counts) {
   return { counts };
