@@ -23,7 +23,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
@@ -158,14 +158,18 @@ function friendlyEvidence(value: string) {
   return shortSignal(value);
 }
 
-function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
-  if (!dashboard.observedAt) return { state: "unknown", label: "没有观测证据" };
-  const ageMs = now - new Date(dashboard.observedAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs > dashboard.staleAfterMs) {
+function evidenceFreshnessAt(observedAt: string | null, staleAfterMs: number, now = Date.now()) {
+  if (!observedAt) return { state: "unknown", label: "没有观测证据" };
+  const ageMs = now - new Date(observedAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs > staleAfterMs) {
     return { state: "unknown", label: "证据已过期" };
   }
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
   return { state: "fresh", label: minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据` };
+}
+
+function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
+  return evidenceFreshnessAt(dashboard.observedAt, dashboard.staleAfterMs, now);
 }
 
 function StatusPill({ status }: { status: Status }) {
@@ -470,6 +474,12 @@ export function App() {
   const selectedHost = useMemo(() => selectFocusHost(priorityHosts, selectedHostId), [priorityHosts, selectedHostId]);
   const manuallyFocused = Boolean(selectedHostId && selectedHost?.id === selectedHostId && selectedHost.id !== priorityHosts[0]?.id);
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
+  const selectedFreshness = useMemo(
+    () => dashboard && selectedHost
+      ? evidenceFreshnessAt(hostEvidenceTimestamp(dashboard, selectedHost), dashboard.staleAfterMs, now)
+      : { state: "unknown", label: "没有观测证据" },
+    [dashboard, selectedHost, now]
+  );
   const currentMessage = useMemo(
     () => overallMessage(
       displayDashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 },
@@ -478,8 +488,8 @@ export function App() {
     [displayDashboard, freshness.state, dashboard?.observedAt]
   );
   const selectedGuidance = useMemo(
-    () => selectedHost ? hostGuidance(selectedHost, freshness.state === "fresh") : null,
-    [selectedHost, freshness.state]
+    () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
+    [selectedHost, selectedFreshness.state]
   );
   const selectedBrief = useMemo(() => displayDashboard && selectedHost ? discussionBrief(displayDashboard, selectedHost, now) : "", [displayDashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
@@ -872,7 +882,7 @@ export function App() {
           <div>
             <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
             <h1>先看结论，再决定要不要动</h1>
-            <p>页面刷新：{formatTime(dashboard.generatedAt)} · {freshness.label}</p>
+            <p>页面刷新：{formatTime(dashboard.generatedAt)} · 最近一次观测：{freshness.label}</p>
             {deskSyncState === "offline" ? (
               <section className="sync-recovery-card" aria-live="polite" aria-label="本地状态恢复">
                 <AlertTriangle size={17} aria-hidden="true" />
@@ -930,7 +940,7 @@ export function App() {
         ) : null}
 
         <section className={`guardian-brief ${currentDashboard.counts.critical ? "critical" : currentDashboard.counts.warning ? "warning" : currentDashboard.counts.unknown ? "unknown" : "healthy"}`}>
-          {freshness.state === "unknown" && dashboard.observedAt ? (
+          {selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? (
             <div className="evidence-expiry-seal" role="status">
               <AlertTriangle size={19} />
               <div>
@@ -944,13 +954,13 @@ export function App() {
             </div>
           ) : null}
           <div className="guardian-brief-copy">
-            <span className="brief-index">GUARDIAN BRIEF · {freshness.state === "fresh" ? "LIVE" : "STALE"}</span>
+            <span className="brief-index">GUARDIAN BRIEF · {selectedFreshness.state === "fresh" ? "LIVE" : "STALE"}</span>
             <h2>{currentMessage.title}</h2>
             <p>{currentMessage.description}</p>
             <div className="brief-focus">
               <span>{manuallyFocused ? "手动查看 · 全局优先级未改变" : "自动焦点 · 跟随最高优先级"}</span>
               <strong>{selectedHost.name}</strong>
-              <em>{freshness.state === "unknown" && dashboard.observedAt ? `上次结果（已过期）：${selectedHost.summary}` : selectedHost.summary}</em>
+              <em>{selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? `上次结果（已过期）：${selectedHost.summary}` : selectedHost.summary}</em>
               {manuallyFocused ? (
                 <button className="brief-focus-return" onClick={() => setSelectedHostId(null)}>
                   回到最高优先级 · {priorityHosts[0]?.name}
@@ -1001,11 +1011,11 @@ export function App() {
                   <span>01</span><CheckCircle2 size={18} /><strong>服务器已登记</strong><small>{dashboard.hosts.length} 台对象，只保存明确提交的配置</small>
                 </button>
                 <button
-                  className={freshness.state === "fresh" ? "complete" : "current"}
+                  className={selectedFreshness.state === "fresh" ? "complete" : "current"}
                   disabled={operationBusy}
                   onClick={() => canCollectEvidence ? runLightCheck(selectedHost.id) : startEditHost(selectedHost)}
                 >
-                  <span>02</span>{freshness.state === "fresh" ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{freshness.state === "fresh" ? "已有当前证据" : dashboard.observedAt ? "重新取得证据" : canCollectEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{dashboard.practiceMode ? "纯离线生成练习证据" : hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
+                  <span>02</span>{selectedFreshness.state === "fresh" ? <CheckCircle2 size={18} /> : <RefreshCcw size={18} />}<strong>{selectedFreshness.state === "fresh" ? "已有当前证据" : selectedHost.lastCheckedAt ? "重新取得证据" : canCollectEvidence ? "取得第一份证据" : "选择证据来源"}</strong><small>{dashboard.practiceMode ? "纯离线生成练习证据" : hasConnectionEvidence ? "HTTP / SSH 按需只读检查" : "补充 Health URL 或 SSH alias"}</small>
                 </button>
                 <button className={scheduler?.enabled ? "complete" : ""} onClick={() => setSelectedTab("scheduler")}>
                   <span>03</span>{scheduler?.enabled ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<strong>{scheduler?.enabled ? "自动巡检已开启" : "开启自动巡检"}</strong><small>本地调度，可随时暂停与调整频率</small>
@@ -1096,7 +1106,7 @@ export function App() {
                 <MetricBar label="磁盘" value={selectedHost.diskPercent} />
               </div>
               <div className="evidence">
-                <h3>{freshness.state === "unknown" && dashboard.observedAt ? "上次检查说明（已过期）" : "检查说明"}</h3>
+                <h3>{selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? "上次检查说明（已过期）" : "检查说明"}</h3>
                 {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
               </div>
               <div className="quick-actions">

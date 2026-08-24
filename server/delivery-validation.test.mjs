@@ -55,11 +55,16 @@ test("report sharing keeps internal and minimal-disclosure paths visibly separat
 test("the desk cannot keep a healthy headline after evidence expires", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const discussionSource = readFileSync(new URL("../src/discussion-brief.mjs", import.meta.url), "utf8");
   assert.match(appSource, /trustworthyDashboard\(dashboard, now\)/);
   assert.match(appSource, /EVIDENCE HOLD \/ 证据封条/);
   assert.match(appSource, /上次结果已过期，不能证明当前正常/);
   assert.match(appSource, /currentDashboard\.counts/);
+  assert.match(appSource, /hostEvidenceTimestamp\(dashboard, selectedHost\)/);
   assert.match(appSource, /<PetMode[\s\S]*now=\{now\}/);
+  assert.match(petSource, /trustworthyDashboard\(dashboard, now\)/);
+  assert.match(petSource, /hostEvidenceIsFresh\(dashboard, priorityHost, now\)/);
+  assert.match(discussionSource, /hostEvidenceIsFresh\(dashboard, host, now\)/);
   assert.match(petSource, /dashboard: DashboardStatus;\s+now: number;/);
   assert.doesNotMatch(petSource, /useState\(\(\) => Date\.now\(\)\)/);
   assert.doesNotMatch(appSource, /dashboard\.counts/);
@@ -93,7 +98,7 @@ test("desk, pet, runtime, and portable build share one resource judgment contrac
   const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
   assert.match(appSource, /resourceSignalStatus\(selectedHost\)/);
   assert.match(appSource, /resourceSignalSummary\(selectedHost\)/);
-  assert.match(petSource, /hostGuidance\(priorityHost, !stale\)/);
+  assert.match(petSource, /hostGuidance\(priorityHost, priorityFresh\)/);
   assert.match(runtimeSource, /classifyCollectedStatus\(http\.status, ssh\)/);
   assert.match(portableSource, /shared\/evidence-judgment\.mjs/);
 });
@@ -106,7 +111,7 @@ test("desk and pet share automatic priority focus instead of trusting API row or
   assert.match(appSource, /selectFocusHost\(priorityHosts, selectedHostId\)/);
   assert.match(appSource, /手动查看 · 全局优先级未改变/);
   assert.match(appSource, /回到最高优先级/);
-  assert.match(petSource, /prioritizeHosts\(dashboard\.hosts/);
+  assert.match(petSource, /prioritizeHosts\(trustedDashboard\.hosts\)/);
   assert.match(prioritySource, /critical: 0, warning: 1, unknown: 2, healthy: 3/);
   assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);
 });

@@ -59,7 +59,11 @@ test("pet snapshot trust never presents retained or expired evidence as current"
   });
   assert.equal(petSnapshotTrust(true, false, false).state, "offline");
   assert.equal(petSnapshotTrust(false, false, false).state, "unknown");
-  assert.equal(petSnapshotTrust(false, true, true).state, "stale");
+  assert.deepEqual(petSnapshotTrust(false, true, true), {
+    state: "stale",
+    label: "存在待更新对象 · 不能视为全部当前",
+    current: false
+  });
   assert.deepEqual(petSnapshotTrust(false, false, true), {
     state: "current",
     label: "证据仍在有效期内",
@@ -85,4 +89,21 @@ test("evidence expiry reaches aggregate pet notifications exactly once", () => {
   assert.match(notice.body, /待确认 2/);
   assert.doesNotMatch(notice.body, /private-one|private-two/);
   assert.equal(worseningNotice(expired, expired), null);
+});
+
+test("pet priority and counts downgrade only the host whose evidence expired", () => {
+  const dashboard = {
+    observedAt: "2026-08-24T00:10:00.000Z",
+    staleAfterMs: 5 * 60_000,
+    counts: { healthy: 1, warning: 0, critical: 1, unknown: 0 },
+    hosts: [
+      { id: "old-critical", name: "private-old", status: "critical", lastCheckedAt: "2026-08-24T00:00:00.000Z" },
+      { id: "fresh-healthy", name: "private-fresh", status: "healthy", lastCheckedAt: "2026-08-24T00:10:00.000Z" }
+    ]
+  };
+  const view = trustworthyDashboard(dashboard, Date.parse("2026-08-24T00:11:00.000Z"));
+  assert.deepEqual(view.counts, { healthy: 1, warning: 0, critical: 0, unknown: 1 });
+  assert.equal(monitorSignal(view).level, "unknown");
+  assert.equal(view.hosts.find((host) => host.id === "old-critical").status, "unknown");
+  assert.equal(view.hosts.find((host) => host.id === "fresh-healthy").status, "healthy");
 });

@@ -30,6 +30,7 @@
   - Source delivery checks require both desk and pet to use the shared priority module, prohibit assigning the first API row as implicit focus, and keep the desk's manual-focus return action visible.
   - Local-status recovery tests require desk and pet copy to retain the last successful read age, disclose the 30-second automatic retry, and state that immediate retry does not inspect or change a server.
   - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
+  - Mixed-age evidence tests prove a fresh check on one host cannot revive another host's expired status or categorized signals; desk counts, selected guidance, pet priority/notification input, and minimal-disclosure discussion use each host's own timestamp.
   - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, runtime, and resource categories to downgrade together and reject any expired healthy/failed wording.
 - Security smoke:
   - Search outputs for obvious secret placeholders.

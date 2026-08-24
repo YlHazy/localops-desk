@@ -63,6 +63,7 @@
 - The Windows Node 24 CI job publishes a 14-day portable artifact containing the built UI and only allow-listed standard-library runtime files; manifest verification rejects added, missing, changed, secret, dependency, log, database, or local-data files before upload.
 - Portable verification starts the API from the packaged directory with a fresh temporary data directory and proves the built home page, empty default state, and recognizable fail-closed Agent manifest.
 - Evidence older than the configured freshness window is shown as unknown across the full desk and pet: headline, aggregate counts, host pills, setup progress, and Codex discussion cannot retain a healthy claim. Prior readings remain visibly labeled as expired reference only, with an explicit action to obtain new evidence. The footer uses observation time rather than response generation time.
+- Freshness is evaluated per host from that host's own last-check timestamp. Refreshing one server never revives another server's expired HTTP, SSH, runtime, resource, guidance, pet, notification, or minimal-disclosure categories; mixed-age dashboards retain fresh hosts while downgrading only non-current hosts and recomputing counts.
 - A pet or Codex-triggered light check refreshes exactly one host.
 - Motion respects `prefers-reduced-motion`; keyboard focus remains visible.
 - Full-desk keyboard users can skip the sidebar, interactive focus has an explicit high-contrast ring, and asynchronous errors are announced as alerts.

@@ -38,5 +38,7 @@ export function fetchDeskSnapshot(request: DeskReadRequest): Promise<DeskSnapsho
 export function fetchPetSnapshot(request: DeskReadRequest): Promise<import("./types").DashboardStatus>;
 export function collectionModeCopy(dashboard: import("./types").DashboardStatus): CollectionModeCopy;
 export function dashboardEvidenceIsFresh(dashboard: import("./types").DashboardStatus, now?: number): boolean;
+export function hostEvidenceTimestamp(dashboard: import("./types").DashboardStatus, host: Partial<import("./types").HostState>): string | null;
+export function hostEvidenceIsFresh(dashboard: import("./types").DashboardStatus, host: Partial<import("./types").HostState>, now?: number): boolean;
 export function trustworthyDashboard(dashboard: import("./types").DashboardStatus, now?: number): import("./types").DashboardStatus;
 export function schedulerDraftAfterSync(currentDraft: SchedulerDraft, scheduler: import("./types").SchedulerState, preserveDraft: boolean): SchedulerDraft;

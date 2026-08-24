@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, MessageCircle, RefreshCcw, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, localRecoveryCopy } from "./desk-sync.mjs";
+import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
 import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.mjs";
@@ -111,28 +111,24 @@ export function PetMode({
     };
   }, [petSessionId]);
 
-  const observedAt = dashboard.observedAt ? new Date(dashboard.observedAt).getTime() : Number.NaN;
-  const stale = !Number.isFinite(observedAt) || now - observedAt > dashboard.staleAfterMs;
-  const hosts = useMemo(
-    () => prioritizeHosts(dashboard.hosts
-      .map((host) => stale ? { ...host, status: "unknown" as const } : host)),
-    [dashboard.hosts, stale]
-  );
+  const trustedDashboard = useMemo(() => trustworthyDashboard(dashboard, now), [dashboard, now]);
+  const hosts = useMemo(() => prioritizeHosts(trustedDashboard.hosts), [trustedDashboard]);
   const priorityHost = hosts[0];
   const focusHost = selectFocusHost(hosts, selectedHostId);
-  const priorityGuidance = priorityHost ? hostGuidance(priorityHost, !stale) : null;
-  const focusGuidance = focusHost ? hostGuidance(focusHost, !stale) : null;
+  const priorityFresh = priorityHost ? hostEvidenceIsFresh(dashboard, priorityHost, now) : false;
+  const focusFresh = focusHost ? hostEvidenceIsFresh(dashboard, focusHost, now) : false;
+  const priorityGuidance = priorityHost ? hostGuidance(priorityHost, priorityFresh) : null;
+  const focusGuidance = focusHost ? hostGuidance(focusHost, focusFresh) : null;
+  const hasNonCurrentHost = dashboard.hosts.some((host) => !hostEvidenceIsFresh(dashboard, host, now));
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
-  const snapshotTrust = petSnapshotTrust(Boolean(syncError), stale, Boolean(dashboard.observedAt));
+  const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
   const collectionMode = collectionModeCopy(dashboard);
-  const visibleCounts = stale
-    ? { healthy: 0, warning: 0, critical: 0, unknown: hosts.length }
-    : dashboard.counts;
+  const visibleCounts = trustedDashboard.counts;
 
   useEffect(() => {
-    const current = monitorSignal(dashboard, Boolean(syncError));
+    const current = monitorSignal(trustedDashboard, Boolean(syncError));
     if (notificationsEnabled && Notification.permission === "granted") {
       const notice = worseningNotice(previousSignal.current, current);
       if (notice) {
@@ -141,7 +137,7 @@ export function PetMode({
       }
     }
     previousSignal.current = current;
-  }, [dashboard, syncError, notificationsEnabled]);
+  }, [trustedDashboard, syncError, notificationsEnabled]);
 
   async function toggleNotifications() {
     if (!notificationsSupported) {
@@ -192,8 +188,8 @@ export function PetMode({
           ? "本地值守连接中断。服务器没有因此被检查或改动。"
           : dashboard.hosts.length === 0
             ? "尚未配置服务器，请先打开控制台添加一台。"
-            : stale
-              ? "检查结果已过期，先刷新最需要关注的一台。"
+            : priorityHost && !priorityFresh
+              ? "最高优先级对象的证据不是当前状态，先刷新这一台。"
               : priorityGuidance?.reason ?? copy.line}</p>
       </section>
 

@@ -1,4 +1,4 @@
-import { dashboardEvidenceIsFresh } from "./desk-sync.mjs";
+import { hostEvidenceIsFresh, hostEvidenceTimestamp } from "./desk-sync.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { httpSignalStatus, resourceSignalStatus, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 
@@ -18,12 +18,13 @@ const signalLabels = {
   resource: "资源压力"
 };
 
-function freshnessLabel(dashboard, now) {
-  if (!dashboard.observedAt) return "没有观测证据";
-  const ageMs = now - new Date(dashboard.observedAt).getTime();
-  if (!dashboardEvidenceIsFresh(dashboard, now)) return "证据已过期";
+function freshnessLabel(dashboard, host, now) {
+  const timestamp = hostEvidenceTimestamp(dashboard, host);
+  if (!timestamp) return "当前对象没有观测证据";
+  const ageMs = now - new Date(timestamp).getTime();
+  if (!hostEvidenceIsFresh(dashboard, host, now)) return "当前对象证据已过期";
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
-  return minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据`;
+  return minutes === 0 ? "当前对象刚刚取得证据" : `当前对象 ${minutes} 分钟前取得证据`;
 }
 
 function shareableSignal(label, status) {
@@ -37,7 +38,7 @@ function shareableSignal(label, status) {
 }
 
 export function discussionBrief(dashboard, host, now = Date.now()) {
-  const fresh = dashboardEvidenceIsFresh(dashboard, now);
+  const fresh = hostEvidenceIsFresh(dashboard, host, now);
   const status = fresh && statusLabels[host.status] ? host.status : "unknown";
   const guidance = hostGuidance({ ...host, status }, fresh);
   const evidence = [
@@ -50,7 +51,7 @@ export function discussionBrief(dashboard, host, now = Date.now()) {
     "LocalOps 值守讨论摘要",
     "对象：当前选中的 1 台服务器（本地名称、环境和角色已省略）",
     `状态：${statusLabels[status]}`,
-    `证据时效：${freshnessLabel(dashboard, now)}`,
+    `证据时效：${freshnessLabel(dashboard, host, now)}`,
     `当前判断：${guidance.reason}`,
     "分类证据：",
     evidence,

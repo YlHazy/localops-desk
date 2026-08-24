@@ -103,8 +103,29 @@ test("expired discussion evidence downgrades every shareable signal atomically",
   }, Date.parse("2026-08-24T00:01:00.001Z"));
 
   assert.match(brief, /状态：未知/);
-  assert.match(brief, /证据时效：证据已过期/);
+  assert.match(brief, /证据时效：当前对象证据已过期/);
   assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 4);
   assert.doesNotMatch(brief, /有效证据显示正常|有效证据显示失败|存在需要复核的信号/);
   assert.match(brief, /未知状态不按正常处理/);
+});
+
+test("a fresh check on another host cannot revive this host's expired categories", () => {
+  const brief = discussionBrief({
+    observedAt: "2026-08-24T00:10:00.000Z",
+    staleAfterMs: 5 * 60_000
+  }, {
+    status: "healthy",
+    lastCheckedAt: "2026-08-24T00:00:00.000Z",
+    httpStatus: "HTTP 200 from private.example.test",
+    sshStatus: "ok",
+    dockerStatus: "docker checked",
+    cpuPercent: 20,
+    memoryPercent: 30,
+    diskPercent: 40
+  }, Date.parse("2026-08-24T00:11:00.000Z"));
+
+  assert.match(brief, /状态：未知/);
+  assert.match(brief, /当前对象证据已过期/);
+  assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 4);
+  assert.doesNotMatch(brief, /有效证据显示正常|HTTP 200|private\.example\.test/);
 });

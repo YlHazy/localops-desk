@@ -49,7 +49,7 @@ export function petSnapshotTrust(hasError, stale, hasObservation) {
     return { state: "unknown", label: "尚未取得观测证据", current: false };
   }
   if (stale) {
-    return { state: "stale", label: "证据已过期 · 不能视为当前状态", current: false };
+    return { state: "stale", label: "存在待更新对象 · 不能视为全部当前", current: false };
   }
   return { state: "current", label: "证据仍在有效期内", current: true };
 }

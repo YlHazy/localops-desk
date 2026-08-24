@@ -82,17 +82,37 @@ export function dashboardEvidenceIsFresh(dashboard, now = Date.now()) {
     && now - observedAt <= dashboard.staleAfterMs;
 }
 
+export function hostEvidenceTimestamp(dashboard, host) {
+  if (host && Object.prototype.hasOwnProperty.call(host, "lastCheckedAt")) {
+    return host.lastCheckedAt || null;
+  }
+  return dashboard?.observedAt || null;
+}
+
+export function hostEvidenceIsFresh(dashboard, host, now = Date.now()) {
+  const timestamp = hostEvidenceTimestamp(dashboard, host);
+  const observedAt = timestamp ? new Date(timestamp).getTime() : Number.NaN;
+  return Number.isFinite(observedAt)
+    && Number.isFinite(dashboard?.staleAfterMs)
+    && dashboard.staleAfterMs >= 0
+    && now - observedAt <= dashboard.staleAfterMs;
+}
+
 export function trustworthyDashboard(dashboard, now = Date.now()) {
-  if (dashboardEvidenceIsFresh(dashboard, now)) return dashboard;
+  let changed = false;
+  const hosts = dashboard.hosts.map((host) => {
+    if (hostEvidenceIsFresh(dashboard, host, now) || host.status === "unknown") return host;
+    changed = true;
+    return { ...host, status: "unknown" };
+  });
+  if (!changed) return dashboard;
   return {
     ...dashboard,
-    counts: {
-      healthy: 0,
-      warning: 0,
-      critical: 0,
-      unknown: dashboard.hosts.length
-    },
-    hosts: dashboard.hosts.map((host) => ({ ...host, status: "unknown" }))
+    counts: hosts.reduce((counts, host) => {
+      counts[host.status] = (counts[host.status] || 0) + 1;
+      return counts;
+    }, { healthy: 0, warning: 0, critical: 0, unknown: 0 }),
+    hosts
   };
 }
 

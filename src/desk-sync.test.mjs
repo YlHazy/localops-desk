@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 
 test("desk sync copy distinguishes initial, running, and recovering states", () => {
   assert.match(deskSyncCopy("idle", null, 10_000).label, /首次同步/);
@@ -107,4 +107,30 @@ test("fresh evidence keeps the authoritative dashboard unchanged", () => {
     hosts: [{ id: "healthy", status: "healthy" }]
   };
   assert.equal(trustworthyDashboard(dashboard, Date.parse("2026-08-24T00:01:00.000Z")), dashboard);
+});
+
+test("one fresh host never revives another host's expired evidence", () => {
+  const dashboard = {
+    observedAt: "2026-08-24T00:10:00.000Z",
+    staleAfterMs: 5 * 60_000,
+    counts: { healthy: 2, warning: 0, critical: 0, unknown: 0 },
+    hosts: [
+      { id: "old", status: "healthy", lastCheckedAt: "2026-08-24T00:00:00.000Z", summary: "old pass" },
+      { id: "fresh", status: "healthy", lastCheckedAt: "2026-08-24T00:10:00.000Z", summary: "fresh pass" }
+    ]
+  };
+  const now = Date.parse("2026-08-24T00:11:00.000Z");
+  const view = trustworthyDashboard(dashboard, now);
+  assert.equal(hostEvidenceIsFresh(dashboard, dashboard.hosts[0], now), false);
+  assert.equal(hostEvidenceIsFresh(dashboard, dashboard.hosts[1], now), true);
+  assert.deepEqual(view.hosts.map((host) => host.status), ["unknown", "healthy"]);
+  assert.deepEqual(view.counts, { healthy: 1, warning: 0, critical: 0, unknown: 1 });
+  assert.equal(view.hosts[0].summary, "old pass");
+  assert.equal(dashboard.hosts[0].status, "healthy");
+});
+
+test("an explicit never-checked host does not inherit the dashboard timestamp", () => {
+  const dashboard = { observedAt: "2026-08-24T00:10:00.000Z", staleAfterMs: 60_000 };
+  assert.equal(hostEvidenceIsFresh(dashboard, { lastCheckedAt: null }, Date.parse("2026-08-24T00:10:30.000Z")), false);
+  assert.equal(hostEvidenceIsFresh(dashboard, {}, Date.parse("2026-08-24T00:10:30.000Z")), true);
 });
