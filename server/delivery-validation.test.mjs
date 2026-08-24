@@ -132,6 +132,21 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);
 });
 
+test("batch checks, scheduler, desk, pet, and portable build share collection coverage", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  const coverageSource = readFileSync(new URL("../shared/collection-coverage.mjs", import.meta.url), "utf8");
+  const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /batchCoverage\.collectible/);
+  assert.match(appSource, /台将跳过/);
+  assert.match(petSource, /collectionCoverage\(dashboard\.mode, dashboard\.hosts/);
+  assert.match(serverSource, /hostCollectionPlan\(mode, hostItem\)\.canCollect/);
+  assert.match(serverSource, /NO_COLLECTIBLE_EVIDENCE/);
+  assert.doesNotMatch(coverageSource, /tags\.includes/);
+  assert.match(portableSource, /shared\/collection-coverage\.mjs/);
+});
+
 function pngFixture({ width, height, colorType }) {
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),

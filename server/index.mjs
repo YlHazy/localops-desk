@@ -4,6 +4,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
 import { collectHost, demoHosts, readOnlySshPreview } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
@@ -235,10 +236,10 @@ function readBody(req) {
 }
 
 function getHosts() {
-  return db.prepare("SELECT * FROM hosts ORDER BY environment, name").all().map((hostRow) => ({
-    ...hostRow,
-    tags: JSON.parse(hostRow.tags)
-  }));
+  return db.prepare("SELECT * FROM hosts ORDER BY environment, name").all().map((hostRow) => {
+    const hostItem = { ...hostRow, tags: JSON.parse(hostRow.tags) };
+    return { ...hostItem, isOfflineDemo: isManagedOfflineDemoHost(hostItem) };
+  });
 }
 
 const offlineDemoIds = new Set(demoHosts.map((hostItem) => hostItem.id));
@@ -431,6 +432,7 @@ function updateHost(id, input) {
     SET name = ?, environment = ?, role = ?, sshAlias = ?, healthUrl = ?, composeProject = ?, tags = ?, updatedAt = ?
     WHERE id = ?
   `).run(hostItem.name, hostItem.environment, hostItem.role, hostItem.sshAlias, hostItem.healthUrl, hostItem.composeProject, JSON.stringify(hostItem.tags), hostItem.updatedAt, id);
+  reconcileSchedulerCoverage();
   return hostItem;
 }
 
@@ -443,6 +445,7 @@ function deleteHost(id) {
   if (active) throw new HostCheckInProgressError(active);
   db.prepare("DELETE FROM host_checks WHERE hostId = ?").run(id);
   const result = db.prepare("DELETE FROM hosts WHERE id = ?").run(id);
+  reconcileSchedulerCoverage();
   return { deleted: result.changes > 0 };
 }
 
@@ -562,6 +565,18 @@ class CheckAlreadyRunningError extends Error {
   }
 }
 
+class NoCollectibleEvidenceError extends Error {
+  constructor(coverage, scope) {
+    super(scope === "all"
+      ? "没有可采集的服务器。请先为至少一台服务器配置 Health URL，或显式启用已登记的只读 SSH。"
+      : "这台服务器当前没有可用证据来源。请先配置 Health URL，或显式启用已登记的只读 SSH。");
+    this.code = "NO_COLLECTIBLE_EVIDENCE";
+    this.httpStatus = 409;
+    this.coverage = coverage;
+    this.scope = scope;
+  }
+}
+
 function conflictingLightCheck(scope) {
   if (scope === "all") return activeLightChecks.values().next().value || null;
   return activeLightChecks.get("all") || activeLightChecks.get(scope) || null;
@@ -576,12 +591,15 @@ async function runLightCheck(options = {}) {
   try {
     const startedAt = new Date();
     const allHosts = getHosts();
-    const hosts = options.hostId
+    const requestedHosts = options.hostId
       ? allHosts.filter((hostItem) => hostItem.id === options.hostId)
       : allHosts;
-    if (options.hostId && hosts.length === 0) {
+    if (options.hostId && requestedHosts.length === 0) {
       throw new Error(`Host not found: ${options.hostId}`);
     }
+    const coverage = collectionCoverage(mode, requestedHosts);
+    if (coverage.collectible === 0) throw new NoCollectibleEvidenceError(coverage, scope);
+    const hosts = requestedHosts.filter((hostItem) => hostCollectionPlan(mode, hostItem).canCollect);
     const hostResults = [];
     for (const hostItem of hosts) {
       hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
@@ -591,7 +609,9 @@ async function runLightCheck(options = {}) {
     const status = overallStatus(hostResults);
     const trigger = String(options.trigger || (options.hostId ? "manual-host" : "manual"));
     const hostScope = options.hostId || "all";
-    const summary = `${hostResults.length} host${hostResults.length === 1 ? "" : "s"} checked (${hostScope}), overall ${status}.`;
+    const summary = coverage.blocked > 0
+      ? `${hostResults.length} 台已取得证据，${coverage.blocked} 台因证据来源不可用而跳过；总体状态：${status}。`
+      : `${hostResults.length} 台已取得证据；总体状态：${status}。`;
 
     const run = db.prepare(`
       INSERT INTO check_runs (kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary)
@@ -620,7 +640,7 @@ async function runLightCheck(options = {}) {
       );
     }
 
-    return { id: Number(run.lastInsertRowid), runId: activeRun.runId, status, summary, durationMs, hostResults };
+    return { id: Number(run.lastInsertRowid), runId: activeRun.runId, status, summary, durationMs, coverage, hostResults };
   } finally {
     activeLightChecks.delete(scope);
   }
@@ -670,13 +690,15 @@ function runRetention(options = {}) {
 let schedulerTimer = null;
 
 function schedulerSnapshot() {
+  const coverage = collectionCoverage(mode, getHosts());
   return {
     enabled: getSetting("schedulerEnabled", "0") === "1",
     lightIntervalMinutes: settingNumber("lightIntervalMinutes", 15, { min: 1, max: 1440 }),
     retentionDays: settingNumber("retentionDays", 7, { min: 1, max: 365 }),
     consecutiveFailures: settingNumber("schedulerConsecutiveFailures", 0, { min: 0, max: 999 }),
     lastRunAt: getSetting("schedulerLastRunAt", "") || null,
-    nextRunAt: getSetting("schedulerNextRunAt", "") || null
+    nextRunAt: getSetting("schedulerNextRunAt", "") || null,
+    coverage
   };
 }
 
@@ -724,6 +746,11 @@ function scheduleNextLightCheck(delayMs) {
 }
 
 function configureScheduler(input = {}) {
+  const enabling = input.enabled === true || (input.enabled == null && schedulerSnapshot().enabled);
+  const coverage = collectionCoverage(mode, getHosts());
+  if (enabling && coverage.collectible === 0) {
+    throw new NoCollectibleEvidenceError(coverage, "all");
+  }
   if (input.lightIntervalMinutes != null) {
     setSetting("lightIntervalMinutes", settingNumberFromInput(input.lightIntervalMinutes, 15, 1, 1440));
   }
@@ -737,6 +764,15 @@ function configureScheduler(input = {}) {
   if (snapshot.enabled) {
     return scheduleNextLightCheck(snapshot.lightIntervalMinutes * 60 * 1000);
   }
+  stopScheduler();
+  return schedulerSnapshot();
+}
+
+function reconcileSchedulerCoverage() {
+  const snapshot = schedulerSnapshot();
+  if (!snapshot.enabled || snapshot.coverage.collectible > 0) return snapshot;
+  setSetting("schedulerEnabled", "0");
+  setSetting("schedulerConsecutiveFailures", "0");
   stopScheduler();
   return schedulerSnapshot();
 }
@@ -986,14 +1022,16 @@ const server = createServer(async (req, res) => {
     return json(res, {
       error: error?.code || "REQUEST_FAILED",
       message: error instanceof Error ? error.message : "Unknown error",
-      ...(error?.runId ? { runId: error.runId, scope: error.scope } : {})
+      ...(error?.runId ? { runId: error.runId, scope: error.scope } : {}),
+      ...(error?.coverage ? { coverage: error.coverage } : {})
     }, status);
   }
 });
 
 server.listen(port, host, () => {
-  if (schedulerSnapshot().enabled) {
-    scheduleNextLightCheck(schedulerSnapshot().lightIntervalMinutes * 60 * 1000);
+  const scheduler = reconcileSchedulerCoverage();
+  if (scheduler.enabled) {
+    scheduleNextLightCheck(scheduler.lightIntervalMinutes * 60 * 1000);
   }
   const address = server.address();
   const listeningPort = address && typeof address === "object" ? address.port : port;

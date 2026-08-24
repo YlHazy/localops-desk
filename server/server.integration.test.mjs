@@ -220,6 +220,89 @@ test("offline practice is explicit, exclusive, network-free, and fully removable
   assert.doesNotMatch(manifest, /practice\/offline/);
 });
 
+test("batch checks collect only usable hosts and report skipped coverage honestly", async (t) => {
+  const api = await startApi(t);
+  const create = async (body) => fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  }).then((response) => response.json());
+  const usable = (await create({ name: "usable", healthUrl: `${api.base}/api/status`, sshAlias: "" })).host;
+  const blocked = (await create({ name: "blocked", healthUrl: "", sshAlias: "" })).host;
+
+  const response = await fetch(`${api.base}/api/checks/light`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual({
+    total: result.coverage.total,
+    collectible: result.coverage.collectible,
+    blocked: result.coverage.blocked
+  }, { total: 2, collectible: 1, blocked: 1 });
+  assert.deepEqual(result.hostResults.map((item) => item.hostId), [usable.id]);
+  assert.match(result.summary, /1 台已取得证据，1 台.*跳过/);
+
+  const status = await fetch(`${api.base}/api/status`).then((item) => item.json());
+  assert.ok(status.hosts.find((item) => item.id === usable.id).lastCheckedAt);
+  assert.equal(status.hosts.find((item) => item.id === blocked.id).lastCheckedAt, null);
+
+  const blockedCheck = await fetch(`${api.base}/api/checks/light/${encodeURIComponent(blocked.id)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(blockedCheck.status, 409);
+  const blockedBody = await blockedCheck.json();
+  assert.equal(blockedBody.error, "NO_COLLECTIBLE_EVIDENCE");
+  assert.equal(blockedBody.coverage.collectible, 0);
+});
+
+test("scheduler refuses zero coverage and stops when the last source is removed", async (t) => {
+  const api = await startApi(t);
+  const created = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "scheduler-host", healthUrl: "", sshAlias: "" })
+  }).then((response) => response.json());
+
+  const refused = await fetch(`${api.base}/api/scheduler`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, lightIntervalMinutes: 60, retentionDays: 7 })
+  });
+  assert.equal(refused.status, 409);
+  assert.equal((await refused.json()).error, "NO_COLLECTIBLE_EVIDENCE");
+  assert.equal((await fetch(`${api.base}/api/scheduler`).then((item) => item.json())).scheduler.enabled, false);
+
+  const updated = await fetch(`${api.base}/api/hosts/${encodeURIComponent(created.host.id)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...created.host, healthUrl: `${api.base}/api/status` })
+  }).then((response) => response.json());
+  const enabled = await fetch(`${api.base}/api/scheduler`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled: true, lightIntervalMinutes: 60, retentionDays: 7 })
+  });
+  assert.equal(enabled.status, 200);
+  const enabledState = (await enabled.json()).scheduler;
+  assert.equal(enabledState.enabled, true);
+  assert.equal(enabledState.coverage.collectible, 1);
+
+  await fetch(`${api.base}/api/hosts/${encodeURIComponent(created.host.id)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...updated.host, healthUrl: "" })
+  });
+  const stopped = (await fetch(`${api.base}/api/scheduler`).then((item) => item.json())).scheduler;
+  assert.equal(stopped.enabled, false);
+  assert.equal(stopped.nextRunAt, null);
+  assert.equal(stopped.coverage.collectible, 0);
+});
+
 test("offline practice never overwrites or deletes colliding user data", async (t) => {
   const api = await startApi(t);
   const created = await fetch(`${api.base}/api/hosts`, {

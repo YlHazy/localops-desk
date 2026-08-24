@@ -1,5 +1,8 @@
+import { hostCollectionPlan } from "../shared/collection-coverage.mjs";
+
 export function evidenceReadiness(dashboard, host) {
-  if (dashboard?.practiceMode || host?.isOfflineDemo) {
+  const plan = hostCollectionPlan(dashboard?.mode, host, { practiceMode: dashboard?.practiceMode });
+  if (plan.state === "offline") {
     return {
       state: "offline",
       canCollect: true,
@@ -9,11 +12,8 @@ export function evidenceReadiness(dashboard, host) {
     };
   }
 
-  const hasHealthUrl = Boolean(host?.healthUrl?.trim());
   const hasSshAlias = Boolean(host?.sshAlias?.trim());
-  const sshEnabled = dashboard?.mode === "ssh-enabled";
-
-  if (hasHealthUrl && hasSshAlias && sshEnabled) {
+  if (plan.state === "combined") {
     return {
       state: "combined",
       canCollect: true,
@@ -23,7 +23,7 @@ export function evidenceReadiness(dashboard, host) {
     };
   }
 
-  if (hasHealthUrl) {
+  if (plan.state === "http") {
     return {
       state: "http",
       canCollect: true,
@@ -35,7 +35,7 @@ export function evidenceReadiness(dashboard, host) {
     };
   }
 
-  if (hasSshAlias && sshEnabled) {
+  if (plan.state === "ssh-only") {
     return {
       state: "ssh-only",
       canCollect: true,
@@ -45,7 +45,7 @@ export function evidenceReadiness(dashboard, host) {
     };
   }
 
-  if (hasSshAlias) {
+  if (plan.state === "ssh-disabled") {
     return {
       state: "ssh-disabled",
       canCollect: false,

@@ -1,3 +1,5 @@
+import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
+
 export type Status = "healthy" | "warning" | "critical" | "unknown";
 
 export interface HostState {
@@ -64,6 +66,7 @@ export interface SchedulerState {
   consecutiveFailures: number;
   lastRunAt: string | null;
   nextRunAt: string | null;
+  coverage: CollectionCoverage;
 }
 
 export interface StartupState {

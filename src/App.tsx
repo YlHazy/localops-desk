@@ -36,6 +36,8 @@ import type { PendingOperation } from "./operation-state.mjs";
 import { petModePath } from "./pet-presence.mjs";
 import type { CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
+import { collectionCoverage } from "../shared/collection-coverage.mjs";
+import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
@@ -325,6 +327,7 @@ export function App() {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
+  const [lastCheckOutcome, setLastCheckOutcome] = useState<{ status: Status; summary: string; coverage: CollectionCoverage } | null>(null);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [dryRunCopied, setDryRunCopied] = useState(false);
   const [report, setReport] = useState<string>("");
@@ -525,6 +528,10 @@ export function App() {
     () => dashboard ? evidenceReadiness(dashboard, selectedHost) : null,
     [dashboard, selectedHost]
   );
+  const batchCoverage = useMemo(
+    () => scheduler?.coverage ?? (dashboard ? collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode }) : collectionCoverage("safe-simulated")),
+    [scheduler, dashboard]
+  );
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
@@ -567,8 +574,10 @@ export function App() {
     if (pendingOperation) return;
     setPendingOperation("check");
     setError("");
+    setLastCheckOutcome(null);
     try {
-      await api(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
+      const result = await api<{ status: Status; summary: string; coverage: CollectionCoverage }>(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
+      setLastCheckOutcome(result);
       try {
         await load();
         if (petMode) setPetSyncError("");
@@ -938,10 +947,13 @@ export function App() {
             )}
           </div>
           <div className="topbar-actions">
-            <button className="primary" onClick={() => runLightCheck()} disabled={operationBusy}>
-              {checking ? <RefreshCcw className="spin" size={18} /> : <Play size={18} />}
-              <span>{checking ? "检查中" : dashboard.practiceMode ? "运行离线练习" : "刷新全部"}</span>
-            </button>
+            <div className={`batch-check-action ${batchCoverage.blocked ? "partial" : "complete"}`}>
+              <button className="primary" onClick={() => batchCoverage.collectible > 0 ? runLightCheck() : startEditHost(selectedHost)} disabled={operationBusy} title={batchCoverage.blocked ? `${batchCoverage.blocked} 台缺少当前可用的证据来源` : undefined}>
+                {checking ? <RefreshCcw className="spin" size={18} /> : batchCoverage.collectible > 0 ? <Play size={18} /> : <Pencil size={18} />}
+                <span>{checking ? "检查中" : dashboard.practiceMode ? "运行离线练习" : batchCoverage.collectible === 0 ? "补充证据来源" : batchCoverage.blocked > 0 ? `刷新可采集 ${batchCoverage.collectible} 台` : "刷新全部"}</span>
+              </button>
+              <small>{batchCoverage.collectible}/{batchCoverage.total} 台可采集{batchCoverage.blocked ? ` · ${batchCoverage.blocked} 台将跳过` : " · 全部覆盖"}</small>
+            </div>
             <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
               <Plus size={18} />
               <span>{dashboard.practiceMode ? "练习中" : "添加服务器"}</span>
@@ -954,6 +966,13 @@ export function App() {
         </header>
 
         {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
+        {lastCheckOutcome ? (
+          <div className={`check-outcome ${lastCheckOutcome.coverage.blocked ? "partial" : "complete"}`} role="status">
+            <CheckCircle2 size={17} />
+            <div><strong>{lastCheckOutcome.coverage.collectible} 台已取得证据</strong><small>{lastCheckOutcome.summary}</small></div>
+            <button onClick={() => setSelectedTab("checks")}>查看记录</button>
+          </div>
+        ) : null}
 
         {dashboard.practiceMode ? (
           <section className="practice-banner" aria-label="离线练习状态">
@@ -1269,14 +1288,25 @@ export function App() {
                   <h2>本地定时巡检</h2>
                   <p>只在 LocalOps Desk 进程运行时生效；关闭本地程序后不会继续轮询服务器。</p>
                 </div>
-                <StatusPill status={scheduler?.enabled ? "healthy" : "unknown"} />
+                <StatusPill status={scheduler?.enabled ? batchCoverage.blocked ? "warning" : "healthy" : "unknown"} />
               </div>
+              <section className={`coverage-ledger ${batchCoverage.collectible === 0 ? "blocked" : batchCoverage.blocked ? "partial" : "complete"}`} aria-label="自动巡检证据覆盖">
+                <div className="coverage-ledger-head">
+                  <div><span>EVIDENCE COVERAGE / 证据覆盖</span><strong>{batchCoverage.collectible} / {batchCoverage.total} 台可巡检</strong></div>
+                  <em>{batchCoverage.blocked === 0 ? "全部覆盖" : `${batchCoverage.blocked} 台将跳过`}</em>
+                </div>
+                <div className="coverage-track" aria-hidden="true"><span style={{ width: `${batchCoverage.total ? Math.round(batchCoverage.collectible / batchCoverage.total * 100) : 0}%` }} /></div>
+                <div className="coverage-stats"><span>完整证据路径 <b>{batchCoverage.complete}</b></span><span>局部证据路径 <b>{batchCoverage.partial}</b></span><span>不可采集 <b>{batchCoverage.blocked}</b></span></div>
+                <p>{batchCoverage.collectible === 0 ? "至少为一台服务器配置 Health URL，或显式启用已登记的只读 SSH，才能开启定时巡检。" : batchCoverage.blocked ? "定时巡检只处理可采集服务器；缺少来源的服务器保持原状态，不会生成新的“未知”记录。" : "每台服务器都有当前启动模式下可用的证据来源。"}</p>
+              </section>
               <div className="scheduler-grid">
                 <label>
                   <span>启用定时巡检</span>
                   <button
                     className={schedulerForm.enabled ? "toggle active" : "toggle"}
+                    disabled={!schedulerForm.enabled && batchCoverage.collectible === 0}
                     onClick={() => setSchedulerForm({ ...schedulerForm, enabled: !schedulerForm.enabled })}
+                    title={batchCoverage.collectible === 0 ? "先补充至少一个可用证据来源" : undefined}
                   >
                     {schedulerForm.enabled ? "已启用" : "未启用"}
                   </button>
@@ -1303,7 +1333,7 @@ export function App() {
                 </label>
               </div>
               <div className="quick-actions">
-                <button className="primary slim" onClick={() => saveScheduler()} disabled={operationBusy}><Save size={16} />{operationState.savingScheduler ? "保存中" : "保存巡检配置"}</button>
+                <button className="primary slim" onClick={() => saveScheduler()} disabled={operationBusy || (schedulerForm.enabled && batchCoverage.collectible === 0)}><Save size={16} />{operationState.savingScheduler ? "保存中" : "保存巡检配置"}</button>
                 <button disabled={operationBusy} onClick={() => saveScheduler({ ...schedulerForm, enabled: false })}>停止定时巡检</button>
                 <button disabled={operationBusy} onClick={() => runRetention(false)}>{operationState.retaining ? "清理中" : "执行保留期清理"}</button>
                 <button disabled={operationBusy} onClick={() => runRetention(true)}>{operationState.retaining ? "清理中" : "清理并压缩 SQLite"}</button>

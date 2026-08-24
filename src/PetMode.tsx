@@ -8,6 +8,7 @@ import { monitorSignal, petSnapshotTrust, worseningNotice } from "./pet-monitor.
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import type { DashboardStatus, Status } from "./types";
+import { collectionCoverage } from "../shared/collection-coverage.mjs";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
@@ -127,6 +128,7 @@ export function PetMode({
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
   const collectionMode = collectionModeCopy(dashboard);
   const focusReadiness = evidenceReadiness(dashboard, focusHost);
+  const batchCoverage = collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode });
   const visibleCopy = overallStatus === "healthy" && focusReadiness.state === "http"
     ? { label: "入口正常", line: "Health URL 当前可达；资源与管理通道还没有证据。" }
     : copy;
@@ -291,7 +293,7 @@ export function PetMode({
         <button className="pet-open" onClick={onOpenDesk}>
           控制台 <ArrowUpRight size={16} />
         </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : collectionMode.compact} · 自动同步不触发巡检</small>
+        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : `${collectionMode.compact} · 可采集 ${batchCoverage.collectible}/${batchCoverage.total}`} · 自动同步不触发巡检</small>
       </footer>
     </main>
   );
