@@ -21,6 +21,7 @@ const statusRank: Record<Status, number> = {
 };
 
 const notificationPreferenceKey = "localops.pet.notifications";
+const sentryOtterUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
 function readNotificationPreference() {
   try {
@@ -183,16 +184,12 @@ export function PetMode({
       <div className="pet-grab" aria-hidden="true" />
       <section className="pet-identity" aria-label={`LocalOps 守护宠物：${copy.label}`}>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
-          <span className="pet-ear pet-ear-left" />
-          <span className="pet-ear pet-ear-right" />
-          <span className="pet-eye pet-eye-left" />
-          <span className="pet-eye pet-eye-right" />
-          <span className="pet-mouth" />
+          <img src={sentryOtterUrl} alt="" />
           <span className="pet-signal pet-signal-one" />
           <span className="pet-signal pet-signal-two" />
         </div>
         <div className="pet-title">
-          <span>LOCALOPS · 值守中</span>
+          <span>LOCALOPS · 小哨值守中</span>
           <strong>{copy.label}</strong>
         </div>
       </section>

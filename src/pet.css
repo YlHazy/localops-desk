@@ -48,51 +48,22 @@ body:has(.pet-window) {
 .pet-identity {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 8px 2px 15px;
+  gap: 14px;
+  padding: 2px 2px 13px;
 }
 
 .pet-character {
   position: relative;
-  flex: 0 0 86px;
-  height: 72px;
-  border: 3px solid var(--pet-ink);
-  border-radius: 32px 32px 27px 27px;
-  background: color-mix(in srgb, var(--pet-mood) 26%, white);
-  box-shadow: inset 0 -8px 0 rgba(25, 51, 60, 0.05), 0 7px 0 rgba(25, 51, 60, 0.08);
+  flex: 0 0 108px;
+  height: 126px;
 }
 
-.pet-ear {
-  position: absolute;
-  z-index: -1;
-  top: -14px;
-  width: 26px;
-  height: 30px;
-  border: 3px solid var(--pet-ink);
-  background: color-mix(in srgb, var(--pet-mood) 22%, white);
-}
-
-.pet-ear-left { left: 5px; border-radius: 18px 4px 8px 4px; transform: rotate(-14deg); }
-.pet-ear-right { right: 5px; border-radius: 4px 18px 4px 8px; transform: rotate(14deg); }
-
-.pet-eye {
-  position: absolute;
-  top: 28px;
-  width: 8px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--pet-ink);
-  animation: pet-blink 6s infinite;
-}
-
-.pet-eye-left { left: 24px; }
-.pet-eye-right { right: 24px; }
-.pet-mouth { position: absolute; left: 38px; top: 48px; width: 10px; height: 5px; border: 2px solid var(--pet-ink); border-top: 0; border-radius: 0 0 9px 9px; }
+.pet-character img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 9px 9px rgba(25, 51, 60, 0.16)); }
 
 .pet-signal {
   position: absolute;
-  top: -2px;
-  right: -9px;
+  top: 14px;
+  right: 5px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -206,15 +177,14 @@ body:has(.pet-window) {
 .pet-actions small { grid-column: 1 / -1; margin-top: 3px; color: var(--pet-muted); font: 10px/1.4 Consolas, monospace; text-align: center; }
 .pet-window button:focus-visible { outline: 3px solid color-mix(in srgb, var(--pet-mood) 35%, transparent); outline-offset: 2px; }
 
-@keyframes pet-blink { 0%, 46%, 50%, 100% { transform: scaleY(1); } 48% { transform: scaleY(0.12); } }
 @keyframes pet-ping { 0% { transform: scale(0.5); opacity: 0.8; } 70%, 100% { transform: scale(2.5); opacity: 0; } }
 @keyframes pet-listen { from { transform: translateY(0); } to { transform: translateY(-4px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .pet-eye, .pet-signal-two, .pet-character.is-listening { animation: none; }
+  .pet-signal-two, .pet-character.is-listening { animation: none; }
 }
 
 @media (max-width: 340px) {
   .pet-window { padding-inline: 13px; border-radius: 20px; }
-  .pet-character { flex-basis: 76px; }
+  .pet-character { flex-basis: 92px; height: 110px; }
 }

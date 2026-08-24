@@ -19,7 +19,8 @@
 - Editing an existing host round-trips its tags instead of silently clearing them; Agent status excludes tags alongside connection configuration and raw evidence.
 - Empty server names fail as a typed 400 input error, and the form prevents submission while explaining which optional fields cause HTTP access, gate SSH, or remain metadata-only.
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
-- The pet's expression, copy, and accent reflect the worst current host state.
+- The compact companion uses the transparent Sentry Otter cutout as a stable product identity while live health remains encoded by explicit evidence copy and the separate status signal; the UI asset is never presented as an installable Codex sprite.
+- The pet's evidence signal, copy, and accent reflect the worst current host state while the character identity remains visually stable.
 - The pet can run a light check, disclose local API errors, list host states, and open the full desk.
 - Selecting a non-priority host changes only the target for refresh and discussion; the pet's mood and headline continue to represent the worst current global state.
 - A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.

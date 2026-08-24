@@ -16,6 +16,14 @@ It is a direction reference only. The generated file currently has an opaque
 checkerboard background and the wrong dimensions, so it **must not be uploaded
 as a Codex pet**.
 
+The LocalOps compact companion renders
+[`../../src/assets/localops-sentry-otter.png`](../../src/assets/localops-sentry-otter.png),
+a genuine-alpha `1136 × 1385` cutout derived from that direction. It is approved
+for the LocalOps UI only: the stable navy character carries product identity,
+while the adjacent evidence dot and copy carry live server state. It remains
+intentionally outside `pets/` because it does not meet the official `1536 ×
+1872` sprite-sheet gate.
+
 ## Product role
 
 The native Codex pet and the LocalOps compact companion deliberately have

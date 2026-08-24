@@ -70,10 +70,11 @@ The plugin expects LocalOps at `http://127.0.0.1:4317` by default. See `docs/03-
 
 The matching visual identity is **小哨 / Sentry Otter**. Its character brief,
 state direction, official hatch prompt, and asset acceptance gate are in
-`docs/02-design/guardian-pet-identity.md`. The checked-in image is a concept
-reference, not an installable sprite; it intentionally remains blocked until a
-genuine transparent 1536 × 1872 asset is produced through the supported Codex
-pet flow.
+`docs/02-design/guardian-pet-identity.md`. The compact LocalOps companion uses
+the genuine-alpha cutout at `src/assets/localops-sentry-otter.png`; it is a UI
+character asset, not an installable Codex sprite. The original concept remains
+a direction reference, and official upload stays blocked until a genuine
+transparent 1536 × 1872 asset is produced through the supported Codex pet flow.
 
 Installable pet sprite sheets are admitted only through `pets/`. The repository
 delivery gate checks exact PNG dimensions, encoded transparency, file size, and

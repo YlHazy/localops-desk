@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 import { inspectPetPng, scanPrivateIdentityText, validateDelivery } from "../scripts/validate-delivery.mjs";
 
@@ -18,6 +18,19 @@ test("pet gate accepts only exact alpha-capable PNG metadata", () => {
   const wrongSize = inspectPetPng(pngFixture({ width: 1151, height: 1367, colorType: 6 }));
   assert.equal(wrongSize.ok, false);
   assert.match(wrongSize.errors.join(" "), /expected 1536x1872/);
+});
+
+test("compact companion uses a bounded transparent Sentry Otter cutout", () => {
+  const asset = new URL("../src/assets/localops-sentry-otter.png", import.meta.url);
+  const metadata = inspectPetPng(readFileSync(asset), statSync(asset).size);
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  assert.equal(metadata.hasTransparency, true);
+  assert.equal(metadata.width, 1136);
+  assert.equal(metadata.height, 1385);
+  assert.ok(metadata.fileSize < 2 * 1024 * 1024);
+  assert.match(petSource, /localops-sentry-otter\.png/);
+  assert.match(petSource, /<img src=\{sentryOtterUrl\} alt=""/);
+  assert.doesNotMatch(petSource, /pet-ear|pet-eye|pet-mouth/);
 });
 
 test("private identity scanner recognizes former project infrastructure without storing it as a fixture", () => {
