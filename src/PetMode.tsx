@@ -21,7 +21,7 @@ const statusCopy: Record<Status, { label: string; line: string }> = {
   unknown: { label: "等待检查", line: "还没有足够证据，先让我巡检一次。" }
 };
 
-const sentryOtterUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
+const sentryOtterUrl = new URL("./assets/localops-sentry-otter-2d.png", import.meta.url).href;
 
 type AlertReceipt = {
   outcome: "sent" | "suppressed" | "failed";

@@ -21,14 +21,14 @@ test("pet gate accepts only exact alpha-capable PNG metadata", () => {
 });
 
 test("compact companion uses a bounded transparent Sentry Otter cutout", () => {
-  const asset = new URL("../src/assets/localops-sentry-otter.png", import.meta.url);
+  const asset = new URL("../src/assets/localops-sentry-otter-2d.png", import.meta.url);
   const metadata = inspectPetPng(readFileSync(asset), statSync(asset).size);
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   assert.equal(metadata.hasTransparency, true);
-  assert.equal(metadata.width, 1136);
-  assert.equal(metadata.height, 1385);
+  assert.equal(metadata.width, 852);
+  assert.equal(metadata.height, 1154);
   assert.ok(metadata.fileSize < 2 * 1024 * 1024);
-  assert.match(petSource, /localops-sentry-otter\.png/);
+  assert.match(petSource, /localops-sentry-otter-2d\.png/);
   assert.match(petSource, /<img src=\{sentryOtterUrl\} alt=""/);
   assert.doesNotMatch(petSource, /pet-ear|pet-eye|pet-mouth/);
 });

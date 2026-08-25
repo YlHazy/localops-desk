@@ -74,7 +74,7 @@ const actionReceiptLabels: Record<ActionReceipt["status"], string> = {
 };
 
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
-const onboardingPetUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
+const onboardingPetUrl = new URL("./assets/localops-sentry-otter-2d.png", import.meta.url).href;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();

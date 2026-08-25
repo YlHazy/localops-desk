@@ -11,7 +11,7 @@ files:
   - server/**
   - shared/**
   - src/pet-presence.mjs
-  - src/assets/localops-sentry-otter.png
+  - src/assets/localops-sentry-otter-2d.png
   - package.json
 win:
   icon: build/icon.ico

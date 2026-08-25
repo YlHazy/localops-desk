@@ -17,12 +17,14 @@ checkerboard background and the wrong dimensions, so it **must not be uploaded
 as a Codex pet**.
 
 The LocalOps compact companion renders
-[`../../src/assets/localops-sentry-otter.png`](../../src/assets/localops-sentry-otter.png),
-a genuine-alpha `1136 × 1385` cutout derived from that direction. It is approved
-for the LocalOps UI only: the stable navy character carries product identity,
-while the adjacent evidence dot and copy carry live server state. It remains
-intentionally outside `pets/` because it does not meet the official `1536 ×
-1872` sprite-sheet gate.
+[`../../src/assets/localops-sentry-otter-2d.png`](../../src/assets/localops-sentry-otter-2d.png),
+a genuine-alpha `852 × 1154` matte 2D cutout derived from that direction. It
+replaces the earlier glossy 3D rendering in product surfaces so the character
+stays legible and calm at its actual 180–240 pixel display size. The stable navy
+silhouette carries product identity; adjacent copy carries live server state.
+It remains intentionally outside `pets/` because it does not meet the official
+`1536 × 1872` sprite-sheet gate. The older cutout is retained only as source
+history and must not be used in new UI.
 
 ## Desktop application icon
 
