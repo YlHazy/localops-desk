@@ -12,3 +12,4 @@ data/pet-browser-profile/
 *.tsbuildinfo
 work/
 artifacts/
+release/

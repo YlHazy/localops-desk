@@ -19,9 +19,14 @@ export function writeTopmostPreference(storage, enabled) {
   }
 }
 
-export async function requestPetWindowTopmost(sessionId, topmost, fetchImpl = fetch) {
-  if (!isPetSessionId(sessionId)) throw new Error("只有 Windows 启动器打开的桌宠才能切换置顶。");
+export async function requestPetWindowTopmost(sessionId, topmost, fetchImpl = fetch, desktopBridge = globalThis.window?.localOpsDesktop) {
+  if (!isPetSessionId(sessionId)) throw new Error("只有 LocalOps 桌面宿主或 Windows 启动器打开的桌宠才能切换置顶。");
   if (typeof topmost !== "boolean") throw new Error("Invalid LocalOps pet window state.");
+  if (desktopBridge?.setAlwaysOnTop) {
+    const state = await desktopBridge.setAlwaysOnTop(topmost);
+    if (state?.topmost !== topmost) throw new Error("桌面宿主没有确认置顶状态。");
+    return state;
+  }
   const response = await fetchImpl(`/api/pet-window/${sessionId}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },

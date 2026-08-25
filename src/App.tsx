@@ -390,7 +390,12 @@ export function App() {
     setSelectedCheckId((previous) => retainCheckSelection(snapshot.checks, previous));
     setReport(snapshot.report);
     setScheduler(snapshot.scheduler);
-    setStartup(snapshot.startup);
+    if (window.localOpsDesktop) {
+      const desktopState = await window.localOpsDesktop.getState();
+      setStartup(desktopState.startup);
+    } else {
+      setStartup(snapshot.startup);
+    }
     setSchedulerForm((currentDraft) => schedulerDraftAfterSync(currentDraft, snapshot.scheduler, preserveSchedulerForm));
     setSelectedHostId((previous) => retainFocusSelection(snapshot.status.hosts, previous));
     const syncedAt = Date.now();
@@ -542,6 +547,10 @@ export function App() {
   }
 
   function openPetWindow() {
+    if (window.localOpsDesktop) {
+      void window.localOpsDesktop.showPet();
+      return;
+    }
     const pet = window.open(petModePath(crypto.randomUUID(), "existing"), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
@@ -882,10 +891,12 @@ export function App() {
     setStartupLoading(true);
     setError("");
     try {
-      const result = await api<{ startup: StartupState }>("/api/startup", {
-        method: "PUT",
-        body: JSON.stringify({ enabled })
-      });
+      const result = window.localOpsDesktop
+        ? await window.localOpsDesktop.setLoginStartup(enabled)
+        : await api<{ startup: StartupState }>("/api/startup", {
+            method: "PUT",
+            body: JSON.stringify({ enabled })
+          });
       setStartup(result.startup);
       setStartupPending(null);
     } catch (err) {

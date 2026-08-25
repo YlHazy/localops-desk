@@ -14,7 +14,7 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -35,11 +35,22 @@ jobs:
       - if: matrix.node == 24
         run: npm run verify:portable
       - if: matrix.node == 24
+        run: npm run package:desktop
+      - if: matrix.node == 24
+        run: npm run verify:desktop
+      - if: matrix.node == 24
         run: node artifacts/localops-guardian-windows-portable/scripts/launch-pet.mjs --check
       - if: matrix.node == 24
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: localops-guardian-windows-portable
           path: artifacts/localops-guardian-windows-portable
+          if-no-files-found: error
+          retention-days: 14
+      - if: matrix.node == 24
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: localops-guardian-windows-desktop
+          path: release/LocalOps-Guardian-0.1.0-x64.exe
           if-no-files-found: error
           retention-days: 14

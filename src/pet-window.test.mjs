@@ -27,3 +27,17 @@ test("topmost request is session-scoped and confirms the requested result", asyn
     async json() { return { window: { supported: true, topmost: true } }; }
   })), /没有确认/);
 });
+
+test("desktop host owns topmost without invoking the legacy PowerShell endpoint", async () => {
+  let fetched = false;
+  const state = await requestPetWindowTopmost(sessionId, false, async () => {
+    fetched = true;
+    throw new Error("must not fetch");
+  }, {
+    async setAlwaysOnTop(enabled) {
+      return { supported: true, topmost: enabled, message: "desktop confirmed" };
+    }
+  });
+  assert.equal(fetched, false);
+  assert.equal(state.topmost, false);
+});

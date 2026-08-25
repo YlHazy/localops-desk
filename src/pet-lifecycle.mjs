@@ -1,6 +1,6 @@
 import { isPetSessionId } from "./pet-presence.mjs";
 
-const runtimeModes = new Set(["owned", "existing"]);
+const runtimeModes = new Set(["owned", "existing", "desktop"]);
 
 export function petRuntimeMode(search) {
   const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
@@ -11,6 +11,9 @@ export function petRuntimeMode(search) {
 }
 
 export function petLifecycleCopy(mode) {
+  if (mode === "desktop") {
+    return { label: "后台值守", detail: "关闭窗口会缩到系统托盘；从托盘“退出 LocalOps”才停止本次值守。", tone: "independent" };
+  }
   if (mode === "owned") {
     return { label: "随窗值守", detail: "关闭桌宠后，它启动的本地值守约 10 秒内结束。", tone: "attached" };
   }

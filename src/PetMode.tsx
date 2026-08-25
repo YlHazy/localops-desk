@@ -267,7 +267,7 @@ export function PetMode({
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
       writeNotificationPreference(false);
-      setNotificationNote("系统没有允许提醒。可在 Edge 的站点权限中重新开启。");
+      setNotificationNote(window.localOpsDesktop ? "系统没有允许提醒。可在 Windows 通知设置中重新开启。" : "系统没有允许提醒。可在浏览器的站点权限中重新开启。");
       return;
     }
     const preferenceSaved = writeNotificationPreference(true);
