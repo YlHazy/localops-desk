@@ -42,7 +42,7 @@ Manual and host-scoped. The user must click **自动排查** for one selected se
 - Returns only categorized signals, percentages, a plain-language finding, and a safe next step; it does not return server identity or raw evidence in the diagnosis object.
 - For an actionable resource/entry/runtime layer, immediately adds the bounded deep evidence above. This internal evidence is local-only and deliberately excluded from the Agent manifest and discussion summary.
 - Records the underlying check with `trigger=manual-diagnosis` so the result remains auditable.
-- Never runs repair commands. Read-only command steps remain a separate preview, and mutating plans remain blocked templates.
+- Diagnosis itself never runs repair commands. A later, separate Nginx reload can become executable only when both runtime gates are enabled and the fresh diagnosis is converted into a short-lived, single-use approval with explicit consent. Compose and arbitrary commands remain blocked.
 
 ### Manual Refresh
 
@@ -79,7 +79,7 @@ The open full desk performs the same 30-second observation cadence across `GET /
 ## Storage Retention
 
 - Raw light samples: 7 days.
-- Current MVP deletes expired `check_runs`, their `host_checks`, and orphan host checks for removed hosts.
+- Current MVP deletes expired `check_runs`, their `host_checks`, orphan host checks for removed hosts, and expired finished action receipts. Receipts still marked `running` are preserved.
 - Optional SQLite `VACUUM` is available through the maintenance endpoint.
 - Hourly aggregates: 30 days.
 - Daily aggregates: 180 days.

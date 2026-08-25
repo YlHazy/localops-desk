@@ -792,7 +792,7 @@ test("dry-run plans enforce read-only copying and placeholder-only mutations", a
   assert.equal(reload.riskTier, "medium");
   assert.equal(reload.executionState, "blocked-template");
   assert.equal(reload.copyAllowed, false);
-  assert.equal(reload.blockedReason, "当前只生成预案，不执行 Nginx 重载。");
+  assert.equal(reload.blockedReason, "Nginx 重载通道未开启，当前只生成预案。");
   assert.ok(reload.commands.every((command) => command.includes("<ssh-alias>")));
   assert.ok(reload.commands.every((command) => !command.includes("safe-readonly")));
 
@@ -817,6 +817,113 @@ test("dry-run plans enforce read-only copying and placeholder-only mutations", a
   });
   assert.equal(unknown.status, 400);
   assert.equal((await unknown.json()).error, "INVALID_INPUT");
+});
+
+test("remote actions stay off by default and enabled preparation requires fresh abnormal evidence", async (t) => {
+  const disabledApi = await startApi(t);
+  const disabledCapability = await fetch(`${disabledApi.base}/api/actions/capability`).then((item) => item.json());
+  assert.equal(disabledCapability.capability.enabled, false);
+  assert.ok(disabledCapability.capability.blockers.length >= 1);
+  const disabledPrepare = await fetch(`${disabledApi.base}/api/actions/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: "missing", actionKey: "reload-nginx" })
+  });
+  assert.equal(disabledPrepare.status, 409);
+  assert.equal((await disabledPrepare.json()).error, "ACTIONS_DISABLED");
+  assert.deepEqual((await fetch(`${disabledApi.base}/api/actions/receipts`).then((item) => item.json())).receipts, []);
+
+  const api = await startApi(t, { LOCALOPS_ENABLE_SSH: "1", LOCALOPS_ENABLE_ACTIONS: "1" });
+  const created = await fetch(`${api.base}/api/hosts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "local-action-test", sshAlias: "localhost", healthUrl: `${api.base}/api/status` })
+  }).then((item) => item.json());
+  const hostId = created.host.id;
+  const beforeDiagnosis = await fetch(`${api.base}/api/actions/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId, actionKey: "reload-nginx" })
+  });
+  assert.equal(beforeDiagnosis.status, 409);
+  assert.equal((await beforeDiagnosis.json()).error, "FRESH_DIAGNOSIS_REQUIRED");
+
+  const diagnosis = await fetch(`${api.base}/api/diagnostics/${encodeURIComponent(hostId)}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{}"
+  });
+  assert.equal(diagnosis.status, 200);
+  assert.ok(["warning", "critical"].includes((await diagnosis.json()).status));
+
+  const preparedResponse = await fetch(`${api.base}/api/actions/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId, actionKey: "reload-nginx" })
+  });
+  assert.equal(preparedResponse.status, 201);
+  const prepared = await preparedResponse.json();
+  assert.equal(prepared.capability.enabled, true);
+  assert.equal(prepared.approval.actionKey, "reload-nginx");
+  assert.match(prepared.approval.commands.join("\n"), /nginx -t.*systemctl reload nginx/s);
+  assert.ok(prepared.approval.expiresAt);
+
+  const wrongPhrase = await fetch(`${api.base}/api/actions/execute`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ approvalId: prepared.approval.approvalId, planDigest: prepared.approval.planDigest, phrase: "确认" })
+  });
+  assert.equal(wrongPhrase.status, 400);
+  assert.equal((await wrongPhrase.json()).error, "ACTION_PHRASE_MISMATCH");
+  assert.deepEqual((await fetch(`${api.base}/api/actions/receipts`).then((item) => item.json())).receipts, []);
+
+  const changedHost = await fetch(`${api.base}/api/hosts/${encodeURIComponent(hostId)}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...created.host, name: "local-action-test-changed" })
+  });
+  assert.equal(changedHost.status, 200);
+  const changedTarget = await fetch(`${api.base}/api/actions/execute`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      approvalId: prepared.approval.approvalId,
+      planDigest: prepared.approval.planDigest,
+      phrase: prepared.approval.requiredPhrase
+    })
+  });
+  assert.equal(changedTarget.status, 409);
+  assert.equal((await changedTarget.json()).error, "ACTION_TARGET_CHANGED");
+  assert.deepEqual((await fetch(`${api.base}/api/actions/receipts`).then((item) => item.json())).receipts, []);
+
+  const manifest = await fetch(`${api.base}/api/agent/manifest`).then((item) => item.text());
+  assert.doesNotMatch(manifest, /actions\/(prepare|execute|receipts|capability)/);
+});
+
+test("retention removes finished action receipts but preserves active and current receipts", async (t) => {
+  const api = await startApi(t);
+  const database = new DatabaseSync(join(api.dataDir, "localops.sqlite"));
+  const insert = database.prepare(`
+    INSERT INTO action_runs (id, hostId, hostName, actionKey, status, approvedAt, startedAt, finishedAt, summary, verificationCheckId, failureCode, commandDigest)
+    VALUES (?, 'host', 'fixture', 'reload-nginx', ?, ?, ?, ?, 'fixture', NULL, NULL, 'digest')
+  `);
+  insert.run("old-finished", "succeeded", "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z", "2020-01-01T00:01:00.000Z");
+  insert.run("old-running", "running", "2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z", null);
+  const recent = new Date().toISOString();
+  insert.run("recent-finished", "failed", recent, recent, recent);
+  database.close();
+
+  const response = await fetch(`${api.base}/api/maintenance/retention`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ vacuum: false })
+  });
+  assert.equal(response.status, 200);
+  const result = (await response.json()).retention;
+  assert.equal(result.deletedActionRuns, 1);
+
+  const verify = new DatabaseSync(join(api.dataDir, "localops.sqlite"));
+  const ids = verify.prepare("SELECT id FROM action_runs ORDER BY id").all().map((row) => row.id);
+  verify.close();
+  assert.deepEqual(ids, ["old-running", "recent-finished"]);
 });
 
 test("automatic diagnosis keeps one host lock and run identity while its check is active", async (t) => {

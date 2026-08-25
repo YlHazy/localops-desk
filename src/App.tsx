@@ -44,7 +44,7 @@ import { petNotificationCalibrationKey, petNotificationPreferenceKey, readNotifi
 import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
-import type { CheckDetail, CheckRun, DashboardStatus, DiagnosisRun, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
+import type { ActionApproval, ActionCapability, ActionExecutionStep, ActionReceipt, CheckDetail, CheckRun, DashboardStatus, DiagnosisRun, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { resourceSignalStatus, resourceSignalSummary } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
@@ -80,6 +80,14 @@ const deepEvidenceSourceLabels: Record<DiagnosisRun["deepEvidence"]["source"], s
   "offline-practice": "离线样例",
   "ssh-read-only": "只读 SSH",
   none: "未读取"
+};
+
+const actionReceiptLabels: Record<ActionReceipt["status"], string> = {
+  running: "执行中",
+  succeeded: "已完成并复查",
+  "verification-warning": "已执行，复查待确认",
+  failed: "未完成",
+  interrupted: "回执中断"
 };
 
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
@@ -203,6 +211,17 @@ function friendlyEvidence(value: string) {
   return shortSignal(value);
 }
 
+function internalSignalSummary(host: HostState) {
+  const ssh = friendlySshStatus(host.sshStatus);
+  const runtime = friendlyDockerStatus(host.dockerStatus);
+  const sshFailed = !["正常", "模拟正常", "未检查", "未配置", "当前未启用"].includes(ssh);
+  const runtimeFailed = !["已检查", "模拟正常", "未检查"].includes(runtime);
+  if (sshFailed) return { status: ssh, detail: `SSH ${ssh} · 服务 ${runtime}` };
+  if (runtimeFailed) return { status: runtime, detail: `SSH ${ssh} · 服务 ${runtime}` };
+  if (["正常", "模拟正常"].includes(ssh) && (runtime === "已检查" || runtime === "模拟正常")) return { status: "正常", detail: `SSH ${ssh} · 服务 ${runtime}` };
+  return { status: "检查不完整", detail: `SSH ${ssh} · 服务 ${runtime}` };
+}
+
 function discussionBriefField(value: string, label: string) {
   const prefix = `${label}：`;
   const line = value.split("\n").find((item) => item.startsWith(prefix));
@@ -227,17 +246,18 @@ function StatusPill({ status }: { status: Status }) {
   return <span className={`status-pill ${status}`}>{statusLabels[status]}</span>;
 }
 
-function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh: boolean; selected: boolean; onSelect: () => void }) {
+function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh: boolean; selected: boolean; onSelect: (trigger: HTMLButtonElement) => void }) {
   return (
-    <button className={`host-panel ${selected ? "selected" : ""}`} onClick={onSelect}>
+    <button className={`host-panel ${selected ? "selected" : ""}`} onClick={(event) => onSelect(event.currentTarget)}>
       <div className="host-panel-top">
         <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
-        <StatusPill status={host.status} />
+        <span className={`host-status-text ${host.status}`}>{statusLabels[host.status]}</span>
       </div>
       <div className="host-glance">
         <span>HTTP <strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待更新"}</strong></span>
-        <span>内存 <strong>{fresh && host.memoryPercent != null ? `${host.memoryPercent}%` : "—"}</strong></span>
-        <span>磁盘 <strong>{fresh && host.diskPercent != null ? `${host.diskPercent}%` : "—"}</strong></span>
+        <span>SSH <strong>{fresh ? friendlySshStatus(host.sshStatus) : "待更新"}</strong></span>
+        <span>资源 <strong>{fresh ? resourceSignalSummary(host) : "待更新"}</strong></span>
+        <time>{fresh ? formatTime(host.lastCheckedAt) : "—"}</time>
         <span aria-hidden="true">›</span>
       </div>
       {host.status === "healthy" || !fresh ? null : <p>{host.summary}</p>}
@@ -357,12 +377,22 @@ export function App() {
   const [checkDetailError, setCheckDetailError] = useState("");
   const [selectedHostId, setSelectedHostId] = useState<string | null>(deskIntentAtLoad.hostId);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(deskIntentAtLoad.hostId));
+  const detailPanelRef = useRef<HTMLElement>(null);
+  const detailCloseRef = useRef<HTMLButtonElement>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>(deskIntentAtLoad.tab ?? "overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
   const [lastCheckOutcome, setLastCheckOutcome] = useState<{ status: Status; summary: string; coverage: CollectionCoverage } | null>(null);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [dryRunCopied, setDryRunCopied] = useState(false);
+  const [actionCapability, setActionCapability] = useState<ActionCapability | null>(null);
+  const [actionReceipts, setActionReceipts] = useState<ActionReceipt[]>([]);
+  const [actionApproval, setActionApproval] = useState<ActionApproval | null>(null);
+  const [actionPhrase, setActionPhrase] = useState("");
+  const [actionConsent, setActionConsent] = useState(false);
+  const [actionExecution, setActionExecution] = useState<{ receipt: ActionReceipt; steps: ActionExecutionStep[] } | null>(null);
+  const [actionFlowError, setActionFlowError] = useState("");
   const [diagnosisResult, setDiagnosisResult] = useState<{ hostId: string; run: DiagnosisRun } | null>(null);
   const [diagnosisError, setDiagnosisError] = useState("");
   const [report, setReport] = useState<string>("");
@@ -540,6 +570,22 @@ export function App() {
   }, [petMode]);
 
   useEffect(() => {
+    if (petMode || selectedTab !== "actions") return undefined;
+    let stopped = false;
+    Promise.all([
+      api<{ capability: ActionCapability }>("/api/actions/capability"),
+      api<{ receipts: ActionReceipt[] }>("/api/actions/receipts")
+    ]).then(([capabilityResult, receiptResult]) => {
+      if (stopped) return;
+      setActionCapability(capabilityResult.capability);
+      setActionReceipts(receiptResult.receipts);
+    }).catch((err) => {
+      if (!stopped) setActionFlowError(err instanceof Error ? err.message : "无法读取操作通道状态");
+    });
+    return () => { stopped = true; };
+  }, [petMode, selectedTab]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -547,14 +593,35 @@ export function App() {
   useEffect(() => {
     if (petMode || !detailsOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailsOpen(false);
+    detailCloseRef.current?.focus();
+    const closeDetail = () => {
+      setDetailsOpen(false);
+      window.setTimeout(() => detailTriggerRef.current?.focus(), 0);
+    };
+    const handleDetailKeys = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDetail();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(detailPanelRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), summary, a[href], input:not(:disabled)") ?? []);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", handleDetailKeys);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("keydown", handleDetailKeys);
     };
   }, [petMode, detailsOpen]);
 
@@ -712,6 +779,10 @@ export function App() {
     () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
     [selectedHost, selectedFreshness.state]
   );
+  const selectedInternalSignal = useMemo(
+    () => selectedHost ? internalSignalSummary(selectedHost) : { status: "待重新检查", detail: "—" },
+    [selectedHost]
+  );
   const batchCoverage = useMemo(
     () => scheduler?.coverage ?? (dashboard ? collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode }) : collectionCoverage("safe-simulated")),
     [scheduler, dashboard]
@@ -728,6 +799,8 @@ export function App() {
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
   const diagnosing = operationState.diagnosing;
+  const preparingApproval = operationState.preparingApproval;
+  const executingAction = operationState.executingAction;
   const selectedDiagnosis = diagnosisResult && diagnosisResult.hostId === selectedHost?.id ? diagnosisResult.run : null;
   const selectedDeepFindings = selectedDiagnosis
     ? selectedDiagnosis.deepEvidence.findings.filter((finding) => finding.status === "warning" || finding.status === "critical")
@@ -736,16 +809,14 @@ export function App() {
     selectedDeepFindings.push(selectedDiagnosis.deepEvidence.findings[0]);
   }
 
-  function chooseFocusHost(hostId: string) {
+  function chooseFocusHost(hostId: string, trigger?: HTMLButtonElement) {
     if (hostId !== selectedHostId) {
       setDiagnosisResult(null);
       setDiagnosisError("");
     }
+    if (trigger) detailTriggerRef.current = trigger;
     setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
     setDetailsOpen(true);
-    if (window.matchMedia("(max-width: 980px)").matches) {
-      window.setTimeout(() => document.getElementById("server-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
-    }
   }
 
   function chooseCheckFilter(nextFilter: CheckHistoryFilter) {
@@ -864,6 +935,11 @@ export function App() {
     setPendingOperation("action");
     setError("");
     setDryRunCopied(false);
+    setActionApproval(null);
+    setActionPhrase("");
+    setActionConsent(false);
+    setActionExecution(null);
+    setActionFlowError("");
     try {
       const result = await api<DryRunAction>("/api/actions/dry-run", {
         method: "POST",
@@ -958,6 +1034,60 @@ export function App() {
         )}
       </main>
     );
+  }
+
+  async function prepareNginxAction() {
+    if (pendingOperation || !selectedHost || dryRun?.actionKey !== "reload-nginx") return;
+    setPendingOperation("action-prepare");
+    setActionFlowError("");
+    setActionExecution(null);
+    try {
+      const result = await api<{ capability: ActionCapability; approval: ActionApproval }>("/api/actions/prepare", {
+        method: "POST",
+        body: JSON.stringify({ hostId: selectedHost.id, actionKey: "reload-nginx" })
+      });
+      setActionCapability(result.capability);
+      setActionApproval(result.approval);
+      setActionPhrase("");
+      setActionConsent(false);
+    } catch (err) {
+      setActionFlowError(err instanceof Error ? err.message : "无法准备 Nginx 重载");
+    } finally {
+      setPendingOperation(null);
+    }
+  }
+
+  async function executeApprovedNginxAction() {
+    if (pendingOperation || !actionApproval || !actionConsent || actionPhrase !== actionApproval.requiredPhrase) return;
+    setPendingOperation("action-execute");
+    setActionFlowError("");
+    try {
+      const result = await api<{ receipt: ActionReceipt; replay: boolean; steps: ActionExecutionStep[] }>("/api/actions/execute", {
+        method: "POST",
+        body: JSON.stringify({
+          approvalId: actionApproval.approvalId,
+          planDigest: actionApproval.planDigest,
+          phrase: actionPhrase
+        })
+      });
+      setActionExecution({ receipt: result.receipt, steps: result.steps });
+      setActionReceipts((current) => [result.receipt, ...current.filter((item) => item.id !== result.receipt.id)].slice(0, 12));
+      setActionApproval(null);
+      setActionPhrase("");
+      setActionConsent(false);
+      await load();
+    } catch (err) {
+      setActionFlowError(err instanceof Error ? err.message : "Nginx 重载流程没有完成");
+    } finally {
+      setPendingOperation(null);
+    }
+  }
+
+  function cancelActionApproval() {
+    setActionApproval(null);
+    setActionPhrase("");
+    setActionConsent(false);
+    setActionFlowError("");
   }
 
   async function runAutomaticDiagnosis() {
@@ -1074,10 +1204,6 @@ export function App() {
         onRefresh={(hostId) => runLightCheck(hostId)}
         onRetrySync={retryPetSync}
         onOpenDesk={openDeskFromPet}
-        onDiscuss={(hostId) => {
-          const host = currentDashboard.hosts.find((item) => item.id === hostId);
-          if (host) window.location.assign(codexDiscussionLink(discussionBrief(currentDashboard, host)));
-        }}
       />
     );
   }
@@ -1240,49 +1366,56 @@ export function App() {
                     host={host}
                     fresh={hostEvidenceIsFresh(dashboard, host, now)}
                     selected={detailsOpen && host.id === selectedHost.id}
-                    onSelect={() => chooseFocusHost(host.id)}
+                    onSelect={(trigger) => chooseFocusHost(host.id, trigger)}
                   />
                 ))}
               </div>
             </div>
 
-            {detailsOpen ? <><button className="detail-backdrop" onClick={() => setDetailsOpen(false)} aria-label="关闭服务器详情" /><aside className="detail-panel main-detail" id="server-detail" aria-label={`${selectedHost.name} 详情`}>
+            {detailsOpen ? <><button className="detail-backdrop" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭服务器详情" /><aside ref={detailPanelRef} className="detail-panel main-detail server-detail-drawer" id="server-detail" role="dialog" aria-modal="true" aria-label={`${selectedHost.name} 详情`}>
               <div className="detail-head">
-                <div><h2>{selectedHost.name}</h2><p>{selectedFreshness.label}</p></div>
-                <div className="detail-head-actions"><StatusPill status={selectedHost.status} /><button className="detail-close" onClick={() => setDetailsOpen(false)} aria-label="关闭详情"><X size={18} /></button></div>
+                <div className="detail-title"><i className={`host-dot ${selectedHost.status}`} aria-hidden="true" /><div><h2>{selectedHost.name}</h2><p>{statusLabels[selectedHost.status]} · {selectedFreshness.label}</p></div></div>
+                <button ref={detailCloseRef} className="detail-close" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭详情"><X size={18} /></button>
               </div>
-              {selectedGuidance ? null : <p className="server-detail-summary">{selectedHost.summary}</p>}
+              <div className="detail-primary-actions">
+                {selectedHost.status !== "healthy" && selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "正在查原因" : diagnosisError ? "重试查原因" : selectedDiagnosis ? "重新查原因" : "自动查原因"}</button> : null}
+                <button className={selectedHost.status === "healthy" || !selectedReadiness?.canCollect ? "primary slim" : "secondary slim"} disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>
+                <button className="quiet-action" onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
+              </div>
+              <dl className="server-facts">
+                <div><dt>网页 / API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待重新检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
+                <div><dt>服务器内部</dt><dd><strong>{selectedEvidenceCurrent ? selectedInternalSignal.status : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? selectedInternalSignal.detail : "—"}</span></dd></div>
+                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>CPU / 内存 / 磁盘</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `${selectedHost.cpuPercent == null ? "—" : `${selectedHost.cpuPercent}%`} / ${selectedHost.memoryPercent == null ? "—" : `${selectedHost.memoryPercent}%`} / ${selectedHost.diskPercent == null ? "—" : `${selectedHost.diskPercent}%`}` : "—"}</span></dd></div>
+              </dl>
               {diagnosing ? (
                 <section className="diagnosis-running" role="status">
                   <RefreshCcw className="spin" size={19} />
-                  <div><strong>正在重新检查这台服务器</strong><p>检查网页、SSH、服务和资源；不会执行修复命令。</p></div>
+                  <div><strong>正在查原因</strong><p>读取网页、SSH、服务和资源状态。</p></div>
                 </section>
               ) : selectedDiagnosis ? (
                 <>
                   <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
-                    <header><span><CheckCircle2 size={17} />自动排查完成</span><em>定位：{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
+                    <header><span><CheckCircle2 size={17} />排查结果</span><em>{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
                     <h3>{selectedDiagnosis.diagnosis.headline}</h3>
                     <p>{selectedDiagnosis.diagnosis.detail}</p>
-                    <div><strong>建议</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
-                    <small>只读排查 · 未执行任何变更</small>
+                    <div><strong>下一步</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
                   </section>
-                  <section className={`diagnostic-proof ${selectedDiagnosis.deepEvidence.state}`} aria-label="进一步诊断证据">
-                    <header><strong>{selectedDiagnosis.deepEvidence.title}</strong><span>{deepEvidenceSourceLabels[selectedDiagnosis.deepEvidence.source]}</span></header>
-                    {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
-                    {selectedDeepFindings.length ? (
-                      <div className="diagnostic-proof-list">
-                        {selectedDeepFindings.map((finding) => (
-                          <div className={finding.status} key={finding.key}>
-                            <span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {selectedDiagnosis.deepEvidence.excerpt.length ? (
-                      <details><summary>查看脱敏片段</summary><pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre></details>
-                    ) : null}
-                    <small>{selectedDiagnosis.deepEvidence.source === "offline-practice" ? "离线生成 · 未联网" : selectedDiagnosis.deepEvidence.source === "ssh-read-only" ? "只读命令 · 日志未保存" : "未读取服务器内部信息"}</small>
-                  </section>
+                  <details className={`diagnostic-proof ${selectedDiagnosis.deepEvidence.state}`}>
+                    <summary><strong>技术详情</strong><span>{deepEvidenceSourceLabels[selectedDiagnosis.deepEvidence.source]}</span></summary>
+                    <div className="diagnostic-proof-body">
+                      {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
+                      {selectedDeepFindings.length ? (
+                        <div className="diagnostic-proof-list">
+                          {selectedDeepFindings.map((finding) => (
+                            <div className={finding.status} key={finding.key}>
+                              <span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {selectedDiagnosis.deepEvidence.excerpt.length ? <pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre> : null}
+                    </div>
+                  </details>
                 </>
               ) : selectedHost.status === "healthy" || !selectedGuidance ? null : (
                 <section className={`server-diagnosis ${selectedHost.status}`} aria-label="状态说明">
@@ -1290,20 +1423,9 @@ export function App() {
                   <p>{selectedGuidance.detail}</p>
                 </section>
               )}
-              {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>自动排查没有完成</strong><p>{diagnosisError}</p></span><button onClick={runAutomaticDiagnosis}>重试</button></div> : null}
-              <dl className="server-facts">
-                <div><dt>网页/API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "证据已过期"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs}ms</span> : null}</dd></div>
-                <div><dt>SSH / Docker</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? friendlyDockerStatus(selectedHost.dockerStatus) : "旧值不作为当前状态"}</span></dd></div>
-                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>资源</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `内存 ${selectedHost.memoryPercent == null ? "—" : `${selectedHost.memoryPercent}%`} · 磁盘 ${selectedHost.diskPercent == null ? "—" : `${selectedHost.diskPercent}%`}` : "旧值不作为当前状态"}</span></dd></div>
-              </dl>
-              <div className="quick-actions">
-                {selectedHost.status !== "healthy" && selectedReadiness?.canCollect && !diagnosisError ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "自动排查中" : selectedDiagnosis ? "重新排查" : "自动排查"}</button> : <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>}
-                {selectedHost.status !== "healthy" && selectedReadiness?.canCollect && !selectedDiagnosis && !diagnosisError ? <button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "只重新检查"}</button> : null}
-                {selectedDiagnosis && selectedDiagnosis.diagnosis.layer !== "none" && selectedDiagnosis.diagnosis.layer !== "unknown" ? <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>查看排查步骤</button> : null}
-                <button className="quiet-action" onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
-              </div>
+              {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>没有查完</strong><p>{diagnosisError}</p></span></div> : null}
               <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
-                <summary>{selectedEvidenceCurrent ? "查看检查记录" : "查看上次记录（已过期）"}</summary>
+                <summary>{selectedEvidenceCurrent ? "检查记录" : "上次检查记录（已过期）"}</summary>
                 <div>{selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}</div>
               </details>
             </aside></> : null}
@@ -1600,7 +1722,7 @@ export function App() {
                 {retentionResult ? (
                   <div className="retention-result">
                     <strong>最近清理完成</strong>
-                    <p>删除检查 {retentionResult.deletedRuns} 次、明细 {retentionResult.deletedHostChecks} 条；数据库 {Math.round(retentionResult.sizeBytes / 1024)} KB。</p>
+                    <p>删除检查 {retentionResult.deletedRuns} 次、明细 {retentionResult.deletedHostChecks} 条、操作回执 {retentionResult.deletedActionRuns} 条；数据库 {Math.round(retentionResult.sizeBytes / 1024)} KB。</p>
                   </div>
                 ) : null}
               </div>
@@ -1612,7 +1734,7 @@ export function App() {
           <section className="action-layout">
             <header className="action-intro">
               <h2>命令与变更预案</h2>
-              <p>只读命令可以检查后复制；重载和重启只展示计划，当前版本不会执行。</p>
+              <p>只读命令可以复制；Nginx 重载只有在独立通道开启、证据仍新鲜且你逐次确认后才会执行。</p>
             </header>
             <div className="action-menu">
               <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
@@ -1625,7 +1747,7 @@ export function App() {
                 <>
                   <div className={`action-contract ${dryRun.executionState}`}>
                     <div><span>风险等级</span><strong>{({ "read-only": "只读", low: "低风险", medium: "中风险", high: "高风险" } as const)[dryRun.riskTier]}</strong></div>
-                    <div><span>远程执行</span><strong>关闭</strong></div>
+                    <div><span>远程执行</span><strong>{dryRun.actionKey === "reload-nginx" && actionCapability?.enabled ? "逐次授权" : "关闭"}</strong></div>
                     <div><span>参数状态</span><strong>{dryRun.copyAllowed ? "可复制只读命令" : "占位符模板"}</strong></div>
                     <p>{dryRun.safetyBoundary}</p>
                   </div>
@@ -1642,11 +1764,50 @@ export function App() {
                   </button>
                   <h3>验证步骤</h3>
                   <ul>{dryRun.verification.map((item) => <li key={item}>{item}</li>)}</ul>
-                  {dryRun.riskTier !== "read-only" ? (
+                  {dryRun.actionKey === "reload-nginx" ? (
+                    <section className="execution-gate" aria-label="Nginx 重载授权">
+                      {actionExecution ? (
+                        <div className={`action-receipt-result ${actionExecution.receipt.status}`} role="status">
+                          <header><strong>{actionReceiptLabels[actionExecution.receipt.status]}</strong><span>{formatTime(actionExecution.receipt.finishedAt || actionExecution.receipt.startedAt)}</span></header>
+                          <p>{actionExecution.receipt.summary}</p>
+                          {actionExecution.steps.length ? <ol>{actionExecution.steps.map((step) => <li className={step.status} key={step.key}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol> : null}
+                          {actionExecution.receipt.status === "succeeded" ? null : <small>不要直接重复执行；先返回服务器详情查看最新证据。</small>}
+                        </div>
+                      ) : actionApproval ? (
+                        <div className="action-approval" role="group" aria-label="最后确认 Nginx 重载">
+                          <header><div><span>最后确认</span><h3>重载 {actionApproval.target.name} 的 Nginx</h3></div><em>{formatTime(actionApproval.expiresAt)} 前有效</em></header>
+                          <div className="approval-sequence">
+                            <span><b>1</b>先验证配置</span><span><b>2</b>通过后才重载</span><span><b>3</b>自动重新检查</span>
+                          </div>
+                          <p>{actionApproval.impact}</p>
+                          <pre>{actionApproval.commands.join("\n")}</pre>
+                          <p className="approval-stop"><ShieldCheck size={16} />{actionApproval.stopCondition}</p>
+                          <label className="approval-check"><input type="checkbox" checked={actionConsent} onChange={(event) => setActionConsent(event.target.checked)} /><span>我已核对目标、两条命令和影响；异常时不会连续点击。</span></label>
+                          <label className="approval-phrase"><span>输入 <strong>{actionApproval.requiredPhrase}</strong></span><input value={actionPhrase} onChange={(event) => setActionPhrase(event.target.value)} autoComplete="off" /></label>
+                          <div className="approval-actions">
+                            <button className="danger-action" disabled={!actionConsent || actionPhrase !== actionApproval.requiredPhrase || operationBusy} onClick={executeApprovedNginxAction}>{executingAction ? "正在执行" : "确认并重载 Nginx"}</button>
+                            <button className="secondary slim" disabled={operationBusy} onClick={cancelActionApproval}>取消</button>
+                          </div>
+                        </div>
+                      ) : actionCapability?.enabled ? (
+                        <div className="execution-ready">
+                          <AlertTriangle size={21} />
+                          <div><strong>这是会改变服务器的操作</strong><p>准备后才会显示真实目标和完整命令；两分钟内输入确认短语才可执行。</p></div>
+                          <button className="danger-outline" disabled={operationBusy} onClick={prepareNginxAction}>{preparingApproval ? "准备中" : "准备重载"}</button>
+                        </div>
+                      ) : (
+                        <div className="execution-disabled">
+                          <ShieldCheck size={20} />
+                          <div><strong>远程变更保持关闭</strong><p>{actionCapability?.message || "正在读取本机操作通道状态。"}</p></div>
+                        </div>
+                      )}
+                      {actionFlowError ? <div className="action-flow-error" role="alert"><AlertTriangle size={16} />{actionFlowError}</div> : null}
+                    </section>
+                  ) : dryRun.riskTier !== "read-only" ? (
                     <div className="danger-consent" role="note">
                       <AlertTriangle size={22} />
-                      <div><strong>这是会改变服务器的操作</strong><p>当前只生成预案，不开放远程执行。未来接入执行时，仍需再次显示目标、完整命令、影响和回退方法，由你逐条确认。</p></div>
-                      <button disabled>执行通道未开启</button>
+                      <div><strong>服务重启仍未开放</strong><p>当前缺少可验证的服务名称、部署目录和回退配置，因此只保留不可执行模板。</p></div>
+                      <button disabled>保持关闭</button>
                     </div>
                   ) : null}
                 </>
@@ -1654,6 +1815,12 @@ export function App() {
                 <p>这里不会直接连接服务器执行操作。先看命令和验证步骤，后续版本再接入二次确认。</p>
               )}
             </div>
+            {actionReceipts.length ? (
+              <details className="action-receipts">
+                <summary>最近变更回执 · {actionReceipts.length}</summary>
+                <div>{actionReceipts.map((receipt) => <article key={receipt.id}><span className={receipt.status}>{actionReceiptLabels[receipt.status]}</span><strong>{receipt.hostName}</strong><p>{receipt.summary}</p><time>{formatTime(receipt.finishedAt || receipt.startedAt)}</time></article>)}</div>
+              </details>
+            ) : null}
           </section>
         )}
 

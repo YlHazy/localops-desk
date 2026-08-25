@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
@@ -102,7 +102,7 @@ function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "
   if (/down|fail|timeout|refused|unreachable|error/.test(http)) return "网页或 API 现在无法正常访问。";
   if (/fail|timeout|refused|unreachable|error/.test(ssh)) return "管理通道现在无法连接。";
   if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有正常运行。";
-  if (/资源占用/.test(guidanceReason)) {
+  if (/资源(?:占用|使用)|磁盘|内存/.test(guidanceReason)) {
     return (host.diskPercent ?? 0) >= (host.memoryPercent ?? 0)
       ? `磁盘 ${host.diskPercent ?? "—"}%，需要留意。`
       : `内存 ${host.memoryPercent ?? "—"}%，需要留意。`;
@@ -120,8 +120,7 @@ export function PetMode({
   actionError,
   onRefresh,
   onRetrySync,
-  onOpenDesk,
-  onDiscuss
+  onOpenDesk
 }: {
   dashboard: DashboardStatus;
   now: number;
@@ -133,7 +132,6 @@ export function PetMode({
   onRefresh: (hostId?: string) => void;
   onRetrySync: () => void;
   onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void | Promise<void>;
-  onDiscuss: (hostId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
@@ -157,6 +155,8 @@ export function PetMode({
   const [topmostActive, setTopmostActive] = useState(false);
   const [topmostPending, setTopmostPending] = useState(false);
   const [topmostNote, setTopmostNote] = useState(topmostSupported ? "正在确认桌面置顶状态。" : "从 Windows 启动器打开后可使用桌面置顶。");
+  const glanceButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const refreshNotificationState = () => {
@@ -226,6 +226,35 @@ export function PetMode({
       closePresence();
     };
   }, [petSessionId, applyTopmost]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const drawer = drawerRef.current;
+    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []);
+    focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setExpanded(false);
+        window.setTimeout(() => glanceButtonRef.current?.focus(), 0);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expanded]);
 
   const trustedDashboard = useMemo(() => trustworthyDashboard(dashboard, now), [dashboard, now]);
   const hosts = useMemo(() => prioritizeHosts(trustedDashboard.hosts), [trustedDashboard]);
@@ -380,9 +409,11 @@ export function PetMode({
   }
 
   const headline = syncError
-    ? "我和本地服务断开了"
+    ? "本地连接断开"
+    : actionError
+      ? "这次没检查完"
     : dashboard.hosts.length === 0
-      ? "还没告诉我要看谁"
+      ? "还没添加服务器"
       : overallStatus === "healthy"
         ? focusReadiness.state === "http" ? "入口正常" : `${visibleCounts.healthy ?? 0} 台都稳`
         : overallStatus === "critical"
@@ -424,33 +455,20 @@ export function PetMode({
           <strong>{headline}</strong>
           <p>{syncError
             ? "服务器没有因此被检查或改动。"
+            : actionError
+              ? "上次结果没变，稍后再试。"
             : dashboard.hosts.length === 0
               ? "添加后，我会定时替你看。"
               : priorityHost && !priorityFresh
                 ? "证据过期了，重新看一次才算数。"
                 : overallStatus === "healthy"
-                  ? focusReadiness.state === "http" ? "网页/API 可达，资源状态还没检查。" : "没有发现问题，我继续替你盯着。"
+                  ? focusReadiness.state === "http" ? "入口正常，资源还没检查。" : "刚刚检查，我继续盯着。"
                   : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason)}</p>
         </div>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />
         </div>
       </section>
-
-      {syncError ? (
-        <section className="pet-recovery" aria-label="本地状态恢复">
-          <strong>{recovery.label}</strong>
-          <small>{recovery.detail}</small>
-          <details><summary>安全说明</summary><p>{recovery.boundary}</p><em title={syncError}>原因：{syncError}</em></details>
-        </section>
-      ) : null}
-
-      {actionError ? (
-        <section className="pet-action-error" role="alert">
-          <AlertTriangle size={15} />
-          <span><strong>巡检完成状态未确认</strong><small>{actionError}。上次证据保持不变；先等自动同步，不要连续点击。</small></span>
-        </section>
-      ) : null}
 
       <footer className="pet-actions">
         <button className="pet-refresh" onClick={() => syncError
@@ -459,13 +477,13 @@ export function PetMode({
           ? onOpenDesk(undefined, "hosts")
           : (overallStatus === "warning" || overallStatus === "critical") && priorityHost
             ? onOpenDesk(priorityHost.id, "overview")
-            : onRefresh()} disabled={loading || syncing}>
+          : onRefresh()} disabled={loading || syncing} title={syncError ? `${recovery.detail} ${recovery.boundary}` : actionError || undefined}>
           {loading || syncing ? <RefreshCcw className="spin" size={18} /> : syncError ? <RefreshCcw size={18} /> : overallStatus === "healthy" ? <Check size={18} /> : <Server size={18} />}
           {loading ? "我正在看" : syncing ? "正在连接" : primaryAction}
         </button>
       </footer>
 
-      <button className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
+      <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
         <strong>{syncError ? "本地状态断开" : visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${batchCoverage.partial} 台仅看入口` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
         <span>{snapshotTrust.state === "offline" ? "仅保留旧结果" : snapshotTrust.state === "stale" ? "证据已过期" : snapshotTrust.state === "unknown" ? "尚未检查" : `${latestTime(dashboard.observedAt)} 检查`}</span>
@@ -474,7 +492,7 @@ export function PetMode({
 
       <div className={`pet-sheet-layer ${expanded ? "open" : ""}`} aria-hidden={!expanded}>
         <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={() => setExpanded(false)} aria-label="关闭快速查看" />
-        <section className="pet-drawer" id="pet-quick-view" aria-label="服务器快速查看">
+        <section ref={drawerRef} className="pet-drawer" id="pet-quick-view" role="dialog" aria-modal="true" aria-label="服务器快速查看">
           <header><strong>服务器</strong><button onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1} aria-label="关闭"><X size={17} /></button></header>
           <div className="pet-hosts">
             {hosts.map((host) => {
@@ -482,15 +500,12 @@ export function PetMode({
               return <button className="pet-host-row" key={host.id} disabled={!expanded} aria-current={host.id === focusHost?.id ? "true" : undefined} onClick={() => setSelectedHostId(manualFocusSelection(hosts, host.id))}>
                 <span className={`pet-status-dot ${host.status}`} />
                 <span><strong>{host.name}</strong><small>{current ? statusCopy[host.status].label : host.lastCheckedAt ? "证据过期" : "等待检查"}</small></span>
-                <em>{current && host.memoryPercent != null ? `内存 ${host.memoryPercent}%` : "—"}</em>
               </button>;
             })}
           </div>
           <div className="pet-sheet-actions">
             <button className="pet-open-console" disabled={!expanded} onClick={() => onOpenDesk(focusHost?.id, "overview")}>打开控制台 <ArrowUpRight size={15} /></button>
-            <button className="pet-open-settings" disabled={!expanded} onClick={() => onOpenDesk(undefined, "scheduler")}>提醒设置</button>
           </div>
-          {(overallStatus === "warning" || overallStatus === "critical") && focusHost ? <button className="pet-discuss" disabled={!expanded} onClick={() => onDiscuss(focusHost.id)}><MessageCircle size={15} />让 Codex 分析</button> : null}
         </section>
       </div>
     </main>

@@ -4,7 +4,7 @@ The first visual concept is stored at:
 
 - `docs/02-design/generated-images/localops-dashboard-concept.png`
 
-The first MVP implementation uses this concept as direction, while prioritizing a working local API and safe operational interactions. A later visual pass should tighten fidelity for these screens:
+The implemented direction favors a quiet daily glance over a generic dashboard: one judgment and dense server list in the desk, a right-side fact drawer, and a four-row compact companion. Further visual work must preserve that hierarchy for these screens:
 
 - Dashboard overview.
 - Host detail.

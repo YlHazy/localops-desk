@@ -90,13 +90,29 @@ Accepts an explicit boolean `enabled`. On Windows it creates or removes only the
 
 `POST /api/maintenance/retention`
 
-Deletes expired local check history and orphan check rows according to the configured retention window. Optional `vacuum` compacts the local SQLite database.
+Deletes expired local check history, orphan check rows, and finished action receipts according to the configured retention window. Receipts still marked `running` are preserved. Optional `vacuum` compacts the local SQLite database.
 
 ## Actions
 
 `POST /api/actions/dry-run`
 
 Returns an allow-listed action plan and verification steps. It does not mutate remote state. Read-only plans may return a copyable configured target; practice and mutating plans return non-copyable placeholders and never disclose the configured SSH alias. Unknown action keys are rejected.
+
+`GET /api/actions/capability`
+
+Returns whether the fixed Nginx recovery path is available and why it is disabled. This endpoint and all executable action endpoints are UI-only and absent from the Agent manifest.
+
+`GET /api/actions/receipts`
+
+Returns bounded local action receipts without adding a command surface.
+
+`POST /api/actions/prepare`
+
+Validates both runtime gates, a fresh abnormal manual diagnosis, and the exact supported action. Returns a two-minute single-use approval bound to the host configuration, target snapshot, evidence, and fixed commands.
+
+`POST /api/actions/execute`
+
+Consumes the approval only after target/digest checks, explicit consent, and the exact confirmation phrase. Runs Nginx preflight before reload, records each step, and always performs bounded post-check verification after a reload attempt.
 
 ## Reports
 

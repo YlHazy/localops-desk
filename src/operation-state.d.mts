@@ -1,4 +1,4 @@
-export type PendingOperation = "check" | "diagnosis" | "scheduler" | "retention" | "action" | "host-save" | "host-delete" | null;
+export type PendingOperation = "check" | "diagnosis" | "scheduler" | "retention" | "action" | "action-prepare" | "action-execute" | "host-save" | "host-delete" | null;
 
 export function operationUiState(pendingOperation: PendingOperation): {
   busy: boolean;
@@ -7,6 +7,8 @@ export function operationUiState(pendingOperation: PendingOperation): {
   savingScheduler: boolean;
   retaining: boolean;
   preparingAction: boolean;
+  preparingApproval: boolean;
+  executingAction: boolean;
   savingHost: boolean;
   deletingHost: boolean;
 };

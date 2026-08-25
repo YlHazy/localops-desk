@@ -7,7 +7,8 @@ import { DatabaseSync } from "node:sqlite";
 import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
 import { diagnoseHost } from "../shared/host-diagnosis.mjs";
 import { collectDeepEvidence } from "./deep-diagnostics.mjs";
-import { collectHost, demoHosts, readOnlySshPreview, runDeepSshReadOnly, sanitizeError } from "./runtime.mjs";
+import { actionCapability, createNginxReloadApproval, executeNginxReload, publicApproval, validateNginxApproval } from "./safe-actions.mjs";
+import { collectHost, demoHosts, readOnlySshPreview, runDeepSshReadOnly, runNginxActionStep, sanitizeError } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { petWindowCapability, setPetWindowTopmost } from "./pet-window.mjs";
@@ -17,6 +18,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const host = process.env.LOCALOPS_API_HOST || "127.0.0.1";
 const port = Number(process.env.LOCALOPS_API_PORT || "4317");
 const mode = process.env.LOCALOPS_ENABLE_SSH === "1" ? "ssh-enabled" : "safe-simulated";
+const actionsEnabled = process.env.LOCALOPS_ENABLE_ACTIONS === "1";
 const loopbackApiHosts = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 if (!loopbackApiHosts.has(host)) {
   throw new Error("LOCALOPS_API_HOST must be a loopback address in this MVP.");
@@ -81,7 +83,31 @@ db.exec(`
     value TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS action_runs (
+    id TEXT PRIMARY KEY,
+    hostId TEXT NOT NULL,
+    hostName TEXT NOT NULL,
+    actionKey TEXT NOT NULL,
+    status TEXT NOT NULL,
+    approvedAt TEXT NOT NULL,
+    startedAt TEXT NOT NULL,
+    finishedAt TEXT,
+    summary TEXT NOT NULL,
+    verificationCheckId INTEGER,
+    failureCode TEXT,
+    commandDigest TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_action_runs_started ON action_runs(startedAt DESC);
 `);
+
+db.prepare(`
+  UPDATE action_runs
+  SET status = 'interrupted', finishedAt = COALESCE(finishedAt, ?),
+      summary = '上次会话在形成最终回执前结束；不要直接重复执行。', failureCode = 'ACTION_INTERRUPTED'
+  WHERE status = 'running'
+`).run(new Date().toISOString());
 
 function ensureColumn(table, column, definition) {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all();
@@ -809,6 +835,10 @@ function runRetention(options = {}) {
     DELETE FROM host_checks
     WHERE hostId NOT IN (SELECT id FROM hosts)
   `).run().changes;
+  const deletedActionRuns = db.prepare(`
+    DELETE FROM action_runs
+    WHERE status != 'running' AND COALESCE(finishedAt, startedAt) < ?
+  `).run(cutoff).changes;
   if (options.vacuum) {
     db.exec("VACUUM");
   }
@@ -818,6 +848,7 @@ function runRetention(options = {}) {
     deletedRuns,
     deletedHostChecks,
     deletedOrphanHostChecks: orphanChecks,
+    deletedActionRuns,
     vacuumed: Boolean(options.vacuum),
     sizeBytes: statSync(dbPath).size
   };
@@ -1058,6 +1089,7 @@ function dryRunAction(input) {
     throw error;
   }
   const practice = isManagedOfflineDemoHost(hostItem);
+  const capability = actionCapability({ actionsEnabled, sshEnabled: mode === "ssh-enabled" });
   const ssh = actionKey === "inspect-service" && !practice
     ? validateSshAlias(hostItem.sshAlias, { allowEmpty: false })
     : "<ssh-alias>";
@@ -1082,10 +1114,14 @@ function dryRunAction(input) {
       title: `Reload Nginx：${hostItem.name}`,
       executionState: "blocked-template",
       copyAllowed: false,
-      safetyBoundary: "变更类预案固定使用占位符，不携带真实 SSH alias，也不提供一键复制。",
+      safetyBoundary: capability.enabled
+        ? "当前仍是占位预案；只有单独准备后才显示目标和完整命令，并要求输入确认短语。"
+        : "变更类预案固定使用占位符，不携带真实 SSH alias，也不提供一键复制。",
       commands: ["ssh <ssh-alias> 'sudo nginx -t'", "ssh <ssh-alias> 'sudo systemctl reload nginx'"],
       verification: ["先通过 nginx -t。", "重载后检查 HTTP 健康状态。", "失败时不继续执行后续动作。"],
-      blockedReason: "当前只生成预案，不执行 Nginx 重载。"
+      blockedReason: capability.enabled
+        ? "远程执行不会从这份模板直接发生；请在下方进入两步确认。"
+        : "Nginx 重载通道未开启，当前只生成预案。"
     },
     "restart-compose-service": {
       actionKey,
@@ -1104,6 +1140,145 @@ function dryRunAction(input) {
   };
 
   return plans[actionKey];
+}
+
+const actionApprovals = new Map();
+
+function actionRuntimeCapability() {
+  return actionCapability({ actionsEnabled, sshEnabled: mode === "ssh-enabled" });
+}
+
+function actionRequestError(code, message, httpStatus = 409) {
+  const error = new Error(message);
+  error.code = code;
+  error.httpStatus = httpStatus;
+  return error;
+}
+
+function latestActionableDiagnosis(hostId) {
+  const row = db.prepare(`
+    SELECT cr.id AS checkId, cr.finishedAt, hc.status
+    FROM check_runs cr
+    JOIN host_checks hc ON hc.runId = cr.id
+    WHERE cr.trigger = 'manual-diagnosis' AND hc.hostId = ?
+    ORDER BY cr.id DESC
+    LIMIT 1
+  `).get(hostId);
+  if (!row) return null;
+  const ageMs = Date.now() - new Date(row.finishedAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 10 * 60 * 1000) return null;
+  if (!["warning", "critical"].includes(row.status)) return null;
+  return row;
+}
+
+function actionReceiptRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    hostName: row.hostName,
+    actionKey: row.actionKey,
+    status: row.status,
+    approvedAt: row.approvedAt,
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+    summary: row.summary,
+    verificationCheckId: row.verificationCheckId,
+    failureCode: row.failureCode
+  };
+}
+
+function actionReceipt(id) {
+  return actionReceiptRow(db.prepare("SELECT * FROM action_runs WHERE id = ?").get(id));
+}
+
+function recentActionReceipts() {
+  return db.prepare("SELECT * FROM action_runs ORDER BY startedAt DESC LIMIT 12").all().map(actionReceiptRow);
+}
+
+function prepareAction(input) {
+  const capability = actionRuntimeCapability();
+  if (!capability.enabled) throw actionRequestError("ACTIONS_DISABLED", capability.message);
+  if (input.actionKey !== "reload-nginx") {
+    throw actionRequestError("ACTION_NOT_SUPPORTED", "当前只开放固定的 Nginx 重载流程。", 400);
+  }
+  const hostItem = getHosts().find((item) => item.id === input.hostId);
+  if (!hostItem) throw actionRequestError("HOST_NOT_FOUND", `Host not found: ${input.hostId}`, 404);
+  if (isManagedOfflineDemoHost(hostItem)) {
+    throw actionRequestError("PRACTICE_ACTION_BLOCKED", "离线练习不允许准备远程变更。");
+  }
+  const active = conflictingLightCheck(hostItem.id);
+  if (active) throw new CheckAlreadyRunningError(active);
+  const evidence = latestActionableDiagnosis(hostItem.id);
+  if (!evidence) {
+    throw actionRequestError("FRESH_DIAGNOSIS_REQUIRED", "请先对这台异常服务器运行一次自动排查；只有十分钟内的异常证据可以进入变更确认。");
+  }
+  const now = Date.now();
+  for (const [id, approval] of actionApprovals) {
+    if (approval.hostId === hostItem.id || new Date(approval.expiresAt).getTime() <= now) actionApprovals.delete(id);
+  }
+  const approval = createNginxReloadApproval({
+    host: hostItem,
+    approvalId: randomUUID(),
+    evidenceCheckId: evidence.checkId,
+    now
+  });
+  actionApprovals.set(approval.approvalId, approval);
+  return { capability, approval: publicApproval(approval) };
+}
+
+async function executePreparedAction(input) {
+  const existing = actionReceipt(String(input.approvalId || ""));
+  if (existing) return { receipt: existing, replay: true, steps: [] };
+  const capability = actionRuntimeCapability();
+  if (!capability.enabled) throw actionRequestError("ACTIONS_DISABLED", capability.message);
+  const approval = actionApprovals.get(String(input.approvalId || ""));
+  validateNginxApproval(approval, input);
+  const hostItem = getHosts().find((item) => item.id === approval.hostId);
+  if (!hostItem || hostItem.sshAlias !== approval.sshAlias || hostItem.updatedAt !== approval.hostUpdatedAt) {
+    throw actionRequestError("ACTION_TARGET_CHANGED", "服务器配置在准备后发生变化，请重新排查并准备。");
+  }
+  const evidence = latestActionableDiagnosis(hostItem.id);
+  if (!evidence || evidence.checkId !== approval.evidenceCheckId) {
+    throw actionRequestError("ACTION_EVIDENCE_CHANGED", "诊断证据已经变化或过期，请重新准备。");
+  }
+  const active = conflictingLightCheck(hostItem.id);
+  if (active) throw new CheckAlreadyRunningError(active);
+
+  actionApprovals.delete(approval.approvalId);
+  const retainedLock = { runId: approval.approvalId, scope: hostItem.id };
+  activeLightChecks.set(hostItem.id, retainedLock);
+  const approvedAt = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO action_runs (id, hostId, hostName, actionKey, status, approvedAt, startedAt, finishedAt, summary, verificationCheckId, failureCode, commandDigest)
+    VALUES (?, ?, ?, ?, 'running', ?, ?, NULL, ?, NULL, NULL, ?)
+  `).run(approval.approvalId, hostItem.id, hostItem.name, approval.actionKey, approvedAt, approvedAt, "正在执行固定 Nginx 重载流程。", approval.planDigest);
+
+  try {
+    const result = await executeNginxReload({
+      approval,
+      runCommand: (step) => runNginxActionStep(hostItem, step),
+      verify: async () => {
+        const check = await runLightCheck({ hostId: hostItem.id, trigger: "manual-recovery-verification" }, retainedLock);
+        return { status: check.status, checkId: check.id, summary: check.summary };
+      }
+    });
+    const finishedAt = new Date().toISOString();
+    db.prepare(`
+      UPDATE action_runs
+      SET status = ?, finishedAt = ?, summary = ?, verificationCheckId = ?, failureCode = ?
+      WHERE id = ?
+    `).run(result.status, finishedAt, result.summary, result.verificationCheckId, result.failureCode, approval.approvalId);
+    return { receipt: actionReceipt(approval.approvalId), replay: false, steps: result.steps };
+  } catch (error) {
+    db.prepare(`
+      UPDATE action_runs
+      SET status = 'failed', finishedAt = ?, summary = ?, failureCode = 'ACTION_INTERNAL_FAILURE'
+      WHERE id = ?
+    `).run(new Date().toISOString(), "操作流程意外中断；不要直接重复执行。", approval.approvalId);
+    throw error;
+  } finally {
+    activeLightChecks.delete(hostItem.id);
+  }
 }
 
 function agentManifest() {
@@ -1252,6 +1427,18 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/api/actions/dry-run") {
       return json(res, dryRunAction(await readBody(req)));
+    }
+    if (req.method === "GET" && url.pathname === "/api/actions/capability") {
+      return json(res, { capability: actionRuntimeCapability() });
+    }
+    if (req.method === "GET" && url.pathname === "/api/actions/receipts") {
+      return json(res, { receipts: recentActionReceipts() });
+    }
+    if (req.method === "POST" && url.pathname === "/api/actions/prepare") {
+      return json(res, prepareAction(await readBody(req)), 201);
+    }
+    if (req.method === "POST" && url.pathname === "/api/actions/execute") {
+      return json(res, await executePreparedAction(await readBody(req)));
     }
     if (req.method === "GET" && url.pathname === "/api/reports/current") {
       return json(res, { report: currentReport() });

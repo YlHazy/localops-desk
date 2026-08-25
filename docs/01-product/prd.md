@@ -19,7 +19,7 @@ LocalOps Desk provides a local cockpit that makes routine inspection and low-ris
 - Know when the last check ran, how long it took, and why it failed.
 - Inspect CPU, memory, disk, Docker services, health endpoints, and recent errors.
 - Generate a concise incident report.
-- Preview safe recovery actions before execution.
+- Explain the problem first, then offer a tightly bounded recovery only with explicit consent.
 
 ## MVP Features
 
@@ -30,7 +30,7 @@ LocalOps Desk provides a local cockpit that makes routine inspection and low-ris
 - Check history with collection timestamps and duration.
 - Diagnostic report generated from latest checks.
 - One-click host diagnosis that rechecks the selected server, explains the likely failing layer, and—when safe read-only SSH is available—automatically inspects a bounded resource/service/log evidence set without executing repair commands.
-- Dry-run action panel for safe operational plans.
+- Dry-run plans plus one gated Nginx reload workflow with preflight, approval, verification, and a local receipt.
 - Local Agent API manifest.
 
 ## Non-Goals
@@ -38,6 +38,8 @@ LocalOps Desk provides a local cockpit that makes routine inspection and low-ris
 - Hosted SaaS.
 - Full Prometheus/Grafana replacement.
 - Arbitrary SSH terminal.
+- Arbitrary commands, free-form service names, and automatic retries after uncertain mutations.
+- Executable Compose restart, deployment, migration, DNS/TLS, or cloud control-plane operations.
 - Storing secrets.
 - Real cloud control-plane operations.
 - Continuous high-frequency polling.

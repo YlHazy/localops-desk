@@ -17,12 +17,19 @@
 - Dry-run action output is visible and never executes a command; unknown action keys fail closed.
 - Only allow-listed read-only plans with a configured SSH alias are copyable. Practice plans and all mutating plans use explicit placeholders, never include the configured alias, and are not directly copyable.
 - Copyable read-only previews are generated from the executor's exact command allowlist, so UI instructions cannot silently drift from collected evidence.
-- Nginx reload is labeled medium risk and Compose service restart high risk; the UI keeps remote execution visibly off and presents blocked templates as an expected boundary rather than a runtime error.
+- Remote action capability is off unless both `LOCALOPS_ENABLE_ACTIONS=1` and `LOCALOPS_ENABLE_SSH=1` are enabled; Compose restart remains blocked.
+- The only executable action uses the exact fixed commands `sudo -n nginx -t` and `sudo -n systemctl reload nginx`; no user command or service argument reaches the executor.
+- Nginx reload requires an abnormal `manual-diagnosis` no older than ten minutes, then issues a two-minute single-use approval bound to the host id, SSH alias, host configuration update time, target label, evidence, and command digest.
+- Execution requires an explicit consent checkbox and the exact phrase `确认重载 Nginx`. A changed host configuration, expired/reused approval, failed preflight, or mismatched digest fails closed before reload.
+- Every attempted run has a durable local receipt. A successful reload always enters bounded host verification; an uncertain verification result is reported without automatic retry, and startup marks abandoned `running` receipts as interrupted.
+- Retention removes expired finished action receipts but never removes a receipt still marked `running`. High-risk action endpoints are excluded from the Agent manifest.
 - The Agent API manifest lists supported local endpoints.
 - No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.
 - Editing an existing host round-trips its tags instead of silently clearing them; Agent status excludes tags alongside connection configuration and raw evidence.
 - Empty server names fail as a typed 400 input error, and the form prevents submission while explaining which optional fields cause HTTP access, gate SSH, or remain metadata-only.
 - `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
+- The compact window uses four stable rows—top controls, character/status stage, one primary check button, and freshness line—with no settings or discussion controls in its host drawer. At 320 × 400 the main action and status remain visible without horizontal overflow.
+- The overview leads with one current judgment, one check action, and one dense host list. Host detail presents recovery actions and three fact rows before abnormal explanation; raw technical evidence and check history remain collapsed until requested.
 - The compact companion uses the transparent Sentry Otter cutout as a stable product identity while live health remains encoded by explicit evidence copy and the separate status signal; the UI asset is never presented as an installable Codex sprite.
 - The pet's evidence signal, copy, and accent reflect the worst current host state while the character identity remains visually stable.
 - The full desk and pet derive their automatic focus from one shared severity order—critical, warning, unknown, healthy—rather than API row order. With no deliberate selection, a newly worse host becomes the focus after the next read.

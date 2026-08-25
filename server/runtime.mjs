@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { classifyCollectedStatus, resourceSignalStatus } from "../shared/evidence-judgment.mjs";
 import { validateSshAlias } from "./input-validation.mjs";
 import { deepSshCommand } from "./deep-diagnostics.mjs";
+import { nginxActionCommand } from "./safe-actions.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -350,4 +351,21 @@ export async function runDeepSshReadOnly(host, commandKey, containerName = "", t
     windowsHide: true
   });
   return trimOutput(`${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`, 4000);
+}
+
+export async function runNginxActionStep(host, step, timeoutMs = 20000) {
+  if (!host.sshAlias) throw new Error("SSH alias is not configured.");
+  const sshAlias = validateSshAlias(host.sshAlias, { allowEmpty: false });
+  const command = nginxActionCommand(step);
+  const result = await execFileAsync("ssh", [
+    "-o", "BatchMode=yes",
+    "-o", "ConnectTimeout=5",
+    sshAlias,
+    command
+  ], {
+    timeout: timeoutMs,
+    maxBuffer: 1024 * 128,
+    windowsHide: true
+  });
+  return trimOutput(`${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`, 2000);
 }

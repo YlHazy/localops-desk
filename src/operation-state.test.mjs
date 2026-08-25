@@ -3,7 +3,7 @@ import test from "node:test";
 import { operationUiState } from "./operation-state.mjs";
 
 test("non-check work never masquerades as an active server check", () => {
-  for (const operation of ["diagnosis", "scheduler", "retention", "action", "host-save", "host-delete"]) {
+  for (const operation of ["diagnosis", "scheduler", "retention", "action", "action-prepare", "action-execute", "host-save", "host-delete"]) {
     const state = operationUiState(operation);
     assert.equal(state.busy, true);
     assert.equal(state.checking, false);
@@ -17,6 +17,8 @@ test("each operation exposes one truthful purpose flag", () => {
     scheduler: "savingScheduler",
     retention: "retaining",
     action: "preparingAction",
+    "action-prepare": "preparingApproval",
+    "action-execute": "executingAction",
     "host-save": "savingHost",
     "host-delete": "deletingHost"
   };
@@ -35,6 +37,8 @@ test("idle is not busy and unknown operation names fail closed", () => {
     savingScheduler: false,
     retaining: false,
     preparingAction: false,
+    preparingApproval: false,
+    executingAction: false,
     savingHost: false,
     deletingHost: false
   });

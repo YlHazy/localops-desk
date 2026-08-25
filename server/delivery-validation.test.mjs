@@ -83,25 +83,26 @@ test("first watch uses beginner language for the recommended evidence source", (
 test("expired evidence stays out of the current overview and pet glance", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
-  assert.match(appSource, /fresh && host\.memoryPercent != null/);
-  assert.match(appSource, /旧值不作为当前状态/);
-  assert.match(appSource, /查看上次记录（已过期）/);
-  assert.match(petSource, /current && host\.memoryPercent != null/);
+  assert.match(appSource, /fresh \? resourceSignalSummary\(host\) : "待更新"/);
+  assert.match(appSource, /selectedEvidenceCurrent \? selectedInternalSignal\.status : "待重新检查"/);
+  assert.match(appSource, /上次检查记录（已过期）/);
+  assert.match(petSource, /if \(!host \|\| !fresh\) return/);
+  assert.match(petSource, /petIssueLine\(priorityHost, priorityFresh/);
   assert.match(petSource, /snapshotTrust\.state === "stale" \? "证据已过期"/);
 });
 
-test("server detail runs one bounded automatic diagnosis before offering command steps", () => {
+test("server detail keeps actions and facts primary while folding bounded diagnosis evidence", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
   const diagnosisSource = readFileSync(new URL("../shared/host-diagnosis.mjs", import.meta.url), "utf8");
   assert.match(appSource, /\/api\/diagnostics\/\$\{encodeURIComponent\(hostId\)\}/);
-  assert.match(appSource, /正在重新检查这台服务器/);
-  assert.match(appSource, /不会执行修复命令/);
-  assert.match(appSource, /自动排查完成/);
-  assert.match(appSource, /进一步诊断证据/);
-  assert.match(appSource, /查看脱敏片段/);
+  assert.match(appSource, /自动查原因/);
+  assert.match(appSource, /className="detail-primary-actions"/);
+  assert.match(appSource, /<dl className="server-facts">/);
+  assert.match(appSource, /<details className={`diagnostic-proof/);
+  assert.match(appSource, /<summary><strong>技术详情<\/strong>/);
   assert.match(appSource, /无法连接本地 LocalOps 服务/);
-  assert.match(appSource, /查看排查步骤/);
+  assert.doesNotMatch(appSource, /查看排查步骤/);
   assert.doesNotMatch(appSource, /memoryPercent \?\? "—"\}%/);
   assert.doesNotMatch(appSource, /diskPercent \?\? "—"\}%/);
   assert.match(serverSource, /trigger: "manual-diagnosis"/);
@@ -115,9 +116,10 @@ test("pet local disconnect routes the main action to local recovery", () => {
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const petStyles = readFileSync(new URL("../src/pet-v2.css", import.meta.url), "utf8");
   assert.match(petSource, /syncError\s*\? onRetrySync\(\)/);
-  assert.match(petSource, /syncError \? "本地状态断开"/);
-  assert.match(petSource, /<summary>安全说明<\/summary>/);
-  assert.match(petStyles, /max-height: min\(68vh, 380px\)/);
+  assert.match(petSource, /syncError\s*\? "本地连接断开"/);
+  assert.match(petSource, /title=\{syncError \? `\$\{recovery\.detail\} \$\{recovery\.boundary\}`/);
+  assert.match(petStyles, /grid-template-rows: 36px minmax\(0, 1fr\) 44px 38px/);
+  assert.match(petStyles, /max-height: 236px/);
 });
 
 test("the desk cannot keep a healthy headline after evidence expires", () => {
@@ -246,7 +248,8 @@ test("desk and pet expose one truthful local-status recovery contract", () => {
   assert.match(appSource, /className="boot-recovery-card"/);
   assert.match(appSource, /className="sync-recovery-card"/);
   assert.match(petSource, /localRecoveryCopy\(lastSyncedAt, now\)/);
-  assert.match(petSource, /<p>\{recovery\.boundary\}<\/p>/);
+  assert.match(petSource, /recovery\.detail/);
+  assert.match(petSource, /recovery\.boundary/);
 });
 
 test("desk, pet, runtime, and portable build share one resource judgment contract", () => {
@@ -284,7 +287,7 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.match(appSource, /selectedReadiness\.canCollect/);
   assert.match(appSource, /资源状态尚未检查/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
-  assert.match(petSource, /网页\/API 可达，资源状态还没检查/);
+  assert.match(petSource, /入口正常，资源还没检查/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
   assert.match(readinessSource, /state: "ssh-disabled"/);
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);
@@ -339,7 +342,8 @@ test("action plans distinguish read-only templates from mutating commands", () =
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(appSource, /dryRun\.riskTier !== "read-only"/);
   assert.match(appSource, /这是会改变服务器的操作/);
-  assert.match(appSource, /当前版本不会执行/);
+  assert.match(appSource, /服务重启仍未开放/);
+  assert.match(appSource, /actionCapability\?\.enabled/);
   assert.match(appSource, /dryRun\?\.actionKey === "inspect-service" \? "selected"/);
 });
 

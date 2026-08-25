@@ -114,6 +114,7 @@ export interface RetentionResult {
   deletedRuns: number;
   deletedHostChecks: number;
   deletedOrphanHostChecks: number;
+  deletedActionRuns: number;
   vacuumed: boolean;
   sizeBytes: number;
 }
@@ -128,6 +129,48 @@ export interface DryRunAction {
   commands: string[];
   verification: string[];
   blockedReason?: string;
+}
+
+export interface ActionCapability {
+  enabled: boolean;
+  supportedActions: string[];
+  blockers: string[];
+  message: string;
+}
+
+export interface ActionApproval {
+  approvalId: string;
+  actionKey: "reload-nginx";
+  evidenceCheckId: number;
+  target: { name: string; environment: string; role: string };
+  preparedAt: string;
+  expiresAt: string;
+  planDigest: string;
+  requiredPhrase: string;
+  commands: string[];
+  impact: string;
+  stopCondition: string;
+  recovery: string;
+}
+
+export interface ActionReceipt {
+  id: string;
+  hostName: string;
+  actionKey: string;
+  status: "running" | "succeeded" | "verification-warning" | "failed" | "interrupted";
+  approvedAt: string;
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string;
+  verificationCheckId: number | null;
+  failureCode: string | null;
+}
+
+export interface ActionExecutionStep {
+  key: "preflight" | "reload" | "verify";
+  status: "passed" | "failed" | "warning";
+  label: string;
+  detail: string;
 }
 
 export interface DiagnosisSignal {

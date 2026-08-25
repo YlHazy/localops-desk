@@ -161,13 +161,41 @@ paths:
       summary: Apply local SQLite retention cleanup
       responses:
         "200":
-          description: Retention cleanup result
+          description: Check cleanup plus expired finished action receipts; running receipts are preserved
   /api/actions/dry-run:
     post:
       summary: Generate a safe action plan
       responses:
         "200":
           description: Dry-run action plan
+  /api/actions/capability:
+    get:
+      summary: Read UI-only fixed-action capability and blockers
+      responses:
+        "200":
+          description: Capability state without opening an arbitrary command surface
+  /api/actions/receipts:
+    get:
+      summary: List bounded local action receipts
+      responses:
+        "200":
+          description: Recent durable action receipts
+  /api/actions/prepare:
+    post:
+      summary: Prepare a short-lived single-use Nginx reload approval
+      responses:
+        "200":
+          description: Approval bound to fresh abnormal evidence, target configuration, and fixed commands
+        "409":
+          description: Capability, evidence, target, or action prerequisite failed closed
+  /api/actions/execute:
+    post:
+      summary: Execute one approved fixed Nginx reload with preflight and verification
+      responses:
+        "200":
+          description: Durable receipt with preflight, reload, and verification steps
+        "409":
+          description: Approval expired, reused, changed, or confirmation failed before mutation
   /api/reports/current:
     get:
       summary: Get current diagnostic report

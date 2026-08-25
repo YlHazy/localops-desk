@@ -9,11 +9,10 @@ It is intentionally not a SaaS product. The app runs on `127.0.0.1`, stores summ
 - Local dashboard for production, demo, and personal infrastructure.
 - Manual light checks and scheduled-check model.
 - Host configuration with SSH alias, environment, health URL, and Docker Compose project name.
-- Status overview, host detail, check history, dry-run action panel, and diagnostic report.
-- Evidence-first Guardian Brief with HTTP, SSH, runtime, and next-action reasoning stages.
+- A calm daily overview, compact host details, check history, safe actions, and diagnostic reports.
 - One-click automatic diagnosis reruns only the selected host's bounded light check, identifies the likely failure layer, and—when read-only SSH is available—adds a capped resource/service/log digest without storing logs or running a repair command.
 - First Watch onboarding makes the zero-target, zero-connection default visible before the first host is saved; connection evidence stays opt-in.
-- After the first host is saved, the desk returns to the overview and shows a four-stage Watch Path: register a server, obtain evidence, enable automatic checks, then optionally add the desktop/login companion.
+- After the first host is saved, the overview leads with one current judgment and one server list. Actions and facts appear before optional technical evidence in the detail drawer.
 - The Watch Settings (`值守设置`) page turns those distributed controls into one three-stage daily-watch relay: evidence source, automatic rhythm, and native desktop attention. The last layer completes only after the user confirms a test reminder was actually visible, and a browser preview never counts as a desktop notification channel.
 - A categorized discussion summary and Codex deep link that only prefill reviewable text; they never auto-send or execute an action.
 - Reports are explicitly split into identity-bearing internal diagnostics and a minimal-disclosure discussion summary; copying the internal report requires confirmation.
@@ -50,7 +49,7 @@ While open, pet mode reads the aggregate local status every 30 seconds without t
 
 If that local status read fails after the pet has loaded, LocalOps keeps the last evidence visibly marked as non-current and offers a dedicated read-only reconnect. A failed or timed-out light check is shown separately as an uncertain operation; it does not overwrite the prior evidence or encourage immediate duplicate submission.
 
-The full desk also performs a 30-second read-only sync of status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state. Its watch rail distinguishes syncing, current, and paused states. When observation evidence expires, every current host/count/headline and the Codex discussion brief downgrade to unknown; the former readings remain visible only behind an evidence-hold seal with an explicit refresh action. A failed background sync keeps the last trustworthy result visible and offers an explicit retry; it does not overwrite scheduler values currently being edited or trigger a server check.
+The full desk also performs a 30-second read-only sync of status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state. When evidence expires, current judgments downgrade to unknown and the prior reading is labeled as old rather than healthy. A failed background sync keeps the last trustworthy result visible and offers an explicit retry; it does not overwrite scheduler values currently being edited or trigger a server check.
 
 For source development, run `npm run desktop`. For a distributable Windows build, run `npm run package:desktop`; the output is `release/LocalOps-Guardian-0.1.0-x64.exe`. The packaged app includes Electron's Node/Chromium runtime and therefore requires neither a separately installed Node.js nor Microsoft Edge. Closing the pet window hides it to the system tray and keeps the local watch alive; the first close explains where it went. Only the explicit tray action “退出 LocalOps（停止本次值守）” stops an API process owned by that desktop session; a recognizable API that was already running is reused and never killed by LocalOps Desktop. `npm run assets:desktop-icons` derives the checked-in 256px PNG and four-size Windows ICO from the close-up 小哨 badge.
 
@@ -94,5 +93,7 @@ Start a new Codex task after installation so the skill and MCP tools are discove
 ## Safety Defaults
 
 Real SSH collection is disabled unless `LOCALOPS_ENABLE_SSH=1` is set. Without that flag, checks use deterministic simulated collectors so UI and workflow development remain safe.
+
+Remote recovery is separately disabled unless both `LOCALOPS_ENABLE_ACTIONS=1` and `LOCALOPS_ENABLE_SSH=1` are set. The only executable recovery is the fixed Nginx path: `sudo -n nginx -t`, followed by `sudo -n systemctl reload nginx` only if preflight succeeds. It requires a fresh abnormal manual diagnosis, a two-minute single-use approval bound to the exact host configuration, an explicit checkbox, and the typed phrase `确认重载 Nginx`. LocalOps records a durable receipt and performs a bounded post-check; it never accepts arbitrary commands or automatically retries an uncertain result. Compose restart remains preview-only.
 
 When SSH is enabled, host entries must reference aliases that already work in the local user's `~/.ssh/config`. Aliases are limited to letters, numbers, `.`, `_`, and `-`, and cannot start with `-`. A quick preflight is `ssh -G <alias>`; if it does not resolve to the intended host, LocalOps will still run HTTP checks but SSH resource and Docker evidence will be reported as unavailable.
