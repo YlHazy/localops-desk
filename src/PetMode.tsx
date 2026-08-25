@@ -9,7 +9,7 @@ import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
-import { notificationDecision, petQuietDurationMs, readQuietUntil, watchModeCopy, writeQuietUntil } from "./pet-watch.mjs";
+import { notificationDecision, petQuietDurationMs, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, Status } from "./types";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
@@ -21,7 +21,6 @@ const statusCopy: Record<Status, { label: string; line: string }> = {
   unknown: { label: "等待检查", line: "还没有足够证据，先让我巡检一次。" }
 };
 
-const notificationPreferenceKey = "localops.pet.notifications";
 const sentryOtterUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
 type AlertReceipt = {
@@ -38,23 +37,6 @@ type NotificationDelivery = {
   message: string;
   browserNotification?: Notification;
 };
-
-function readNotificationPreference() {
-  try {
-    return window.localStorage.getItem(notificationPreferenceKey) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeNotificationPreference(enabled: boolean) {
-  try {
-    window.localStorage.setItem(notificationPreferenceKey, enabled ? "1" : "0");
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function readQuietPreference() {
   try {
@@ -144,7 +126,7 @@ export function PetMode({
   const notificationsBlocked = !desktopNotifications && notificationsSupported && Notification.permission === "denied";
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationsSupported
     && (desktopNotifications || Notification.permission === "granted")
-    && readNotificationPreference());
+    && readNotificationPreference(window.localStorage));
   const [notificationNote, setNotificationNote] = useState("");
   const [notificationTesting, setNotificationTesting] = useState(false);
   const [quietUntil, setQuietUntil] = useState(readQuietPreference);
@@ -284,7 +266,7 @@ export function PetMode({
       return;
     }
     if (notificationsEnabled) {
-      writeNotificationPreference(false);
+      writeNotificationPreference(window.localStorage, false);
       writeQuietPreference(0);
       setQuietUntil(0);
       setNotificationsEnabled(false);
@@ -293,11 +275,11 @@ export function PetMode({
     }
     const permission = desktopNotifications ? "granted" : await Notification.requestPermission();
     if (permission !== "granted") {
-      writeNotificationPreference(false);
+      writeNotificationPreference(window.localStorage, false);
       setNotificationNote(window.localOpsDesktop ? "系统没有允许提醒。可在 Windows 通知设置中重新开启。" : "系统没有允许提醒。可在浏览器的站点权限中重新开启。");
       return;
     }
-    const preferenceSaved = writeNotificationPreference(true);
+    const preferenceSaved = writeNotificationPreference(window.localStorage, true);
     writeQuietPreference(0);
     setQuietUntil(0);
     setNotificationsEnabled(true);

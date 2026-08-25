@@ -1,12 +1,30 @@
 import { worseningNotice } from "./pet-monitor.mjs";
 
 export const petQuietDurationMs = 60 * 60 * 1000;
+export const petNotificationPreferenceKey = "localops.pet.notifications";
 
 export function notificationDecision(previous, current, { enabled, permission, quietUntil = 0, now = Date.now() }) {
   const notice = worseningNotice(previous, current);
   if (!notice || !enabled || permission !== "granted") return { outcome: "none", notice: null };
   if (quietUntil > now) return { outcome: "suppressed", notice };
   return { outcome: "sent", notice };
+}
+
+export function readNotificationPreference(storage) {
+  try {
+    return storage.getItem(petNotificationPreferenceKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeNotificationPreference(storage, enabled) {
+  try {
+    storage.setItem(petNotificationPreferenceKey, enabled ? "1" : "0");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function watchModeCopy({ supported, blocked, enabled, permissionSurface = "browser", quietUntil = 0, now = Date.now() }) {

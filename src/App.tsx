@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Bell,
   Bot,
   CheckCircle2,
   ClipboardCheck,
@@ -17,6 +18,7 @@ import {
   RefreshCcw,
   Save,
   Server,
+  Settings2,
   ShieldCheck,
   TerminalSquare,
   Trash2,
@@ -38,8 +40,10 @@ import type { PendingOperation } from "./operation-state.mjs";
 import { petDeskIntent, petDeskPath } from "./pet-navigation.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petModePath } from "./pet-presence.mjs";
+import { petNotificationPreferenceKey, readNotificationPreference } from "./pet-watch.mjs";
 import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
+import { watchReadiness } from "./watch-readiness.mjs";
 import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
@@ -329,6 +333,7 @@ function HostForm({
 
 export function App() {
   const petMode = new URLSearchParams(window.location.search).get("mode") === "pet";
+  const desktopRuntime = Boolean(window.localOpsDesktop);
   const [dashboard, setDashboard] = useState<DashboardStatus | null>(null);
   const [checks, setChecks] = useState<CheckRun[]>([]);
   const [checkFilter, setCheckFilter] = useState<CheckHistoryFilter>("all");
@@ -353,6 +358,7 @@ export function App() {
   const [startup, setStartup] = useState<StartupState | null>(null);
   const [startupPending, setStartupPending] = useState<boolean | null>(null);
   const [startupLoading, setStartupLoading] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreference(window.localStorage));
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
@@ -410,6 +416,20 @@ export function App() {
     loadGate.current.invalidate();
     checkDetailGate.current.invalidate();
   }, []);
+
+  useEffect(() => {
+    if (petMode) return undefined;
+    const refreshNotificationPreference = () => setNotificationsEnabled(readNotificationPreference(window.localStorage));
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key == null || event.key === petNotificationPreferenceKey) refreshNotificationPreference();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", refreshNotificationPreference);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", refreshNotificationPreference);
+    };
+  }, [petMode]);
 
   async function loadCheckDetail(id: number) {
     const requestToken = checkDetailGate.current.begin();
@@ -619,6 +639,12 @@ export function App() {
     [scheduler, dashboard]
   );
   const schedulerOutcome = useMemo(() => schedulerOutcomeCopy(scheduler), [scheduler]);
+  const watchSetup = useMemo(() => watchReadiness({
+    coverage: batchCoverage,
+    schedulerEnabled: Boolean(scheduler?.enabled),
+    desktopRuntime,
+    notificationsEnabled
+  }), [batchCoverage, scheduler?.enabled, desktopRuntime, notificationsEnabled]);
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
@@ -1009,7 +1035,7 @@ export function App() {
           {[
             ["overview", Activity, "首页"],
             ["hosts", Server, "服务器配置"],
-            ["scheduler", Clock3, "自动检查"],
+            ["scheduler", Settings2, "值守设置"],
             ["checks", History, "检查记录"],
             ["actions", TerminalSquare, "操作预案"],
             ["reports", FileText, "报告与分享"],
@@ -1470,10 +1496,48 @@ export function App() {
 
         {selectedTab === "scheduler" && (
           <section className="scheduler-layout">
-            <div className="detail-panel">
+            <section className={`watch-readiness-board ${watchSetup.complete ? "complete" : "calibrating"}`} aria-labelledby="watch-readiness-title">
+              <header>
+                <div>
+                  <span className="topbar-kicker">DAILY WATCH / 值守接力</span>
+                  <h2 id="watch-readiness-title">把一次检查，接成持续有人盯</h2>
+                  <p>{watchSetup.detail}</p>
+                </div>
+                <output aria-label={`值守链路已完成 ${watchSetup.readyCount} 项，共 ${watchSetup.total} 项`}>
+                  <strong>{watchSetup.readyCount}</strong><span>/ {watchSetup.total}</span><small>{watchSetup.headline}</small>
+                </output>
+              </header>
+              <div className="watch-relay" aria-label="值守接力步骤">
+                {watchSetup.items.map((item, index) => {
+                  const Icon = item.key === "evidence" ? ShieldCheck : item.key === "rhythm" ? Clock3 : Bell;
+                  return (
+                    <article className={`watch-relay-card ${item.tone}`} key={item.key}>
+                      <span className="watch-relay-index">0{index + 1}</span>
+                      <Icon size={19} aria-hidden="true" />
+                      <div><strong>{item.label}</strong><p>{item.detail}</p></div>
+                      {item.ready ? (
+                        <span className="watch-relay-ready"><CheckCircle2 size={14} />已接通</span>
+                      ) : (
+                        <button onClick={() => {
+                          if (item.key === "evidence") setSelectedTab("hosts");
+                          else if (item.key === "rhythm") document.getElementById("scheduler-controls")?.focus();
+                          else openPetWindow();
+                        }}>{item.actionLabel}</button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              <footer>
+                <span><MonitorUp size={14} />{desktopRuntime ? "桌面宿主已连接" : "浏览器仅供预览"}</span>
+                <span><ShieldCheck size={14} />查看设置不会发起服务器连接</span>
+                <span><Clock3 size={14} />{startup?.enabled ? "登录后会自动接力" : startup?.status === "conflict" ? "登录启动存在冲突" : "登录启动为可选项"}</span>
+              </footer>
+            </section>
+            <div className="detail-panel" id="scheduler-controls" tabIndex={-1}>
               <div className="detail-head">
                 <div>
-                  <h2>本地定时巡检</h2>
+                  <h2>检查节奏与本地保留</h2>
                   <p>只在 LocalOps Desk 进程运行时生效；关闭本地程序后不会继续轮询服务器。</p>
                 </div>
                 <StatusPill status={scheduler?.enabled ? batchCoverage.blocked ? "warning" : "healthy" : "unknown"} />

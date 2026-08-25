@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { monitorSignal } from "./pet-monitor.mjs";
-import { notificationDecision, petQuietDurationMs, readQuietUntil, watchModeCopy, writeQuietUntil } from "./pet-watch.mjs";
+import { notificationDecision, petNotificationPreferenceKey, petQuietDurationMs, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 
 const signal = (counts) => monitorSignal({ counts });
 const healthy = signal({ healthy: 2 });
@@ -36,4 +36,17 @@ test("quiet preference is bounded to a future timestamp and fails closed", () =>
   assert.equal(writeQuietUntil(storage, 0), true);
   assert.equal(values.size, 0);
   assert.equal(writeQuietUntil({ setItem() { throw new Error("blocked"); }, removeItem() {} }, 50_000), false);
+});
+
+test("notification preference is shared without broadening stored data", () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  assert.equal(readNotificationPreference(storage), false);
+  assert.equal(writeNotificationPreference(storage, true), true);
+  assert.equal(values.get(petNotificationPreferenceKey), "1");
+  assert.equal(readNotificationPreference(storage), true);
+  assert.equal(writeNotificationPreference(storage, false), true);
+  assert.equal(values.get(petNotificationPreferenceKey), "0");
+  assert.equal(writeNotificationPreference({ setItem() { throw new Error("blocked"); } }, true), false);
+  assert.equal(readNotificationPreference({ getItem() { throw new Error("blocked"); } }), false);
 });
