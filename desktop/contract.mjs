@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 
 export const desktopOrigin = "http://127.0.0.1:4317";
 
+export function desktopLoopbackOrigin(port = 4317) {
+  const value = Number(port);
+  if (!Number.isInteger(value) || value < 1 || value > 65_535) throw new TypeError("desktop API port must be an integer between 1 and 65535");
+  return `http://127.0.0.1:${value}`;
+}
+
 export const firstTrayNotice = Object.freeze({
   title: "小哨仍在值守",
   content: "LocalOps 已缩到系统托盘。右键托盘图标可打开控制台，或明确退出本次值守。"
@@ -40,13 +46,14 @@ export function desktopAlertCopy(request) {
   };
 }
 
-export function desktopPetUrl(sessionId = randomUUID()) {
-  return `${desktopOrigin}/?mode=pet&session=${encodeURIComponent(sessionId)}&runtime=desktop`;
+export function desktopPetUrl(sessionId = randomUUID(), port = 4317) {
+  return `${desktopLoopbackOrigin(port)}/?mode=pet&session=${encodeURIComponent(sessionId)}&runtime=desktop`;
 }
 
-export function desktopDeskUrl(path = "/") {
-  const target = new URL(path, desktopOrigin);
-  if (target.origin !== desktopOrigin) throw new Error("LocalOps desktop windows only accept the loopback app origin.");
+export function desktopDeskUrl(path = "/", port = 4317) {
+  const origin = desktopLoopbackOrigin(port);
+  const target = new URL(path, origin);
+  if (target.origin !== origin) throw new Error("LocalOps desktop windows only accept the selected loopback app origin.");
   target.search = "";
   return target.toString();
 }
@@ -62,26 +69,27 @@ export function safeWindowBounds(value, fallback = { width: 360, height: 420 }) 
   return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
 }
 
-export function navigationAction(rawUrl) {
+export function navigationAction(rawUrl, port = 4317) {
   let target;
   try {
     target = new URL(rawUrl);
   } catch {
     return "deny";
   }
-  if (target.origin === desktopOrigin) return "desk";
+  if (target.origin === desktopLoopbackOrigin(port)) return "desk";
   if (target.protocol === "https:" && target.hostname === "chatgpt.com") return "external";
   return "deny";
 }
 
-export async function localOpsReady(fetchImpl = fetch) {
+export async function localOpsReady(fetchImpl = fetch, port = 4317) {
   try {
+    const origin = desktopLoopbackOrigin(port);
     const request = { signal: AbortSignal.timeout(1_500) };
-    const manifestResponse = await fetchImpl(`${desktopOrigin}/api/agent/manifest`, request);
+    const manifestResponse = await fetchImpl(`${origin}/api/agent/manifest`, request);
     if (!manifestResponse.ok) return false;
     const manifest = await manifestResponse.json();
     if (manifest?.name !== "LocalOps Desk Agent API" || manifest?.safety?.arbitraryShell !== false) return false;
-    const statusResponse = await fetchImpl(`${desktopOrigin}/api/status`, request);
+    const statusResponse = await fetchImpl(`${origin}/api/status`, request);
     if (!statusResponse.ok) return false;
     const status = await statusResponse.json();
     return Boolean(status?.counts && Array.isArray(status?.hosts));

@@ -69,6 +69,7 @@
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
 - The packaged desktop host is single-instance, keeps native capabilities behind an exact loopback renderer check, and uses a native tray and always-on-top control instead of Edge title matching or a PowerShell helper.
 - The sandboxed renderer loads a CommonJS preload compatible with Electron's sandbox; desktop smoke must observe the exact bridge methods, read the native tray/topmost state, and prove an unallow-listed notification request is rejected before claiming native behavior works.
+- Packaged desktop verification reserves an isolated loopback port only under `--smoke-check`, proves the package owns that API, and confirms the port is closed after exit without disturbing a normal instance on `4317`. Normal desktop launches cannot select another port.
 - Closing the packaged pet hides it to the tray without stopping its owned API, explains that behavior once, and requires the explicit tray action “退出 LocalOps（停止本次值守）” to end the desktop-owned watch.
 - A pet opened from the full desk uses a random validated memory-only session, sends the same bounded presence heartbeat as a launcher-opened pet, and is therefore visible to aggregate ordinary duplicate-window refusal without exposing a server or user identity.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.

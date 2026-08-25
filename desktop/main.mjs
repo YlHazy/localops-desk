@@ -2,10 +2,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray, utilityProcess } from "electron";
-import { desktopAlertCopy, desktopDeskUrl, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopAlertCopy, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const smokeCheck = process.argv.includes("--smoke-check");
 const smokeReportPath = smokeCheck ? process.env.LOCALOPS_SMOKE_REPORT : null;
+const runtimePort = smokeCheck && process.env.LOCALOPS_SMOKE_API_PORT ? Number(process.env.LOCALOPS_SMOKE_API_PORT) : 4317;
+const runtimeOrigin = desktopLoopbackOrigin(runtimePort);
 if (smokeCheck) {
   app.setPath("userData", resolve(process.env.LOCALOPS_SMOKE_PROFILE || join(tmpdir(), `localops-guardian-smoke-${process.pid}`)));
 }
@@ -87,7 +89,7 @@ function secureWindowOptions(extra = {}) {
 }
 
 function openExternalAllowed(url) {
-  if (navigationAction(url) !== "external") return;
+  if (navigationAction(url, runtimePort) !== "external") return;
   void shell.openExternal(url);
 }
 
@@ -98,12 +100,12 @@ function assertTrustedIpc(event) {
   } catch {
     // Keep an empty origin and reject below.
   }
-  if (origin !== "http://127.0.0.1:4317") throw new Error("Desktop request rejected outside the LocalOps loopback app.");
+  if (origin !== runtimeOrigin) throw new Error("Desktop request rejected outside the selected LocalOps loopback app.");
 }
 
 function attachNavigationGuard(window) {
   window.webContents.setWindowOpenHandler(({ url }) => {
-    const action = navigationAction(url);
+    const action = navigationAction(url, runtimePort);
     if (action === "desk") showDesk(new URL(url).hash);
     else if (action === "external") openExternalAllowed(url);
     return { action: "deny" };
@@ -111,7 +113,7 @@ function attachNavigationGuard(window) {
   window.webContents.on("will-navigate", (event, url) => {
     if (url === window.webContents.getURL()) return;
     event.preventDefault();
-    const action = navigationAction(url);
+    const action = navigationAction(url, runtimePort);
     if (action === "desk") showDesk(new URL(url).hash);
     else if (action === "external") openExternalAllowed(url);
   });
@@ -152,7 +154,7 @@ function createPetWindow() {
   petWindow.once("ready-to-show", () => {
     if (!smokeCheck) petWindow.show();
   });
-  petLoadPromise = petWindow.loadURL(desktopPetUrl());
+  petLoadPromise = petWindow.loadURL(desktopPetUrl(undefined, runtimePort));
   if (!smokeCheck) {
     void petLoadPromise.catch((error) => dialog.showErrorBox("LocalOps 界面加载失败", error instanceof Error ? error.message : String(error)));
   }
@@ -168,7 +170,7 @@ function showPet() {
 }
 
 function showDesk(path = "") {
-  const url = desktopDeskUrl(path || "/");
+  const url = desktopDeskUrl(path || "/", runtimePort);
   if (!deskWindow || deskWindow.isDestroyed()) {
     deskWindow = new BrowserWindow(secureWindowOptions({
       width: 1220,
@@ -270,7 +272,7 @@ function showDesktopNotification(request) {
 
 async function waitForApi(attempts = 60) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (await localOpsReady()) return true;
+    if (await localOpsReady(fetch, runtimePort)) return true;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return false;
@@ -287,12 +289,12 @@ async function waitForPetRenderer(attempts = 40) {
 }
 
 async function ensureApi() {
-  if (await localOpsReady()) return "existing";
+  if (await localOpsReady(fetch, runtimePort)) return "existing";
   ownedApi = utilityProcess.fork(appPath("server", "index.mjs"), [], {
     env: {
       ...process.env,
       LOCALOPS_API_HOST: "127.0.0.1",
-      LOCALOPS_API_PORT: "4317",
+      LOCALOPS_API_PORT: String(runtimePort),
       LOCALOPS_DATA_DIR: join(app.getPath("userData"), "data")
     },
     stdio: "pipe",
@@ -370,6 +372,7 @@ if (gotSingleInstanceLock) {
         const report = {
           ok: true,
           pid: process.pid,
+          apiOrigin: runtimeOrigin,
           apiOwnership,
           hasTray: Boolean(tray && !tray.isDestroyed()),
           hiddenToTray: Boolean(petWindow && !petWindow.isDestroyed() && !petWindow.isVisible()),

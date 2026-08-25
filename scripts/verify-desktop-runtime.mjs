@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { access, readFile, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -14,9 +15,22 @@ await access(executable);
 await rm(reportPath, { force: true });
 await rm(profilePath, { recursive: true, force: true });
 
+const smokePort = await new Promise((resolvePort, rejectPort) => {
+  const reservation = createServer();
+  reservation.unref();
+  reservation.once("error", rejectPort);
+  reservation.listen(0, "127.0.0.1", () => {
+    const address = reservation.address();
+    const port = typeof address === "object" && address ? address.port : null;
+    reservation.close((error) => error ? rejectPort(error) : resolvePort(port));
+  });
+});
+if (!Number.isInteger(smokePort) || smokePort <= 0) throw new Error("Could not reserve an isolated desktop smoke port.");
+const smokeOrigin = `http://127.0.0.1:${smokePort}`;
+
 const child = spawn(executable, ["--smoke-check"], {
   cwd: root,
-  env: { ...process.env, LOCALOPS_SMOKE_REPORT: reportPath, LOCALOPS_SMOKE_PROFILE: profilePath },
+  env: { ...process.env, LOCALOPS_SMOKE_REPORT: reportPath, LOCALOPS_SMOKE_PROFILE: profilePath, LOCALOPS_SMOKE_API_PORT: String(smokePort) },
   windowsHide: true,
   stdio: ["ignore", "pipe", "pipe"]
 });
@@ -37,7 +51,7 @@ for (let attempt = 0; attempt < 240; attempt += 1) {
   }
 }
 
-if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.apiOwnership !== "owned" || report.runtime !== "desktop" || report.title !== "LocalOps Guardian" || report.hasApp !== true || report.bridgeState?.desktop !== true || report.bridgeState?.closeBehavior !== "tray" || report.bridgeState?.topmost !== true || report.hasNotificationBridge !== true || report.rejectsUnsafeNotification !== true || report.hasTray !== true || report.hiddenToTray !== true || report.closeNoticePersisted !== true) {
+if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.apiOwnership !== "owned" || report.apiOrigin !== smokeOrigin || report.runtime !== "desktop" || report.title !== "LocalOps Guardian" || report.hasApp !== true || report.bridgeState?.desktop !== true || report.bridgeState?.closeBehavior !== "tray" || report.bridgeState?.topmost !== true || report.hasNotificationBridge !== true || report.rejectsUnsafeNotification !== true || report.hasTray !== true || report.hiddenToTray !== true || report.closeNoticePersisted !== true) {
   const exit = child.exitCode == null ? null : await childExit;
   throw new Error(`Packaged desktop smoke check did not confirm the renderer: ${JSON.stringify({ report, exit, stdout: childStdout.slice(-2000), stderr: childStderr.slice(-4000) })}`);
 }
@@ -55,7 +69,7 @@ for (let attempt = 0; attempt < 40; attempt += 1) {
 if (!processExited) throw new Error(`Packaged desktop smoke process ${report.pid} did not exit.`);
 
 try {
-  const response = await fetch("http://127.0.0.1:4317/api/agent/manifest", { signal: AbortSignal.timeout(1_000) });
+  const response = await fetch(`${smokeOrigin}/api/agent/manifest`, { signal: AbortSignal.timeout(1_000) });
   if (response.ok) throw new Error("Packaged desktop smoke check left the owned API running.");
 } catch (error) {
   if (error instanceof Error && error.message.includes("left the owned API")) throw error;

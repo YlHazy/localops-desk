@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { desktopAlertCopy, desktopDeskUrl, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopAlertCopy, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -8,6 +8,10 @@ test("desktop URLs stay on the fixed loopback origin and identify the tray runti
   assert.equal(desktopPetUrl(sessionId), `http://127.0.0.1:4317/?mode=pet&session=${sessionId}&runtime=desktop`);
   assert.equal(desktopDeskUrl("/#tab=checks"), "http://127.0.0.1:4317/#tab=checks");
   assert.throws(() => desktopDeskUrl("https://example.com"), /loopback/);
+  assert.equal(desktopLoopbackOrigin(54321), "http://127.0.0.1:54321");
+  assert.equal(desktopPetUrl(sessionId, 54321), `http://127.0.0.1:54321/?mode=pet&session=${sessionId}&runtime=desktop`);
+  assert.equal(desktopDeskUrl("/#tab=checks", 54321), "http://127.0.0.1:54321/#tab=checks");
+  assert.throws(() => desktopLoopbackOrigin(0), /between 1 and 65535/);
 });
 
 test("persisted pet bounds stay within the compact companion window", () => {
@@ -18,6 +22,8 @@ test("persisted pet bounds stay within the compact companion window", () => {
 
 test("navigation allowlist separates LocalOps desk links, Codex discussion, and everything else", () => {
   assert.equal(navigationAction("http://127.0.0.1:4317/#tab=hosts"), "desk");
+  assert.equal(navigationAction("http://127.0.0.1:54321/#tab=hosts", 54321), "desk");
+  assert.equal(navigationAction("http://127.0.0.1:4317/#tab=hosts", 54321), "deny");
   assert.equal(navigationAction("https://chatgpt.com/?q=localops"), "external");
   assert.equal(navigationAction("https://example.com"), "deny");
   assert.equal(navigationAction("file:///C:/secret.txt"), "deny");
