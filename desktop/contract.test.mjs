@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { desktopDeskUrl, desktopPetUrl, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopDeskUrl, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -22,4 +22,9 @@ test("navigation allowlist separates LocalOps desk links, Codex discussion, and 
   assert.equal(navigationAction("https://example.com"), "deny");
   assert.equal(navigationAction("file:///C:/secret.txt"), "deny");
   assert.equal(navigationAction("http://localhost:4317/"), "deny");
+});
+
+test("first close copy explains tray persistence and the explicit exit boundary", () => {
+  assert.match(firstTrayNotice.content, /系统托盘/);
+  assert.match(firstTrayNotice.content, /明确退出/);
 });

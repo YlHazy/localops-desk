@@ -24,6 +24,20 @@ while the adjacent evidence dot and copy carry live server state. It remains
 intentionally outside `pets/` because it does not meet the official `1536 ×
 1872` sprite-sheet gate.
 
+## Desktop application icon
+
+The Windows application and tray use a separate close-up badge at
+[`../../src/assets/localops-desktop-icon-master.png`](../../src/assets/localops-desktop-icon-master.png).
+It preserves the porcelain otter face, navy guardian helmet, amber listening
+beacons, and cyan evidence shield while removing the tablet, limbs, server bag,
+and other details that disappear at 16–32 pixels. The opaque night-navy field is
+intentional: generated transparency attempts produced painted checkerboards and
+were rejected by pixel inspection rather than accepted as alpha.
+
+`npm run assets:desktop-icons` deterministically creates `build/icon.png` at
+256 × 256 and a four-size `build/icon.ico` for Windows. The master is product
+artwork, not an installable Codex pet sprite and not a server-health indicator.
+
 ## Product role
 
 The native Codex pet and the LocalOps compact companion deliberately have

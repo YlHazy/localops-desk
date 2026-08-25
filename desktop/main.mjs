@@ -1,10 +1,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray, utilityProcess } from "electron";
-import { desktopDeskUrl, desktopPetUrl, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopDeskUrl, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const smokeCheck = process.argv.includes("--smoke-check");
 const smokeReportPath = smokeCheck ? process.env.LOCALOPS_SMOKE_REPORT : null;
+if (smokeCheck) {
+  app.setPath("userData", resolve(process.env.LOCALOPS_SMOKE_PROFILE || join(tmpdir(), `localops-guardian-smoke-${process.pid}`)));
+}
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) app.quit();
 
@@ -15,6 +19,7 @@ let tray = null;
 let ownedApi = null;
 let quitting = false;
 let alwaysOnTop = true;
+let firstCloseNoticeShown = false;
 
 function appPath(...parts) {
   return join(app.getAppPath(), ...parts);
@@ -24,32 +29,53 @@ function statePath() {
   return join(app.getPath("userData"), "desktop-window.json");
 }
 
+function readDesktopState() {
+  try {
+    const state = JSON.parse(readFileSync(statePath(), "utf8"));
+    return state && typeof state === "object" ? state : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDesktopState(patch) {
+  try {
+    writeFileSync(statePath(), JSON.stringify({ ...readDesktopState(), ...patch }), "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function writeSmokeReport(report) {
   if (!smokeReportPath) return;
   writeFileSync(smokeReportPath, `${JSON.stringify(report)}\n`, "utf8");
 }
 
+function finishSmoke(exitCode) {
+  quitting = true;
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  tray = null;
+  if (deskWindow && !deskWindow.isDestroyed()) deskWindow.destroy();
+  if (petWindow && !petWindow.isDestroyed()) petWindow.destroy();
+  if (ownedApi) ownedApi.kill();
+  app.exit(exitCode);
+}
+
 function readPetBounds() {
-  try {
-    return safeWindowBounds(JSON.parse(readFileSync(statePath(), "utf8"))?.petBounds);
-  } catch {
-    return safeWindowBounds(null);
-  }
+  return safeWindowBounds(readDesktopState().petBounds);
 }
 
 function persistPetBounds() {
   if (!petWindow || petWindow.isDestroyed()) return;
-  try {
-    writeFileSync(statePath(), JSON.stringify({ petBounds: petWindow.getBounds() }), "utf8");
-  } catch {
-    // A read-only profile must not prevent a safe explicit quit.
-  }
+  writeDesktopState({ petBounds: petWindow.getBounds() });
 }
 
 function secureWindowOptions(extra = {}) {
   return {
     show: false,
     backgroundColor: "#0d1715",
+    icon: appPath("build", "icon.png"),
     webPreferences: {
       preload: appPath("desktop", "preload.mjs"),
       nodeIntegration: false,
@@ -103,10 +129,15 @@ function createPetWindow() {
   }));
   attachNavigationGuard(petWindow);
   petWindow.on("close", (event) => {
-    if (quitting || smokeCheck) return;
+    if (quitting) return;
     event.preventDefault();
     persistPetBounds();
     petWindow.hide();
+    if (!firstCloseNoticeShown && tray) {
+      firstCloseNoticeShown = true;
+      writeDesktopState({ trayCloseExplained: true });
+      tray.displayBalloon({ ...firstTrayNotice, iconType: "info", largeIcon: false });
+    }
     rebuildTrayMenu();
   });
   petWindow.on("move", persistPetBounds);
@@ -199,17 +230,19 @@ function rebuildTrayMenu() {
   if (!tray) return;
   const visible = Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "● 本地值守运行中", enabled: false },
+    { type: "separator" },
     { label: visible ? "隐藏小哨" : "显示小哨", click: () => visible ? petWindow?.hide() : showPet() },
     { label: "打开完整控制台", click: () => showDesk() },
     { type: "separator" },
     { label: "桌宠置顶", type: "checkbox", checked: alwaysOnTop, click: (item) => setAlwaysOnTop(item.checked) },
     { type: "separator" },
-    { label: "退出 LocalOps", click: () => { quitting = true; app.quit(); } }
+    { label: "退出 LocalOps（停止本次值守）", click: () => { quitting = true; app.quit(); } }
   ]));
 }
 
 function createTray() {
-  const source = nativeImage.createFromPath(appPath("src", "assets", "localops-sentry-otter.png"));
+  const source = nativeImage.createFromPath(appPath("build", "icon.png"));
   tray = new Tray(source.resize({ width: 20, height: 20 }));
   tray.setToolTip("LocalOps Guardian · 本地值守中");
   tray.on("click", () => {
@@ -282,6 +315,8 @@ app.on("window-all-closed", () => {
 if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     try {
+      app.setAppUserModelId("com.localops.guardian");
+      firstCloseNoticeShown = readDesktopState().trayCloseExplained === true;
       const apiOwnership = await ensureApi();
       createPetWindow();
       createTray();
@@ -295,22 +330,31 @@ if (gotSingleInstanceLock) {
         if (result.title !== "LocalOps Guardian" || result.runtime !== "desktop" || !result.hasApp) {
           throw new Error(`Desktop renderer smoke result was incomplete: ${JSON.stringify(result)}`);
         }
-        const report = { ok: true, apiOwnership, hasTray: Boolean(tray && !tray.isDestroyed()), ...result };
+        petWindow.close();
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+        const report = {
+          ok: true,
+          pid: process.pid,
+          apiOwnership,
+          hasTray: Boolean(tray && !tray.isDestroyed()),
+          hiddenToTray: Boolean(petWindow && !petWindow.isDestroyed() && !petWindow.isVisible()),
+          closeNoticePersisted: readDesktopState().trayCloseExplained === true,
+          ...result
+        };
         process.stdout.write(`${JSON.stringify(report)}\n`);
         writeSmokeReport(report);
-        quitting = true;
-        if (ownedApi) ownedApi.kill();
-        app.exit(0);
+        finishSmoke(0);
       }
     } catch (error) {
       writeSmokeReport({ ok: false, error: error instanceof Error ? error.message : String(error) });
       if (!smokeCheck) dialog.showErrorBox("LocalOps 无法启动", error instanceof Error ? error.message : String(error));
       else process.stderr.write(`${error instanceof Error ? error.stack : error}\n`);
       process.exitCode = 1;
-      quitting = true;
-      if (ownedApi) ownedApi.kill();
-      if (smokeCheck) app.exit(1);
-      else app.quit();
+      if (smokeCheck) finishSmoke(1);
+      else {
+        quitting = true;
+        app.quit();
+      }
     }
   });
 }

@@ -42,8 +42,8 @@
 - Host configuration cannot be edited, deleted, or batch-cleared while an overlapping light check is active; the typed conflict identifies the in-memory run rather than creating orphan evidence.
 - A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
 - Check, host save/delete, scheduler save, retention cleanup, and action-plan generation expose distinct pending states; non-check work never changes refresh copy to “检查中”, and duplicate mutating controls remain disabled until completion.
-- Windows login-start requires a production build, a usable Node executable, Microsoft Edge, and an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
-- Startup enablement writes only one current-user LocalOps VBS entry; disablement removes it only when its exact managed content still matches. Unknown same-name entries fail closed.
+- The packaged Windows desktop app includes its own runtime, requires neither a separate Node executable nor Microsoft Edge, and gates native current-user login-start behind an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
+- Source preview cannot enable desktop login-start. The legacy Edge/VBS startup entry remains a compatibility path only and continues to refuse overwriting or removing unknown same-name entries.
 - Public startup API responses and Agent status expose no Startup directory, repository path, Node/Edge path, generated script, or other local filesystem identity.
 - The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
 - Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
@@ -54,13 +54,15 @@
 - The report page labels the full identity-bearing report as internal, never recommends it as a fallback for failed safe-copy, and requires a second confirmation before copying; the adjacent safe-share path reuses the tested minimal-disclosure summary.
 - Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
+- The packaged desktop host is single-instance, keeps native capabilities behind an exact loopback renderer check, and uses a native tray and always-on-top control instead of Edge title matching or a PowerShell helper.
+- Closing the packaged pet hides it to the tray without stopping its owned API, explains that behavior once, and requires the explicit tray action “退出 LocalOps（停止本次值守）” to end the desktop-owned watch.
 - A pet opened from the full desk uses a random validated memory-only session, sends the same bounded presence heartbeat as a launcher-opened pet, and is therefore visible to aggregate ordinary duplicate-window refusal without exposing a server or user identity.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
 - Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
 - Launcher-owned API lifetime follows a random, memory-only pet presence session rather than the short-lived Edge bootstrap PID; missing initial presence fails within 10 seconds and stale presence expires automatically.
 - A normal repeated Windows launch detects aggregate unexpired pet presence before spawning Edge, opens no duplicate window, and exposes no session ID; an unavailable or malformed aggregate response fails closed.
-- After the first production build, Windows users can double-click the checked-in desktop entry to open the same bounded pet launcher without a console window; it performs no install, elevation, service, or login-start mutation and shows a visible prerequisite checklist on failure.
-- The Windows Node 24 CI job publishes a 14-day portable artifact containing the built UI and only allow-listed standard-library runtime files; manifest verification rejects added, missing, changed, secret, dependency, log, database, or local-data files before upload.
+- The legacy checked-in Edge launcher remains available for compatibility and performs no install, elevation, service, or login-start mutation.
+- The Windows Node 24 CI job publishes both the legacy folder and a 14-day single-file Electron desktop artifact; the latter must pass icon generation, isolated-profile renderer, tray-close, process-exit, and owned-API cleanup verification.
 - Portable verification starts the API from the packaged directory with a fresh temporary data directory and proves the built home page, empty default state, and recognizable fail-closed Agent manifest.
 - Evidence older than the configured freshness window is shown as unknown across the full desk and pet: headline, aggregate counts, host pills, setup progress, and Codex discussion cannot retain a healthy claim. Prior readings remain visibly labeled as expired reference only, with an explicit action to obtain new evidence. The footer uses observation time rather than response generation time.
 - Freshness is evaluated per host from that host's own last-check timestamp. Refreshing one server never revives another server's expired HTTP, SSH, runtime, resource, guidance, pet, notification, or minimal-disclosure categories; mixed-age dashboards retain fresh hosts while downgrading only non-current hosts and recomputing counts.

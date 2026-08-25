@@ -2,7 +2,8 @@
 
 - TypeScript typecheck.
 - Production build.
-- Portable package manifest, shared evidence-judgment module integrity, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and Windows Edge launcher check.
+- Portable package manifest, shared evidence-judgment module integrity, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and legacy Windows Edge launcher check.
+- Electron desktop packaging verifies a four-size application icon, exact loopback renderer, native tray creation, close-to-tray persistence, explicit process exit, isolated smoke profile cleanup, and shutdown of only the API owned by the test run.
 - Desktop launcher tests cover identity-free aggregate presence, duplicate-window refusal, malformed presence responses, and session expiry.
 - Shared pet-path tests prove the launcher and full desk construct the same validated session route; source delivery checks require desk-opened pets to use a fresh UUID rather than an untracked pet URL.
 - Companion-asset validation checks genuine PNG alpha, bounded file size, expected portrait dimensions, production UI wiring, and removal of the former CSS cat-face parts; official files under `pets/` retain the stricter 1536 × 1872 gate.

@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 
 export const desktopOrigin = "http://127.0.0.1:4317";
 
+export const firstTrayNotice = Object.freeze({
+  title: "小哨仍在值守",
+  content: "LocalOps 已缩到系统托盘。右键托盘图标可打开控制台，或明确退出本次值守。"
+});
+
 export function desktopPetUrl(sessionId = randomUUID()) {
   return `${desktopOrigin}/?mode=pet&session=${encodeURIComponent(sessionId)}&runtime=desktop`;
 }

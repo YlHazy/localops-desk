@@ -6,15 +6,18 @@ directories:
 files:
   - dist/**
   - desktop/**
+  - build/icon.png
+  - build/icon.ico
   - server/**
   - shared/**
   - src/pet-presence.mjs
   - src/assets/localops-sentry-otter.png
   - package.json
 win:
+  icon: build/icon.ico
   target:
     - target: portable
       arch:
         - x64
   artifactName: LocalOps-Guardian-${version}-${arch}.${ext}
-  signAndEditExecutable: false
+  signExecutable: false
