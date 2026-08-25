@@ -579,6 +579,13 @@ class CheckAlreadyRunningError extends Error {
   }
 }
 
+function checkOutcomeLabel(status) {
+  if (status === "healthy") return "本次未发现问题";
+  if (status === "warning") return "有需要关注的信号";
+  if (status === "critical") return "发现明确故障";
+  return "仍有状态无法确认";
+}
+
 class NoCollectibleEvidenceError extends Error {
   constructor(coverage, scope) {
     super(scope === "all"
@@ -623,9 +630,10 @@ async function runLightCheck(options = {}) {
     const status = overallStatus(hostResults);
     const trigger = String(options.trigger || (options.hostId ? "manual-host" : "manual"));
     const hostScope = options.hostId || "all";
+    const outcomeLabel = checkOutcomeLabel(status);
     const summary = coverage.blocked > 0
-      ? `${hostResults.length} 台已取得证据，${coverage.blocked} 台因证据来源不可用而跳过；总体状态：${status}。`
-      : `${hostResults.length} 台已取得证据；总体状态：${status}。`;
+      ? `${hostResults.length} 台已取得证据，${coverage.blocked} 台因证据来源不可用而跳过；${outcomeLabel}。`
+      : `${hostResults.length} 台已取得证据；${outcomeLabel}。`;
     const hostSnapshots = new Map(hosts.map((hostItem) => [hostItem.id, hostItem]));
 
     let run;

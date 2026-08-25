@@ -122,9 +122,9 @@ function createPetWindow() {
   petWindow = new BrowserWindow(secureWindowOptions({
     ...readPetBounds(),
     minWidth: 320,
-    minHeight: 520,
+    minHeight: 400,
     maxWidth: 420,
-    maxHeight: 680,
+    maxHeight: 560,
     title: "LocalOps Guardian",
     autoHideMenuBar: true,
     alwaysOnTop,

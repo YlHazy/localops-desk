@@ -284,6 +284,7 @@ test("batch checks collect only usable hosts and report skipped coverage honestl
   }, { total: 2, collectible: 1, blocked: 1 });
   assert.deepEqual(result.hostResults.map((item) => item.hostId), [usable.id]);
   assert.match(result.summary, /1 台已取得证据，1 台.*跳过/);
+  assert.doesNotMatch(result.summary, /healthy|warning|critical|unknown/);
 
   const status = await fetch(`${api.base}/api/status`).then((item) => item.json());
   assert.ok(status.hosts.find((item) => item.id === usable.id).lastCheckedAt);

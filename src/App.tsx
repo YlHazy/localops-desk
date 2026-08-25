@@ -31,6 +31,7 @@ import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, 
 import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
+import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
@@ -66,6 +67,7 @@ const emptyHostForm: HostConfigInput = {
 };
 
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
+const onboardingPetUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -144,10 +146,19 @@ function shortSignal(value: string) {
   return `${value.slice(0, 72)}...`;
 }
 
+function friendlyHttpStatus(value: string) {
+  if (!value || value === "not checked") return "未检查";
+  if (value === "simulated 200 ready") return "模拟正常";
+  if (value === "simulated not observed") return "模拟未观测";
+  if (/timeout|timed out/i.test(value)) return "连接超时";
+  return shortSignal(value);
+}
+
 function friendlySshStatus(value: string) {
   if (!value || value === "not checked") return "未检查";
   if (value === "not configured") return "未配置";
   if (value === "simulated disabled") return "当前未启用";
+  if (value === "simulated ok") return "模拟正常";
   if (value === "ok") return "正常";
   if (/Could not resolve hostname|alias not found|DNS unresolved/i.test(value)) return "SSH alias 不可用";
   if (/Permission denied|publickey/i.test(value)) return "SSH 权限失败";
@@ -159,6 +170,7 @@ function friendlySshStatus(value: string) {
 function friendlyDockerStatus(value: string) {
   if (!value || value === "not checked") return "未检查";
   if (value === "docker checked") return "已检查";
+  if (value === "compose healthy") return "模拟正常";
   if (/unavailable/i.test(value)) return "Docker 不可用";
   return shortSignal(value);
 }
@@ -197,7 +209,7 @@ function HostPanel({ host, selected, onSelect }: { host: HostState; selected: bo
         <StatusPill status={host.status} />
       </div>
       <div className="host-glance">
-        <span>HTTP <strong>{shortSignal(host.httpStatus)}</strong></span>
+        <span>HTTP <strong>{friendlyHttpStatus(host.httpStatus)}</strong></span>
         <span>内存 <strong>{host.memoryPercent == null ? "—" : `${host.memoryPercent}%`}</strong></span>
         <span>磁盘 <strong>{host.diskPercent == null ? "—" : `${host.diskPercent}%`}</strong></span>
         <span aria-hidden="true">›</span>
@@ -272,8 +284,8 @@ function HostForm({
     <div className="host-form">
       <div className="host-form-intro">
         <div>
-          <strong>{editing ? "修改本机保存的服务器配置" : "先登记服务器，再选择证据来源"}</strong>
-          <small>只要求名称；Health URL 和 SSH alias 均为可选，不要填写密码、Token 或私钥。</small>
+          <strong>{editing ? "修改本机保存的服务器配置" : "填写监控来源"}</strong>
+          <small>只要求名称；连接信息可稍后补充，不要填写密码、Token 或私钥。</small>
         </div>
         <span className={hasHealthUrl || (hasSshAlias && sshCollectionEnabled) ? "ready" : "waiting"}>
           {hasHealthUrl
@@ -285,17 +297,22 @@ function HostForm({
                 : "保存后保持未检查"}
         </span>
       </div>
-      <div className="form-grid">
-        <label>名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：个人博客" /><small>显示名称，只保存在本机。</small></label>
-        <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
-        <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
-        <label>SSH Alias · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>填写 SSH config 的 Host 名；{sshCollectionEnabled ? "当前启动仅执行固定只读命令。" : "当前启动不会使用 SSH。"}</small></label>
-        <label className="wide">Health URL · 可选<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>巡检会向这里发起 HTTP GET；不能含账号、查询参数或 # 片段。</small></label>
-        <label>Compose 项目 · 备注<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="例如：blog-stack" /><small>当前仅作本机标记，不会拼入命令。</small></label>
-        <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
+      <div className="form-grid host-form-essential">
+        <label>服务器名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" /><small>只用于本机显示。</small></label>
+        <label className="wide">Health URL · 推荐<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>只发送 HTTP GET；请勿填写账号、Token 或查询参数。</small></label>
+        <label>SSH 别名 · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>{sshCollectionEnabled ? "读取 CPU、内存、磁盘和 Docker。" : "已登记也不会在当前模式连接。"}</small></label>
       </div>
+      <details className="host-form-advanced" open={editing || undefined}>
+        <summary>更多信息</summary>
+        <div className="form-grid">
+          <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
+          <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
+          <label>Compose 项目 · 备注<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="例如：blog-stack" /><small>仅作本机标记，不会拼入命令。</small></label>
+          <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
+        </div>
+      </details>
       <div className="form-actions">
-        <button className="primary slim" disabled={!form.name.trim() || disabled} onClick={onSubmit}><Save size={16} />{saving ? "保存中" : editing ? "保存配置" : "新增主机"}</button>
+        <button className="primary slim" disabled={!form.name.trim() || disabled} onClick={onSubmit}><Save size={16} />{saving ? "保存中" : editing ? "保存配置" : "添加服务器"}</button>
         <button disabled={saving} onClick={onCancel}><X size={16} />取消</button>
       </div>
     </div>
@@ -475,7 +492,7 @@ export function App() {
     let stopped = false;
     let timer = window.setTimeout(sync, 30_000);
     async function sync() {
-      setDeskSyncState("syncing");
+      setDeskSyncState((current) => current === "offline" ? "offline" : "syncing");
       try {
         await load({ preserveSchedulerForm: true });
       } catch (err) {
@@ -614,7 +631,6 @@ export function App() {
     () => dashboard ? trustworthyDashboard(dashboard, now) : null,
     [dashboard, now]
   );
-  const incidentHosts = useMemo(() => displayDashboard?.hosts.filter((host) => host.status !== "healthy") ?? [], [displayDashboard]);
   const filteredChecks = useMemo(() => filterChecks(checks, checkFilter), [checks, checkFilter]);
   const selectedCheck = useMemo(() => checks.find((check) => check.id === selectedCheckId) ?? null, [checks, selectedCheckId]);
   const priorityHosts = useMemo(() => prioritizeHosts(displayDashboard?.hosts ?? []), [displayDashboard]);
@@ -647,6 +663,10 @@ export function App() {
   const selectedReadiness = useMemo(
     () => dashboard ? evidenceReadiness(dashboard, selectedHost) : null,
     [dashboard, selectedHost]
+  );
+  const selectedGuidance = useMemo(
+    () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
+    [selectedHost, selectedFreshness.state]
   );
   const batchCoverage = useMemo(
     () => scheduler?.coverage ?? (dashboard ? collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode }) : collectionCoverage("safe-simulated")),
@@ -691,7 +711,7 @@ export function App() {
       setBriefCopied(true);
       window.setTimeout(() => setBriefCopied(false), 2_000);
     } catch {
-      setError("最小披露摘要复制失败，请检查剪贴板权限；不要用包含服务器名称的内部报告代替。");
+      setError("隐私版摘要复制失败，请检查剪贴板权限；不要改用包含服务器名称的内部报告。");
     }
   }
 
@@ -859,11 +879,10 @@ export function App() {
           <section className="boot-recovery-card">
             <AlertTriangle size={22} aria-hidden="true" />
             <div>
-              <span>LOCAL STATUS / 本地状态</span>
               <h1>{recovery.label}</h1>
-              <p title={error}>原因：{error}</p>
               <small>{recovery.detail}</small>
               <em>{recovery.boundary}</em>
+              <details><summary>技术原因</summary><p>{error}</p></details>
             </div>
             <button onClick={retryLoad}><RefreshCcw size={15} />立即重试</button>
           </section>
@@ -976,31 +995,25 @@ export function App() {
     return (
       <main className="empty-host-setup">
         <section className={`empty-host-card ${showHostForm ? "configuring" : ""}`}>
-          <div className="empty-host-intro">
+          {!showHostForm ? <div className="empty-host-intro">
             <div>
-              <span className="onboarding-kicker">FIRST WATCH / 首次值守校准</span>
-              <Server size={30} />
-              <h1>先建立一条安全值守线</h1>
-              <p>给服务器起个名字即可开始。没有填写 Health URL 或 SSH alias 时，LocalOps 不会产生任何网络请求。</p>
+              <h1>先添加你要看的服务器</h1>
+              <p>推荐填写一个 Health URL，LocalOps 就能判断服务是否可用。也可以先只填名称，不会自动扫描或连接任何设备。</p>
+              <div className="onboarding-cta">
+                <button className="primary" onClick={startCreateHost}><Plus size={16} />添加服务器</button>
+                <button className="practice-entry" onClick={() => setPracticePending("install")}><ShieldCheck size={16} />看看离线示例</button>
+              </div>
+              <p className="onboarding-boundary"><ShieldCheck size={15} />只连接你明确填写的地址；不保存密码、Token 或私钥。</p>
             </div>
-            <div className="zero-contact-seal">
-              <ShieldCheck size={22} />
-              <span>当前边界</span>
-              <strong>零目标 · 零连接</strong>
-              <small>只保存你明确提交的配置</small>
+            <div className="onboarding-pet" aria-hidden="true">
+              <img src={onboardingPetUrl} alt="" />
             </div>
-          </div>
-          <ol className="onboarding-steps" aria-label="首次配置步骤">
-            <li><span>01</span><strong>命名对象</strong><small>名称、环境和角色用于值守分组。</small></li>
-            <li><span>02</span><strong>选择证据</strong><small>Health URL 与 SSH 均可稍后逐项启用。</small></li>
-            <li><span>03</span><strong>先看再动</strong><small>产品给判断和预案，不替你重启或部署。</small></li>
-          </ol>
+          </div> : null}
           {showHostForm ? (
             <div className="onboarding-form-stage">
               <div>
-                <span className="onboarding-kicker">STEP 01 / 先登记对象</span>
-                <h2>配置第一台服务器</h2>
-                <p>只填名称也能保存；连接信息保持为空，就只建立本地值守档案。</p>
+                <h2>添加第一台服务器</h2>
+                <p>不确定怎么填时，只写名称和 Health URL；其他信息以后再补。</p>
               </div>
               <HostForm
                 form={hostForm}
@@ -1013,17 +1026,9 @@ export function App() {
                 sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
               />
             </div>
-          ) : (
-            <>
-              <div className="onboarding-cta">
-                <button className="primary" onClick={startCreateHost}><Plus size={16} />配置第一台服务器</button>
-                <button className="practice-entry" onClick={() => setPracticePending("install")}><ShieldCheck size={16} />先用离线练习</button>
-                <small>不会自动发现局域网、读取 SSH 配置或导入历史主机。</small>
-              </div>
-              {practicePending === "install" ? (
+          ) : practicePending === "install" ? (
                 <div className="practice-confirm" role="group" aria-label="确认启用离线练习">
                   <div>
-                    <span className="onboarding-kicker">ZERO NETWORK / 零网络练习</span>
                     <strong>载入 3 台纯虚构服务器？</strong>
                     <small>只写入本地示例；地址、SSH 与 Compose 均为空。退出练习会删除这些示例和对应检查记录。</small>
                   </div>
@@ -1031,8 +1036,6 @@ export function App() {
                   <button className="secondary slim" disabled={practiceLoading} onClick={() => setPracticePending(null)}>取消</button>
                 </div>
               ) : null}
-            </>
-          )}
           {error ? <p className="error-banner" role="alert">{error}</p> : null}
         </section>
       </main>
@@ -1083,19 +1086,12 @@ export function App() {
                 <AlertTriangle size={17} aria-hidden="true" />
                 <div>
                   <strong>{deskSync.label}</strong>
-                  <small>{deskSync.detail}</small>
-                  <span>{deskSync.boundary}</span>
-                  {deskSyncError ? <em title={deskSyncError}>原因：{deskSyncError}</em> : null}
+                  <small>{deskSync.detail}；重试只会读取本地状态，不会巡检服务器。</small>
+                  {deskSyncError ? <details><summary>技术原因</summary><p>{deskSyncError}</p></details> : null}
                 </div>
                 <button onClick={retryDeskSync}><RefreshCcw size={14} />立即重试</button>
               </section>
-            ) : (
-              <div className={`sync-rail ${deskSyncState}`} aria-live="polite">
-                <span className="sync-pulse" aria-hidden="true" />
-                <strong>{deskSync.label}</strong>
-                <small>{deskSync.detail}</small>
-              </div>
-            )}
+            ) : null}
           </div>
           <div className="topbar-actions">
             <div className={`batch-check-action ${batchCoverage.blocked ? "partial" : "complete"}`}>
@@ -1103,7 +1099,7 @@ export function App() {
                 {checking ? <RefreshCcw className="spin" size={18} /> : batchCoverage.collectible > 0 ? <Play size={18} /> : <Pencil size={18} />}
                 <span>{checking ? "正在检查" : dashboard.practiceMode ? "运行离线练习" : batchCoverage.collectible === 0 ? "补充监控来源" : batchCoverage.blocked > 0 ? `检查 ${batchCoverage.collectible} 台` : "一键检查全部"}</span>
               </button>
-              <small>{batchCoverage.collectible}/{batchCoverage.total} 台可采集{batchCoverage.blocked ? ` · ${batchCoverage.blocked} 台将跳过` : " · 全部覆盖"}</small>
+              {batchCoverage.blocked ? <small>{batchCoverage.blocked} 台缺少监控来源，本次会跳过</small> : null}
             </div>
             <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
               <Plus size={18} />
@@ -1128,7 +1124,6 @@ export function App() {
         {dashboard.practiceMode ? (
           <section className="practice-banner" aria-label="离线练习状态">
             <div>
-              <span className="topbar-kicker">OFFLINE PRACTICE / 离线练习</span>
               <strong>这里的服务器和证据都是虚构的</strong>
               <small>可以放心巡检、查看异常分级和生成预案；不会访问 HTTP、SSH 或局域网。</small>
             </div>
@@ -1146,18 +1141,6 @@ export function App() {
 
         {selectedTab === "overview" && (
           <section className={`home-grid ${detailsOpen ? "details-open" : ""}`}>
-            {incidentHosts.length ? <div className="todo-panel" aria-label="需要关注">
-              <div className="panel-head">
-                <h2>需要关注</h2>
-              </div>
-              {priorityHosts.filter((host) => host.status !== "healthy").map((host) => (
-                <button key={host.id} className={host.id === selectedHost.id && detailsOpen ? "selected" : ""} onClick={() => chooseFocusHost(host.id)}>
-                  <div><strong>{host.name}</strong><span>{host.summary}</span></div>
-                  <StatusPill status={host.status} />
-                </button>
-              ))}
-            </div> : null}
-
             <div className="all-hosts-panel">
               <div className="panel-head">
                 <h2>服务器</h2>
@@ -1180,16 +1163,22 @@ export function App() {
                 <div><h2>{selectedHost.name}</h2><p>{selectedFreshness.label}</p></div>
                 <div className="detail-head-actions"><StatusPill status={selectedHost.status} /><button className="detail-close" onClick={() => setDetailsOpen(false)} aria-label="关闭详情"><X size={18} /></button></div>
               </div>
-              <p className="server-detail-summary">{selectedHost.summary}</p>
+              {selectedGuidance ? null : <p className="server-detail-summary">{selectedHost.summary}</p>}
+              {selectedHost.status === "healthy" || !selectedGuidance ? null : (
+                <section className={`server-diagnosis ${selectedHost.status}`} aria-label="初步判断">
+                  <div><span>可能原因</span><strong>{selectedGuidance.reason}</strong></div>
+                  <div><span>下一步</span><p>{selectedGuidance.detail}</p></div>
+                </section>
+              )}
               <dl className="server-facts">
-                <div><dt>网页/API</dt><dd><strong>{shortSignal(selectedHost.httpStatus)}</strong>{selectedHost.httpLatencyMs == null ? null : <span>{selectedHost.httpLatencyMs}ms</span>}</dd></div>
+                <div><dt>网页/API</dt><dd><strong>{friendlyHttpStatus(selectedHost.httpStatus)}</strong>{selectedHost.httpLatencyMs == null ? null : <span>{selectedHost.httpLatencyMs}ms</span>}</dd></div>
                 <div><dt>SSH / Docker</dt><dd><strong>{friendlySshStatus(selectedHost.sshStatus)}</strong><span>{friendlyDockerStatus(selectedHost.dockerStatus)}</span></dd></div>
                 <div className={resourceSignalStatus(selectedHost)}><dt>资源</dt><dd><strong>{resourceSignalSummary(selectedHost)}</strong><span>内存 {selectedHost.memoryPercent ?? "—"}% · 磁盘 {selectedHost.diskPercent ?? "—"}%</span></dd></div>
               </dl>
               <div className="quick-actions">
-                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedHost.status === "healthy" ? "重新检查" : "自动查原因"}</button>
+                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>
                 <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
-                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>查看检查命令</button>}
+                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>继续只读排查</button>}
               </div>
               <details className="technical-details">
                 <summary>技术细节</summary>
@@ -1342,7 +1331,7 @@ export function App() {
                             <header><div><strong>{hostEvidence.hostName}</strong><span>{hostEvidence.environment} · {hostEvidence.role} · {hostEvidence.identitySnapshot ? "检查时记录" : "当前配置回填"}</span></div><StatusPill status={hostEvidence.status} /></header>
                             <p>{hostEvidence.summary}</p>
                             <div className="history-signal-ledger">
-                              <span>网页/API<strong>{shortSignal(hostEvidence.httpStatus)}{hostEvidence.httpLatencyMs == null ? "" : ` · ${hostEvidence.httpLatencyMs}ms`}</strong></span>
+                              <span>网页/API<strong>{friendlyHttpStatus(hostEvidence.httpStatus)}{hostEvidence.httpLatencyMs == null ? "" : ` · ${hostEvidence.httpLatencyMs}ms`}</strong></span>
                               <span>只读 SSH<strong>{friendlySshStatus(hostEvidence.sshStatus)}</strong></span>
                               <span>Docker<strong>{friendlyDockerStatus(hostEvidence.dockerStatus)}</strong></span>
                               <span>资源<strong>CPU {hostEvidence.cpuPercent == null ? "未采集" : `${hostEvidence.cpuPercent}%`} · 内存 {hostEvidence.memoryPercent == null ? "未采集" : `${hostEvidence.memoryPercent}%`} · 磁盘 {hostEvidence.diskPercent == null ? "未采集" : `${hostEvidence.diskPercent}%`}</strong></span>
@@ -1549,16 +1538,9 @@ export function App() {
         {selectedTab === "actions" && (
           <section className="action-layout">
             <header className="action-intro">
-              <div>
-                <span>需要处理时</span>
-                <h2>先自动查原因，再决定要不要动服务器</h2>
-                <p>只读诊断可以一键运行；会改变服务器的命令必须先展示目标、影响和验证步骤，再由你明确同意。</p>
-              </div>
-              <ol aria-label="操作安全流程">
-                <li className="done"><b>1</b><span>自动诊断<small>只读执行</small></span></li>
-                <li><b>2</b><span>查看方案<small>命令与影响</small></span></li>
-                <li><b>3</b><span>高危确认<small>逐条同意</small></span></li>
-              </ol>
+              <span>安全操作</span>
+              <h2>先看证据，再准备命令</h2>
+              <p>首页的一键检查会执行固定的只读采集。这里可以继续生成排查命令或变更计划，但 LocalOps 当前不会替你执行任何会改变服务器的命令。</p>
             </header>
             <div className="action-menu">
               <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "生成检查命令"}</button>
@@ -1609,7 +1591,7 @@ export function App() {
               <FileText />
               <div>
                 <h2>报告与安全分享</h2>
-                <p>内部诊断保留现场细节；对外讨论只使用最小披露摘要。</p>
+                <p>内部诊断保留现场细节；对外讨论只使用隐私版摘要。</p>
               </div>
             </div>
             <div className="report-share-grid">

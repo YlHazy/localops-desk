@@ -6,7 +6,7 @@
   --pet-slate: #667572;
 }
 
-body:has(.pet-window) { min-width: 320px; min-height: 520px; overflow: hidden; background: transparent; }
+body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; background: transparent; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .pet-window { --pet-mood: var(--pet-slate); position: relative; box-sizing: border-box; width: min(100%, 420px); min-height: 100vh; margin: 0 auto; padding: 8px 12px 14px; overflow: hidden; color: var(--pet-ink); background: transparent; font-family: "Segoe UI Variable Text", "Microsoft YaHei UI", sans-serif; }
 .pet-window.healthy { --pet-mood: var(--pet-green); }
