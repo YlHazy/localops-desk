@@ -261,6 +261,16 @@ async function waitForApi(attempts = 60) {
   return false;
 }
 
+async function waitForPetRenderer(attempts = 40) {
+  let result = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    result = await petWindow.webContents.executeJavaScript("({ title: document.title, runtime: new URLSearchParams(location.search).get('runtime'), hasApp: Boolean(document.querySelector('.pet-window')) })");
+    if (result.title === "LocalOps Guardian" && result.runtime === "desktop" && result.hasApp) return result;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+  }
+  throw new Error(`Desktop renderer smoke result was incomplete: ${JSON.stringify(result)}`);
+}
+
 async function ensureApi() {
   if (await localOpsReady()) return "existing";
   ownedApi = utilityProcess.fork(appPath("server", "index.mjs"), [], {
@@ -325,11 +335,7 @@ if (gotSingleInstanceLock) {
           petLoadPromise,
           new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Desktop renderer smoke check timed out.")), 15_000))
         ]);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const result = await petWindow.webContents.executeJavaScript("({ title: document.title, runtime: new URLSearchParams(location.search).get('runtime'), hasApp: Boolean(document.querySelector('.pet-window')) })");
-        if (result.title !== "LocalOps Guardian" || result.runtime !== "desktop" || !result.hasApp) {
-          throw new Error(`Desktop renderer smoke result was incomplete: ${JSON.stringify(result)}`);
-        }
+        const result = await waitForPetRenderer();
         petWindow.close();
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
         const report = {
