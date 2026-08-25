@@ -1,6 +1,8 @@
 import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
+import { evidenceReadiness } from "./evidence-readiness.mjs";
+import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
 import { petLifecycleCopy, petRuntimeMode } from "./pet-lifecycle.mjs";
 import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
@@ -10,6 +12,7 @@ import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import { notificationDecision, petQuietDurationMs, readNotificationCalibration, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationCalibration, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
+import { collectionCoverage } from "../shared/collection-coverage.mjs";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
@@ -91,7 +94,7 @@ function latestTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function petIssueLine(host: HostState | null, fresh: boolean) {
+function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "") {
   if (!host || !fresh) return "数据有点旧，重新检查后再判断。";
   const http = host.httpStatus.toLowerCase();
   const ssh = host.sshStatus.toLowerCase();
@@ -99,8 +102,11 @@ function petIssueLine(host: HostState | null, fresh: boolean) {
   if (/down|fail|timeout|refused|unreachable|error/.test(http)) return "网页或 API 现在无法正常访问。";
   if (/fail|timeout|refused|unreachable|error/.test(ssh)) return "管理通道现在无法连接。";
   if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有正常运行。";
-  if ((host.diskPercent ?? 0) >= 75) return "磁盘使用已经接近阈值。";
-  if ((host.memoryPercent ?? 0) >= 75) return "内存使用已经接近阈值。";
+  if (/资源占用/.test(guidanceReason)) {
+    return (host.diskPercent ?? 0) >= (host.memoryPercent ?? 0)
+      ? `磁盘使用 ${host.diskPercent ?? "—"}%，需要留意。`
+      : `内存使用 ${host.memoryPercent ?? "—"}%，需要留意。`;
+  }
   return "有一项状态需要确认。";
 }
 
@@ -227,10 +233,13 @@ export function PetMode({
   const focusHost = selectFocusHost(hosts, selectedHostId);
   const priorityFresh = priorityHost ? hostEvidenceIsFresh(dashboard, priorityHost, now) : false;
   const focusFresh = focusHost ? hostEvidenceIsFresh(dashboard, focusHost, now) : false;
+  const priorityGuidance = priorityHost ? hostGuidance(priorityHost, priorityFresh) : null;
   const hasNonCurrentHost = dashboard.hosts.some((host) => !hostEvidenceIsFresh(dashboard, host, now));
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
+  const focusReadiness = evidenceReadiness(dashboard, focusHost);
+  const batchCoverage = collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode });
   const visibleCounts = trustedDashboard.counts;
   const watchMode = watchModeCopy({
     supported: notificationsSupported,
@@ -375,7 +384,7 @@ export function PetMode({
     : dashboard.hosts.length === 0
       ? "还没告诉我要看谁"
       : overallStatus === "healthy"
-        ? `${visibleCounts.healthy ?? 0} 台都稳`
+        ? focusReadiness.state === "http" ? "入口正常" : `${visibleCounts.healthy ?? 0} 台都稳`
         : overallStatus === "critical"
           ? "发现明确故障"
           : overallStatus === "warning"
@@ -418,8 +427,8 @@ export function PetMode({
               : priorityHost && !priorityFresh
                 ? "证据过期了，重新看一次才算数。"
                 : overallStatus === "healthy"
-                  ? "没有发现问题，我继续替你盯着。"
-                  : petIssueLine(priorityHost, priorityFresh)}</p>
+                  ? focusReadiness.state === "http" ? "网页/API 可达，资源状态还没检查。" : "没有发现问题，我继续替你盯着。"
+                  : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason)}</p>
         </div>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />
@@ -459,7 +468,7 @@ export function PetMode({
 
       <button className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>{visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
+        <strong>{visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${batchCoverage.partial} 台仅看入口` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
         <span>{latestTime(dashboard.observedAt)} 检查</span>
         <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
       </button>

@@ -2055,3 +2055,86 @@ code {
   .server-facts > div { grid-template-columns: 1fr; gap: 4px; padding: 11px 0; }
   .server-diagnosis div { grid-template-columns: 1fr; gap: 3px; }
 }
+
+/* Daily watch settings: three decisions, with maintenance kept secondary. */
+.scheduler-layout { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.watch-readiness-summary { grid-column: 1; padding: 20px 22px; border-radius: 18px; }
+.watch-readiness-summary h2 { font-size: 23px; }
+.watch-readiness-summary header p { color: #596762; font-size: 14px; line-height: 1.5; }
+.watch-readiness-summary output { padding: 7px 10px; font-size: 13px; }
+.watch-summary-line { display: flex; gap: 0; margin-top: 17px; border-top: 1px solid #e2e7e4; }
+.watch-summary-line > span { display: flex; flex: 1; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px 18px 0 0; color: #65716d; font-size: 14px; }
+.watch-summary-line > span + span { padding-left: 18px; border-left: 1px solid #e2e7e4; }
+.watch-summary-line strong { color: #2d3834; font-size: 14px; white-space: nowrap; }
+.watch-summary-line .ready strong { color: #247455; }
+.watch-summary-line .waiting strong { color: #8a641e; }
+
+.watch-settings-panel { overflow: hidden; border: 1px solid #dce3de; border-radius: 18px; background: white; }
+.watch-settings-panel > header { padding: 20px 22px 14px; }
+.watch-settings-panel > header h2 { margin: 0; color: #172321; font-size: 20px; }
+.watch-settings-panel > header p { margin: 5px 0 0; color: #6b7772; font-size: 14px; }
+.watch-setting-row { display: grid; grid-template-columns: 42px minmax(240px, 1fr) auto; gap: 15px; align-items: center; min-height: 92px; padding: 17px 22px; border-top: 1px solid #e4e9e6; scroll-margin-top: 100px; }
+.watch-setting-row:focus { outline: none; background: #fafcfb; }
+.watch-setting-icon { display: grid; width: 42px; height: 42px; place-items: center; color: #42645b; border-radius: 13px; background: #edf3ef; }
+.watch-setting-copy { min-width: 0; }
+.watch-setting-copy > strong { color: #23302b; font-size: 16px; }
+.watch-setting-copy p { margin: 5px 0 0; color: #67736e; font-size: 14px; line-height: 1.5; }
+.watch-setting-copy small { display: block; margin-top: 5px; color: #966719; font-size: 13px; line-height: 1.45; }
+.watch-setting-copy small.error { color: #a33f3a; }
+.watch-setting-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.watch-setting-controls > button { min-height: 40px; white-space: nowrap; }
+.scheduler-inline label, .watch-maintenance-controls label { display: inline-flex; align-items: center; gap: 7px; color: #68746f; font-size: 14px; }
+.scheduler-inline input, .watch-maintenance-controls input { width: 74px; min-height: 40px; padding: 8px 9px; border: 1px solid #ccd6d0; border-radius: 10px; background: white; }
+.watch-setting-controls .toggle { min-width: 82px; min-height: 40px; padding: 8px 12px; border-radius: 10px; }
+.notification-actions, .notification-confirm { flex-wrap: wrap; }
+.notification-confirm > span { font-size: 14px; }
+.startup-confirm { max-width: 390px; }
+
+.watch-last-run { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 18px 22px; border: 1px solid #dce3de; border-radius: 16px; background: white; }
+.watch-last-run > div:first-child { display: grid; gap: 4px; }
+.watch-last-run > div:first-child > span { color: #697570; font-size: 13px; }
+.watch-last-run strong { color: #27332f; font-size: 16px; }
+.watch-last-run p { margin: 0; color: #65716d; font-size: 14px; line-height: 1.5; }
+.watch-last-run.warning { border-left: 4px solid #c98525; }
+.watch-last-run.healthy { border-left: 4px solid #2f8a67; }
+.watch-last-run-meta { display: grid; grid-template-columns: auto auto; gap: 4px 12px; justify-items: end; color: #65716d; font-size: 13px; }
+.watch-last-run-meta > span { color: #34423d; font-weight: 700; }
+.watch-last-run-meta button { grid-column: 1 / -1; margin-top: 4px; }
+
+.watch-advanced { border: 1px solid #dce3de; border-radius: 16px; background: white; }
+.watch-advanced > summary { padding: 16px 20px; color: #46544f; font-size: 14px; font-weight: 700; cursor: pointer; }
+.watch-advanced > summary:focus-visible { outline: 3px solid #efaa43; outline-offset: 3px; border-radius: 12px; }
+.watch-advanced-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 22px; align-items: center; padding: 0 20px 20px; border-top: 1px solid #e5eae7; }
+.watch-maintenance-copy { padding-top: 18px; }
+.watch-maintenance-copy strong { color: #2b3833; font-size: 15px; }
+.watch-maintenance-copy p { margin: 5px 0 0; color: #697570; font-size: 13px; line-height: 1.5; }
+.watch-maintenance-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 18px; }
+.watch-advanced .retention-result { grid-column: 1 / -1; margin: 0; }
+
+@media (max-width: 820px) {
+  .watch-summary-line { display: grid; }
+  .watch-summary-line > span { padding: 12px 0; }
+  .watch-summary-line > span + span { padding-left: 0; border-top: 1px solid #e7ebe8; border-left: 0; }
+  .watch-setting-row { grid-template-columns: 42px minmax(0, 1fr); }
+  .watch-setting-controls { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+  .watch-advanced-body { grid-template-columns: 1fr; }
+  .watch-maintenance-controls { justify-content: flex-start; flex-wrap: wrap; padding-top: 0; }
+}
+
+@media (max-width: 520px) {
+  .watch-readiness-summary { padding: 18px; }
+  .watch-readiness-summary > header { gap: 10px; }
+  .watch-setting-row { grid-template-columns: 1fr; padding: 16px 18px; }
+  .watch-setting-icon { width: 38px; height: 38px; }
+  .watch-setting-controls { grid-column: 1; justify-content: stretch; }
+  .watch-setting-controls > button { flex: 1; }
+  .scheduler-inline { display: grid; grid-template-columns: 82px minmax(94px, 1fr) 88px; width: 100%; }
+  .scheduler-inline > button { width: 100%; }
+  .scheduler-inline label { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+  .scheduler-inline label span { white-space: nowrap; }
+  .scheduler-inline input { width: 100%; min-width: 0; }
+  .watch-last-run { grid-template-columns: 1fr; padding: 17px 18px; }
+  .watch-last-run-meta { justify-items: start; }
+  .watch-last-run-meta button { grid-column: auto; }
+  .watch-advanced-body { padding-inline: 18px; }
+}

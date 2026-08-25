@@ -123,6 +123,10 @@ test("value watch settings derive a three-layer relay from bounded local state",
   const preferenceSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
   assert.match(appSource, /\["scheduler", Settings2, "提醒与值守"\]/);
   assert.match(appSource, /watch-readiness-summary/);
+  assert.match(appSource, /watch-setting-row/);
+  assert.match(appSource, /watch-advanced/);
+  assert.doesNotMatch(appSource, /watch-checklist/);
+  assert.doesNotMatch(appSource, /coverage-ledger/);
   assert.match(appSource, /开启并测试/);
   assert.match(appSource, /finishNotificationCalibration/);
   assert.match(appSource, /readNotificationPreference\(window\.localStorage\)/);
@@ -211,7 +215,7 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.match(appSource, /selectedReadiness\.canCollect/);
   assert.match(appSource, /证据仍不完整/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
-  assert.match(petSource, /资源与管理通道还没有证据/);
+  assert.match(petSource, /网页\/API 可达，资源状态还没检查/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
   assert.match(readinessSource, /state: "ssh-disabled"/);
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);
@@ -224,7 +228,7 @@ test("batch checks, scheduler, desk, pet, and portable build share collection co
   const coverageSource = readFileSync(new URL("../shared/collection-coverage.mjs", import.meta.url), "utf8");
   const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
   assert.match(appSource, /batchCoverage\.collectible/);
-  assert.match(appSource, /台将跳过/);
+  assert.match(appSource, /自动检查会跳过/);
   assert.match(petSource, /collectionCoverage\(dashboard\.mode, dashboard\.hosts/);
   assert.match(serverSource, /hostCollectionPlan\(mode, hostItem\)\.canCollect/);
   assert.match(serverSource, /NO_COLLECTIBLE_EVIDENCE/);
@@ -242,7 +246,7 @@ test("scheduler outcomes are persisted by the server and rendered with an explic
   assert.match(serverSource, /BEGIN IMMEDIATE/);
   assert.match(serverSource, /maintenance-warning/);
   assert.match(appSource, /\/api\/scheduler\/run-now/);
-  assert.match(appSource, /立即验证一次/);
+  assert.match(appSource, /checking \? "检查中" : "立即检查"/);
   assert.match(outcomeSource, /stopped-no-evidence/);
   assert.doesNotMatch(serverSource, /schedulerLastMessage[^\n]*error\?\.message/);
 });

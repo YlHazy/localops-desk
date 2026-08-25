@@ -1356,95 +1356,53 @@ export function App() {
             <section className={`watch-readiness-summary ${watchSetup.complete ? "complete" : ""}`} aria-labelledby="watch-readiness-title">
               <header>
                 <div>
-                  <h2 id="watch-readiness-title">提醒与值守</h2>
-                  <p>{watchSetup.detail}</p>
+                  <h2 id="watch-readiness-title">自动值守</h2>
+                  <p>{watchSetup.complete ? "自动检查和桌面提醒都已准备好。" : "设置好下面三项，LocalOps 才能在你不盯着界面时继续值守。"}</p>
                 </div>
-                <output>{watchSetup.readyCount} / {watchSetup.total} 已完成</output>
+                <output>{watchSetup.complete ? "已准备好" : `${watchSetup.readyCount} / ${watchSetup.total} 已设置`}</output>
               </header>
-              <div className="watch-checklist" aria-label="值守设置检查">
-                {watchSetup.items.map((item) => {
-                  const Icon = item.key === "evidence" ? ShieldCheck : item.key === "rhythm" ? Clock3 : Bell;
-                  return (
-                    <article className={`watch-check ${item.tone}`} key={item.key}>
-                      <Icon size={19} aria-hidden="true" />
-                      <div><strong>{item.label}</strong><p>{item.detail}</p></div>
-                      {item.ready ? (
-                        <span className="watch-check-ready"><CheckCircle2 size={14} />已完成</span>
-                      ) : (
-                        <button onClick={() => {
-                          if (item.key === "evidence") setSelectedTab("hosts");
-                          else if (item.key === "rhythm") document.getElementById("scheduler-controls")?.focus();
-                          else document.getElementById("notification-controls")?.focus();
-                        }}>{item.actionLabel}</button>
-                      )}
-                    </article>
-                  );
-                })}
+              <div className="watch-summary-line" aria-label="值守准备状态">
+                <span className={batchCoverage.collectible > 0 ? "ready" : "waiting"}>证据来源 <strong>{batchCoverage.collectible} / {batchCoverage.total} 台</strong></span>
+                <span className={scheduler?.enabled ? "ready" : "waiting"}>自动检查 <strong>{scheduler?.enabled ? `每 ${scheduler.lightIntervalMinutes} 分钟` : "未开启"}</strong></span>
+                <span className={notificationsCalibrated ? "ready" : "waiting"}>桌面提醒 <strong>{!desktopRuntime ? "桌面版设置" : notificationsCalibrated ? "可用" : "未确认"}</strong></span>
               </div>
             </section>
-            <div className="detail-panel" id="scheduler-controls" tabIndex={-1}>
-              <div className="detail-head">
-                <div>
-                  <h2>检查节奏与本地保留</h2>
-                  <p>只在 LocalOps Desk 进程运行时生效；关闭本地程序后不会继续轮询服务器。</p>
+
+            <section className="watch-settings-panel" aria-labelledby="watch-settings-title">
+              <header>
+                <h2 id="watch-settings-title">日常设置</h2>
+                <p>这些设置只在本机 LocalOps 运行时生效。</p>
+              </header>
+
+              <section className="watch-setting-row" id="scheduler-controls" tabIndex={-1}>
+                <span className="watch-setting-icon"><Clock3 size={20} /></span>
+                <div className="watch-setting-copy">
+                  <strong>自动检查</strong>
+                  <p>{schedulerForm.enabled ? `每 ${schedulerForm.lightIntervalMinutes} 分钟读取一次已配置的证据。` : "关闭时只会在你点击“一键检查”后读取服务器状态。"}</p>
+                  {batchCoverage.blocked ? <small>{batchCoverage.blocked} 台缺少监控来源，自动检查会跳过。</small> : null}
                 </div>
-                <StatusPill status={scheduler?.enabled ? batchCoverage.blocked ? "warning" : "healthy" : "unknown"} />
-              </div>
-              <section className={`coverage-ledger ${batchCoverage.collectible === 0 ? "blocked" : batchCoverage.blocked ? "partial" : "complete"}`} aria-label="自动巡检证据覆盖">
-                <div className="coverage-ledger-head">
-                  <div><span>自动检查范围</span><strong>{batchCoverage.collectible} / {batchCoverage.total} 台可巡检</strong></div>
-                  <em>{batchCoverage.blocked === 0 ? "全部覆盖" : `${batchCoverage.blocked} 台将跳过`}</em>
-                </div>
-                <div className="coverage-track" aria-hidden="true"><span style={{ width: `${batchCoverage.total ? Math.round(batchCoverage.collectible / batchCoverage.total * 100) : 0}%` }} /></div>
-                <div className="coverage-stats"><span>完整证据路径 <b>{batchCoverage.complete}</b></span><span>局部证据路径 <b>{batchCoverage.partial}</b></span><span>不可采集 <b>{batchCoverage.blocked}</b></span></div>
-                <p>{batchCoverage.collectible === 0 ? "至少为一台服务器配置 Health URL，或显式启用已登记的只读 SSH，才能开启定时巡检。" : batchCoverage.blocked ? "定时巡检只处理可采集服务器；缺少来源的服务器保持原状态，不会生成新的“未知”记录。" : "每台服务器都有当前启动模式下可用的证据来源。"}</p>
-              </section>
-              <div className="scheduler-grid">
-                <label>
-                  <span>启用定时巡检</span>
+                <div className="watch-setting-controls scheduler-inline">
                   <button
                     className={schedulerForm.enabled ? "toggle active" : "toggle"}
                     disabled={!schedulerForm.enabled && batchCoverage.collectible === 0}
                     onClick={() => setSchedulerForm({ ...schedulerForm, enabled: !schedulerForm.enabled })}
-                    title={batchCoverage.collectible === 0 ? "先补充至少一个可用证据来源" : undefined}
-                  >
-                    {schedulerForm.enabled ? "已启用" : "未启用"}
-                  </button>
-                </label>
-                <label>
-                  <span>轻量检查间隔（分钟）</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={1440}
-                    value={schedulerForm.lightIntervalMinutes}
-                    onChange={(event) => setSchedulerForm({ ...schedulerForm, lightIntervalMinutes: Number(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  <span>本地历史保留（天）</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={schedulerForm.retentionDays}
-                    onChange={(event) => setSchedulerForm({ ...schedulerForm, retentionDays: Number(event.target.value) })}
-                  />
-                </label>
-              </div>
-              <div className="quick-actions">
-                <button className="primary slim" onClick={() => saveScheduler()} disabled={operationBusy || (schedulerForm.enabled && batchCoverage.collectible === 0)}><Save size={16} />{operationState.savingScheduler ? "保存中" : "保存巡检配置"}</button>
-                <button disabled={operationBusy} onClick={() => saveScheduler({ ...schedulerForm, enabled: false })}>停止定时巡检</button>
-                <button disabled={operationBusy} onClick={() => runRetention(false)}>{operationState.retaining ? "清理中" : "执行保留期清理"}</button>
-                <button disabled={operationBusy} onClick={() => runRetention(true)}>{operationState.retaining ? "清理中" : "清理并压缩 SQLite"}</button>
-              </div>
-              <section className={`notification-controls ${notificationsCalibrated ? "enabled" : ""}`} id="notification-controls" tabIndex={-1}>
-                <div>
-                  <Bell size={19} aria-hidden="true" />
-                  <span><strong>桌面提醒</strong><small>{!desktopRuntime ? "只在桌面版可用" : notificationsCalibrated ? "已确认可以收到" : notificationsEnabled ? "已开启，等待测试确认" : "状态变差时提醒你"}</small></span>
+                    aria-pressed={schedulerForm.enabled}
+                  >{schedulerForm.enabled ? "已开启" : "未开启"}</button>
+                  <label><input type="number" min={1} max={1440} value={schedulerForm.lightIntervalMinutes} onChange={(event) => setSchedulerForm({ ...schedulerForm, lightIntervalMinutes: Number(event.target.value) })} /><span>分钟</span></label>
+                  <button className="primary slim" onClick={() => saveScheduler()} disabled={operationBusy || (schedulerForm.enabled && batchCoverage.collectible === 0)}>{operationState.savingScheduler ? "保存中" : "保存"}</button>
                 </div>
-                {!desktopRuntime ? (
-                  <button disabled>浏览器预览不可设置</button>
+              </section>
+
+              <section className="watch-setting-row" id="notification-controls" tabIndex={-1}>
+                <span className="watch-setting-icon"><Bell size={20} /></span>
+                <div className="watch-setting-copy">
+                  <strong>桌面提醒</strong>
+                  <p>{!desktopRuntime ? "安装并打开桌面版后，可在状态变差时收到 Windows 提醒。" : notificationsCalibrated ? "测试提醒已经确认；只有状态变差才会通知。" : notificationsEnabled ? "提醒已开启，还需要确认一次测试消息。" : "开启后，状态变差时会提醒你。"}</p>
+                  {notificationNote ? <small className={notificationTestState === "failed" ? "error" : ""}>{notificationNote}</small> : null}
+                </div>
+                <div className="watch-setting-controls">
+                  {!desktopRuntime ? (
+                    <button disabled>桌面版设置</button>
                 ) : notificationTestState === "confirm" ? (
                   <div className="notification-confirm">
                     <span>刚才看到测试提醒了吗？</span>
@@ -1457,28 +1415,23 @@ export function App() {
                     {notificationsEnabled ? <button className="secondary slim" onClick={disableNotifications}>关闭提醒</button> : null}
                   </div>
                 )}
-                {notificationNote ? <p className={notificationTestState === "failed" ? "error" : ""}>{notificationNote}</p> : null}
-              </section>
-              <section className={`startup-watch ${startup?.enabled ? "enabled" : startup?.status ?? "unknown"}`}>
-                <div className="startup-watch-head">
-                  <div>
-                    <h3>登录 Windows 后自动打开桌宠</h3>
-                  </div>
-                  <StatusPill status={startup?.enabled ? "healthy" : startup?.status === "conflict" ? "warning" : "unknown"} />
                 </div>
-                <p>{startup?.message ?? "正在读取当前用户的启动设置。"}</p>
-                <ul>
-                  <li>仅管理当前 Windows 用户，不需要管理员权限。</li>
-                  <li>不会安装 Windows 服务；关闭桌宠会停止由它启动的本地 API。</li>
-                  <li>同名未知启动项不会被覆盖或删除。</li>
-                </ul>
+              </section>
+
+              <section className="watch-setting-row">
+                <span className="watch-setting-icon"><MonitorUp size={20} /></span>
+                <div className="watch-setting-copy">
+                  <strong>登录后自动打开桌宠</strong>
+                  <p>{startup?.message ?? "正在读取当前用户的启动设置。"}</p>
+                </div>
+                <div className="watch-setting-controls">
                 {startupPending == null ? (
                   <button
                     className={startup?.enabled ? "secondary slim" : "primary slim"}
                     disabled={startupLoading || !startup?.supported || (!startup.enabled && !startup.ready) || startup.status === "conflict"}
                     onClick={() => setStartupPending(!startup?.enabled)}
                   >
-                    <MonitorUp size={16} />{startup?.enabled ? "关闭登录后启动" : "开启登录后启动"}
+                    {startup?.supported ? startup?.enabled ? "关闭" : "开启" : "桌面版设置"}
                   </button>
                 ) : (
                   <div className="startup-confirm" role="group" aria-label="确认登录启动设置">
@@ -1490,48 +1443,43 @@ export function App() {
                     </div>
                   </div>
                 )}
-              </section>
-            </div>
-            <div className="table-panel">
-              <h2>调度状态</h2>
-              <section className={`scheduler-outcome-card ${schedulerOutcome.tone}`} aria-live="polite">
-                <div className="scheduler-outcome-head">
-                  <span>{schedulerOutcome.label}</span>
-                  <small>{scheduler?.lastEventAt ? formatTime(scheduler.lastEventAt) : "等待第一条调度事件"}</small>
                 </div>
+              </section>
+            </section>
+
+            <section className={`watch-last-run ${schedulerOutcome.tone}`} aria-live="polite">
+              <div>
+                <span>最近自动检查</span>
                 <strong>{schedulerOutcome.title}</strong>
                 <p>{schedulerOutcome.detail}</p>
-                {scheduler?.lastOutcome !== "never" ? (
-                  <div className="scheduler-outcome-facts">
-                    <span>已检查 <b>{scheduler?.lastCheckedHosts ?? 0}</b></span>
-                    <span>已跳过 <b>{scheduler?.lastSkippedHosts ?? 0}</b></span>
-                    <span>耗时 <b>{scheduler?.lastDurationMs == null ? "—" : `${scheduler.lastDurationMs}ms`}</b></span>
+              </div>
+              <div className="watch-last-run-meta">
+                <span>{schedulerOutcome.label}</span>
+                <small>{scheduler?.lastEventAt ? formatTime(scheduler.lastEventAt) : "尚无记录"}</small>
+                {schedulerOutcome.action === "run-now" ? <button className="secondary slim" disabled={operationBusy} onClick={verifySchedulerNow}>{checking ? "检查中" : "立即检查"}</button> : schedulerOutcome.action === "configure-hosts" ? <button className="secondary slim" onClick={() => setSelectedTab("hosts")}>补充监控来源</button> : null}
+              </div>
+            </section>
+
+            <details className="watch-advanced">
+              <summary>本地记录与维护</summary>
+              <div className="watch-advanced-body">
+                <div className="watch-maintenance-copy">
+                  <strong>检查记录保留 {schedulerForm.retentionDays} 天</strong>
+                  <p>{batchCoverage.collectible} / {batchCoverage.total} 台服务器有可用监控来源；完整来源 {batchCoverage.complete} 台，局部来源 {batchCoverage.partial} 台。</p>
+                </div>
+                <div className="watch-maintenance-controls">
+                  <label><input type="number" min={1} max={365} value={schedulerForm.retentionDays} onChange={(event) => setSchedulerForm({ ...schedulerForm, retentionDays: Number(event.target.value) })} /><span>天</span></label>
+                  <button disabled={operationBusy} onClick={() => runRetention(false)}>{operationState.retaining ? "清理中" : "按保留期清理"}</button>
+                  <button disabled={operationBusy} onClick={() => runRetention(true)}>{operationState.retaining ? "清理中" : "清理并压缩数据库"}</button>
+                </div>
+                {retentionResult ? (
+                  <div className="retention-result">
+                    <strong>最近清理完成</strong>
+                    <p>删除检查 {retentionResult.deletedRuns} 次、明细 {retentionResult.deletedHostChecks} 条；数据库 {Math.round(retentionResult.sizeBytes / 1024)} KB。</p>
                   </div>
                 ) : null}
-                {scheduler?.lastErrorCode ? <small className="scheduler-error-code">恢复代码：{scheduler.lastErrorCode}</small> : null}
-                {schedulerOutcome.action === "run-now" ? (
-                  <button className="primary slim" disabled={operationBusy} onClick={verifySchedulerNow}><RefreshCcw className={checking ? "spin" : undefined} size={15} />{checking ? "验证中" : "立即验证一次"}</button>
-                ) : schedulerOutcome.action === "configure-hosts" ? (
-                  <button className="primary slim" onClick={() => setSelectedTab("hosts")}><Pencil size={15} />补充证据来源</button>
-                ) : null}
-              </section>
-              <div className="state-grid">
-                <div><span>当前状态</span><strong>{scheduler?.enabled ? "运行中" : "已停止"}</strong></div>
-                <div><span>下次运行</span><strong>{formatTime(scheduler?.nextRunAt ?? null)}</strong></div>
-                <div><span>上次尝试</span><strong>{formatTime(scheduler?.lastRunAt ?? null)}</strong></div>
-                <div><span>最近结果</span><strong>{schedulerOutcome.label}</strong></div>
-                <div><span>连续失败</span><strong>{scheduler?.consecutiveFailures ?? 0}</strong></div>
               </div>
-              {retentionResult ? (
-                <div className="retention-result">
-                  <h3>最近清理结果</h3>
-                  <p>保留 {retentionResult.retentionDays} 天，删除检查 {retentionResult.deletedRuns} 次、明细 {retentionResult.deletedHostChecks} 条、孤儿明细 {retentionResult.deletedOrphanHostChecks} 条。</p>
-                  <p>SQLite 当前大小：{Math.round(retentionResult.sizeBytes / 1024)} KB；压缩：{retentionResult.vacuumed ? "已执行" : "未执行"}。</p>
-                </div>
-              ) : (
-                <p className="muted">尚未在本次界面会话执行清理。</p>
-              )}
-            </div>
+            </details>
           </section>
         )}
 
