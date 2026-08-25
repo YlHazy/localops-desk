@@ -25,7 +25,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, friendlyCheckSummary, retainCheckSelection } from "./check-history.mjs";
 import type { CheckHistoryFilter } from "./check-history.mjs";
@@ -106,37 +106,38 @@ function formatTime(value: string | null) {
 function overallMessage(counts: Record<Status, number>, evidenceExpired = false, partialEvidenceCount = 0) {
   if (evidenceExpired) {
     return {
-      title: `${counts.unknown ?? 0} 台服务器需要重新取证`,
-      description: "上次结果已超过可信时效，当前统一按未知处理；先刷新证据再判断。"
+      title: `${counts.unknown ?? 0} 台状态待更新`,
+      description: "上次检查已过期"
     };
   }
   if ((counts.critical ?? 0) > 0) {
     return {
       title: `${counts.critical} 台服务器故障`,
-      description: "先看红色故障项。HTTP、SSH 或资源检查中至少有一项失败。"
+      description: "需要立即查看"
     };
   }
   if ((counts.warning ?? 0) > 0) {
     return {
-      title: `${counts.warning} 台服务器需要处理`,
-      description: "服务可能还能访问，但管理通道、资源指标或某个依赖需要确认。"
+      title: `${counts.warning} 台服务器需关注`,
+      description: "目前还能使用，但有异常信号"
     };
   }
   if ((counts.unknown ?? 0) > 0) {
     return {
-      title: `${counts.unknown} 台服务器还没检查`,
-      description: "先运行一次检查，拿到当前状态。"
+      title: `${counts.unknown} 台尚未检查`,
+      description: "运行检查后显示状态"
     };
   }
   if (partialEvidenceCount > 0) {
     return {
-      title: `${partialEvidenceCount} 台入口正常，证据仍不完整`,
-      description: "Health URL 当前可达，但 SSH、运行时或资源状态仍未知；不会把局部正常写成全部正常。"
+      title: `${partialEvidenceCount} 台仅确认入口可用`,
+      description: "资源状态尚未检查"
     };
   }
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   return {
-    title: "当前全部正常",
-    description: "所有已配置服务器最近一次检查都没有发现问题。"
+    title: `${total} 台服务器正常`,
+    description: "没有需要处理的问题"
   };
 }
 
@@ -196,7 +197,7 @@ function evidenceFreshnessAt(observedAt: string | null, staleAfterMs: number, no
     return { state: "unknown", label: "证据已过期" };
   }
   const minutes = Math.max(0, Math.floor(ageMs / 60_000));
-  return { state: "fresh", label: minutes === 0 ? "刚刚取得证据" : `${minutes} 分钟前取得证据` };
+  return { state: "fresh", label: minutes === 0 ? "刚刚检查" : `${minutes} 分钟前检查` };
 }
 
 function evidenceFreshness(dashboard: DashboardStatus, now = Date.now()) {
@@ -207,7 +208,7 @@ function StatusPill({ status }: { status: Status }) {
   return <span className={`status-pill ${status}`}>{statusLabels[status]}</span>;
 }
 
-function HostPanel({ host, selected, onSelect }: { host: HostState; selected: boolean; onSelect: () => void }) {
+function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh: boolean; selected: boolean; onSelect: () => void }) {
   return (
     <button className={`host-panel ${selected ? "selected" : ""}`} onClick={onSelect}>
       <div className="host-panel-top">
@@ -215,12 +216,12 @@ function HostPanel({ host, selected, onSelect }: { host: HostState; selected: bo
         <StatusPill status={host.status} />
       </div>
       <div className="host-glance">
-        <span>HTTP <strong>{friendlyHttpStatus(host.httpStatus)}</strong></span>
-        <span>内存 <strong>{host.memoryPercent == null ? "—" : `${host.memoryPercent}%`}</strong></span>
-        <span>磁盘 <strong>{host.diskPercent == null ? "—" : `${host.diskPercent}%`}</strong></span>
+        <span>HTTP <strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待更新"}</strong></span>
+        <span>内存 <strong>{fresh && host.memoryPercent != null ? `${host.memoryPercent}%` : "—"}</strong></span>
+        <span>磁盘 <strong>{fresh && host.diskPercent != null ? `${host.diskPercent}%` : "—"}</strong></span>
         <span aria-hidden="true">›</span>
       </div>
-      {host.status === "healthy" ? null : <p>{host.summary}</p>}
+      {host.status === "healthy" || !fresh ? null : <p>{host.summary}</p>}
     </button>
   );
 }
@@ -523,6 +524,20 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (petMode || !detailsOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDetailsOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [petMode, detailsOpen]);
+
+  useEffect(() => {
     if (petMode) return;
     const applyPetDeskIntent = () => {
       const intent = petDeskIntent(window.location.hash);
@@ -649,6 +664,7 @@ export function App() {
       : { state: "unknown", label: "没有观测证据" },
     [dashboard, selectedHost, now]
   );
+  const selectedEvidenceCurrent = selectedFreshness.state === "fresh";
   const partialEvidenceCount = useMemo(
     () => dashboard
       ? displayDashboard?.hosts.filter((host) => host.status === "healthy" && evidenceReadiness(dashboard, host).state === "http").length ?? 0
@@ -1068,7 +1084,7 @@ export function App() {
           <div className="brand-mark"><ShieldCheck size={21} /></div>
           <div>
             <strong>LocalOps Guardian</strong>
-            <span>证据先于操作</span>
+            <span>服务器状态助手</span>
           </div>
         </div>
         <nav>
@@ -1119,10 +1135,6 @@ export function App() {
               </button>
               {batchCoverage.blocked ? <small>{batchCoverage.blocked} 台缺少监控来源，本次会跳过</small> : null}
             </div>
-            {selectedTab === "overview" ? <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
-              <Plus size={18} />
-              <span>{dashboard.practiceMode ? "练习中" : "添加服务器"}</span>
-            </button> : null}
             <button className="secondary" onClick={openPetWindow}>
               <MonitorUp size={18} />
               <span>打开桌宠</span>
@@ -1161,14 +1173,15 @@ export function App() {
           <section className={`home-grid ${detailsOpen ? "details-open" : ""}`}>
             <div className="all-hosts-panel">
               <div className="panel-head">
-                <h2>服务器</h2>
-                <span>{priorityHosts.length} 台</span>
+                <div><h2>服务器</h2><span>{priorityHosts.length} 台</span></div>
+                {!dashboard.practiceMode ? <button className="quiet-action" onClick={startCreateHost} disabled={operationBusy}><Plus size={16} />添加</button> : null}
               </div>
               <div className="host-list simple">
                 {priorityHosts.map((host) => (
                   <HostPanel
                     key={host.id}
                     host={host}
+                    fresh={hostEvidenceIsFresh(dashboard, host, now)}
                     selected={detailsOpen && host.id === selectedHost.id}
                     onSelect={() => chooseFocusHost(host.id)}
                   />
@@ -1176,33 +1189,33 @@ export function App() {
               </div>
             </div>
 
-            {detailsOpen ? <aside className="detail-panel main-detail" id="server-detail" aria-label={`${selectedHost.name} 详情`}>
+            {detailsOpen ? <><button className="detail-backdrop" onClick={() => setDetailsOpen(false)} aria-label="关闭服务器详情" /><aside className="detail-panel main-detail" id="server-detail" aria-label={`${selectedHost.name} 详情`}>
               <div className="detail-head">
                 <div><h2>{selectedHost.name}</h2><p>{selectedFreshness.label}</p></div>
                 <div className="detail-head-actions"><StatusPill status={selectedHost.status} /><button className="detail-close" onClick={() => setDetailsOpen(false)} aria-label="关闭详情"><X size={18} /></button></div>
               </div>
               {selectedGuidance ? null : <p className="server-detail-summary">{selectedHost.summary}</p>}
               {selectedHost.status === "healthy" || !selectedGuidance ? null : (
-                <section className={`server-diagnosis ${selectedHost.status}`} aria-label="初步判断">
-                  <div><span>可能原因</span><strong>{selectedGuidance.reason}</strong></div>
-                  <div><span>下一步</span><p>{selectedGuidance.detail}</p></div>
+                <section className={`server-diagnosis ${selectedHost.status}`} aria-label="状态说明">
+                  <strong>{selectedGuidance.reason}</strong>
+                  <p>{selectedGuidance.detail}</p>
                 </section>
               )}
               <dl className="server-facts">
-                <div><dt>网页/API</dt><dd><strong>{friendlyHttpStatus(selectedHost.httpStatus)}</strong>{selectedHost.httpLatencyMs == null ? null : <span>{selectedHost.httpLatencyMs}ms</span>}</dd></div>
-                <div><dt>SSH / Docker</dt><dd><strong>{friendlySshStatus(selectedHost.sshStatus)}</strong><span>{friendlyDockerStatus(selectedHost.dockerStatus)}</span></dd></div>
-                <div className={resourceSignalStatus(selectedHost)}><dt>资源</dt><dd><strong>{resourceSignalSummary(selectedHost)}</strong><span>内存 {selectedHost.memoryPercent ?? "—"}% · 磁盘 {selectedHost.diskPercent ?? "—"}%</span></dd></div>
+                <div><dt>网页/API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "证据已过期"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs}ms</span> : null}</dd></div>
+                <div><dt>SSH / Docker</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? friendlyDockerStatus(selectedHost.dockerStatus) : "旧值不作为当前状态"}</span></dd></div>
+                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>资源</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `内存 ${selectedHost.memoryPercent ?? "—"}% · 磁盘 ${selectedHost.diskPercent ?? "—"}%` : "旧值不作为当前状态"}</span></dd></div>
               </dl>
               <div className="quick-actions">
                 <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>
-                <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
-                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>继续只读排查</button>}
+                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>排查原因</button>}
+                <button className="quiet-action" onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
               </div>
-              <details className="technical-details">
-                <summary>技术细节</summary>
+              <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
+                <summary>{selectedEvidenceCurrent ? "查看检查记录" : "查看上次记录（已过期）"}</summary>
                 <div>{selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}</div>
               </details>
-            </aside> : null}
+            </aside></> : null}
           </section>
         )}
 

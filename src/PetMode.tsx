@@ -104,8 +104,8 @@ function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "
   if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有正常运行。";
   if (/资源占用/.test(guidanceReason)) {
     return (host.diskPercent ?? 0) >= (host.memoryPercent ?? 0)
-      ? `磁盘使用 ${host.diskPercent ?? "—"}%，需要留意。`
-      : `内存使用 ${host.memoryPercent ?? "—"}%，需要留意。`;
+      ? `磁盘 ${host.diskPercent ?? "—"}%，需要留意。`
+      : `内存 ${host.memoryPercent ?? "—"}%，需要留意。`;
   }
   return "有一项状态需要确认。";
 }
@@ -390,11 +390,13 @@ export function PetMode({
           : overallStatus === "warning"
             ? "有情况要看"
             : "现在还看不清";
-  const primaryAction = dashboard.hosts.length === 0
-    ? "去添加服务器"
-    : overallStatus === "warning" || overallStatus === "critical"
-      ? "查看原因"
-      : "帮我看一下";
+  const primaryAction = syncError
+    ? "重新连接"
+    : dashboard.hosts.length === 0
+      ? "去添加服务器"
+      : overallStatus === "warning" || overallStatus === "critical"
+        ? "查看原因"
+        : "帮我看一下";
 
   function hidePet() {
     if (window.localOpsDesktop?.hidePet) {
@@ -437,14 +439,9 @@ export function PetMode({
 
       {syncError ? (
         <section className="pet-recovery" aria-label="本地状态恢复">
-          <span>{recovery.label}</span>
+          <strong>{recovery.label}</strong>
           <small>{recovery.detail}</small>
-          <em title={syncError}>原因：{syncError}</em>
-          <p>{recovery.boundary}</p>
-          <button onClick={onRetrySync} disabled={syncing}>
-            <RefreshCcw className={syncing ? "spin" : ""} size={15} />
-            {syncing ? "正在重连" : "只重连本地状态"}
-          </button>
+          <details><summary>安全说明</summary><p>{recovery.boundary}</p><em title={syncError}>原因：{syncError}</em></details>
         </section>
       ) : null}
 
@@ -456,20 +453,22 @@ export function PetMode({
       ) : null}
 
       <footer className="pet-actions">
-        <button className="pet-refresh" onClick={() => dashboard.hosts.length === 0
+        <button className="pet-refresh" onClick={() => syncError
+          ? onRetrySync()
+          : dashboard.hosts.length === 0
           ? onOpenDesk(undefined, "hosts")
           : (overallStatus === "warning" || overallStatus === "critical") && priorityHost
             ? onOpenDesk(priorityHost.id, "overview")
             : onRefresh()} disabled={loading || syncing}>
-          {loading ? <RefreshCcw className="spin" size={18} /> : overallStatus === "healthy" ? <Check size={18} /> : <Server size={18} />}
-          {loading ? "我正在看" : primaryAction}
+          {loading || syncing ? <RefreshCcw className="spin" size={18} /> : syncError ? <RefreshCcw size={18} /> : overallStatus === "healthy" ? <Check size={18} /> : <Server size={18} />}
+          {loading ? "我正在看" : syncing ? "正在连接" : primaryAction}
         </button>
       </footer>
 
       <button className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>{visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${batchCoverage.partial} 台仅看入口` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
-        <span>{latestTime(dashboard.observedAt)} 检查</span>
+        <strong>{syncError ? "本地状态断开" : visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${batchCoverage.partial} 台仅看入口` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
+        <span>{snapshotTrust.state === "offline" ? "仅保留旧结果" : snapshotTrust.state === "stale" ? "证据已过期" : snapshotTrust.state === "unknown" ? "尚未检查" : `${latestTime(dashboard.observedAt)} 检查`}</span>
         <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
       </button>
 
@@ -478,13 +477,14 @@ export function PetMode({
         <section className="pet-drawer" id="pet-quick-view" aria-label="服务器快速查看">
           <header><strong>服务器</strong><button onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1} aria-label="关闭"><X size={17} /></button></header>
           <div className="pet-hosts">
-            {hosts.map((host) => (
-              <button className="pet-host-row" key={host.id} disabled={!expanded} aria-current={host.id === focusHost?.id ? "true" : undefined} onClick={() => setSelectedHostId(manualFocusSelection(hosts, host.id))}>
+            {hosts.map((host) => {
+              const current = hostEvidenceIsFresh(dashboard, host, now);
+              return <button className="pet-host-row" key={host.id} disabled={!expanded} aria-current={host.id === focusHost?.id ? "true" : undefined} onClick={() => setSelectedHostId(manualFocusSelection(hosts, host.id))}>
                 <span className={`pet-status-dot ${host.status}`} />
-                <span><strong>{host.name}</strong><small>{statusCopy[host.status].label}</small></span>
-                <em>{host.memoryPercent == null ? "—" : `内存 ${host.memoryPercent}%`}</em>
-              </button>
-            ))}
+                <span><strong>{host.name}</strong><small>{current ? statusCopy[host.status].label : host.lastCheckedAt ? "证据过期" : "等待检查"}</small></span>
+                <em>{current && host.memoryPercent != null ? `内存 ${host.memoryPercent}%` : "—"}</em>
+              </button>;
+            })}
           </div>
           <div className="pet-sheet-actions">
             <button className="pet-open-console" disabled={!expanded} onClick={() => onOpenDesk(focusHost?.id, "overview")}>打开控制台 <ArrowUpRight size={15} /></button>

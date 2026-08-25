@@ -80,12 +80,31 @@ test("first watch uses beginner language for the recommended evidence source", (
   assert.doesNotMatch(appSource, /只写名称和 Health URL/);
 });
 
+test("expired evidence stays out of the current overview and pet glance", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /fresh && host\.memoryPercent != null/);
+  assert.match(appSource, /旧值不作为当前状态/);
+  assert.match(appSource, /查看上次记录（已过期）/);
+  assert.match(petSource, /current && host\.memoryPercent != null/);
+  assert.match(petSource, /snapshotTrust\.state === "stale" \? "证据已过期"/);
+});
+
+test("pet local disconnect routes the main action to local recovery", () => {
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const petStyles = readFileSync(new URL("../src/pet-v2.css", import.meta.url), "utf8");
+  assert.match(petSource, /syncError\s*\? onRetrySync\(\)/);
+  assert.match(petSource, /syncError \? "本地状态断开"/);
+  assert.match(petSource, /<summary>安全说明<\/summary>/);
+  assert.match(petStyles, /max-height: min\(68vh, 380px\)/);
+});
+
 test("the desk cannot keep a healthy headline after evidence expires", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const discussionSource = readFileSync(new URL("../src/discussion-brief.mjs", import.meta.url), "utf8");
   assert.match(appSource, /trustworthyDashboard\(dashboard, now\)/);
-  assert.match(appSource, /上次结果已超过可信时效/);
+  assert.match(appSource, /上次检查已过期/);
   assert.match(appSource, /<h1>\{currentMessage\.title\}<\/h1>/);
   assert.match(appSource, /hostEvidenceTimestamp\(dashboard, selectedHost\)/);
   assert.match(appSource, /<PetMode[\s\S]*now=\{now\}/);
@@ -241,7 +260,7 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   const readinessSource = readFileSync(new URL("../src/evidence-readiness.mjs", import.meta.url), "utf8");
   assert.match(appSource, /evidenceReadiness\(dashboard, selectedHost\)/);
   assert.match(appSource, /selectedReadiness\.canCollect/);
-  assert.match(appSource, /证据仍不完整/);
+  assert.match(appSource, /资源状态尚未检查/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
   assert.match(petSource, /网页\/API 可达，资源状态还没检查/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);

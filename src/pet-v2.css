@@ -27,15 +27,18 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; b
 .pet-character { position: absolute; z-index: 1; bottom: 0; left: -8px; width: 194px; height: 232px; transform-origin: 50% 90%; }
 .pet-character img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 14px 13px rgba(20, 37, 40, .18)); }
 .pet-character.is-listening { animation: pet-breathe 2s ease-in-out infinite; }
-.pet-speech { position: absolute; z-index: 2; top: 30px; right: 0; width: min(60%, 206px); box-sizing: border-box; padding: 15px 16px 16px; border: 1px solid rgba(23, 35, 33, .09); border-radius: 18px 18px 18px 6px; background: rgba(255, 255, 255, .95); box-shadow: 0 8px 22px rgba(23, 35, 33, .10); }
+.pet-speech { position: absolute; z-index: 2; top: 30px; right: 0; width: min(62%, 216px); box-sizing: border-box; padding: 15px 16px 16px; border: 1px solid rgba(23, 35, 33, .09); border-radius: 18px 18px 18px 6px; background: rgba(255, 255, 255, .95); box-shadow: 0 8px 22px rgba(23, 35, 33, .10); }
 .pet-speech::after { position: absolute; bottom: -8px; left: 21px; width: 14px; height: 14px; content: ""; background: inherit; border-right: 1px solid rgba(23, 35, 33, .08); border-bottom: 1px solid rgba(23, 35, 33, .08); transform: rotate(45deg); }
-.pet-speech strong { display: block; font: 760 clamp(24px, 7vw, 27px)/1.08 "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif; letter-spacing: -.04em; }
+.pet-speech strong { display: block; font: 760 clamp(23px, 6.6vw, 26px)/1.08 "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif; letter-spacing: -.035em; }
 .pet-speech p { display: -webkit-box; margin: 9px 0 0; overflow: hidden; color: #4f5d59; font-size: 14px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 
 .pet-recovery, .pet-action-error { display: grid; gap: 5px; margin-bottom: 8px; padding: 12px 14px; border: 1px solid rgba(184, 75, 67, .22); border-radius: 12px; background: #fff7f5; }
 .pet-recovery span, .pet-recovery strong, .pet-action-error strong { color: #873c37; font-size: 14px; }
 .pet-recovery small, .pet-recovery em, .pet-recovery p, .pet-action-error small { margin: 0; color: #6e5550; font-size: 13px; font-style: normal; line-height: 1.45; }
-.pet-recovery button { justify-self: start; min-height: 40px; padding: 0 12px; border-radius: 12px; }
+.pet-recovery details { margin-top: 3px; padding-top: 7px; border-top: 1px solid rgba(184, 75, 67, .15); }
+.pet-recovery summary { width: max-content; color: #76534e; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.pet-recovery details p { margin-top: 6px; }
+.pet-recovery details em { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pet-actions { margin-top: 5px; }
 .pet-actions button { display: inline-flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; color: white; border: 1px solid var(--pet-ink); border-radius: 12px; background: var(--pet-ink); font-size: 15px; font-weight: 750; cursor: pointer; transition: filter 140ms ease, transform 100ms ease; }
@@ -56,7 +59,7 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; b
 .pet-sheet-layer { position: absolute; z-index: 20; inset: 0; visibility: hidden; pointer-events: none; opacity: 0; transition: visibility 0s linear 180ms, opacity 180ms ease; }
 .pet-sheet-layer.open { visibility: visible; pointer-events: auto; opacity: 1; transition-delay: 0s; }
 .pet-sheet-scrim { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(20, 29, 27, .16); }
-.pet-drawer { position: absolute; right: 8px; bottom: 8px; left: 8px; max-height: 240px; padding: 12px; overflow: auto; border-radius: 18px; background: rgba(249, 250, 248, .98); box-shadow: 0 16px 40px rgba(23, 35, 33, .16); transform: translateY(10px); transition: transform 180ms cubic-bezier(.2, .8, .2, 1); }
+.pet-drawer { position: absolute; right: 8px; bottom: 8px; left: 8px; max-height: min(68vh, 380px); padding: 12px; overflow: auto; border-radius: 18px; background: rgba(249, 250, 248, .98); box-shadow: 0 16px 40px rgba(23, 35, 33, .16); transform: translateY(10px); transition: transform 180ms cubic-bezier(.2, .8, .2, 1); }
 .pet-sheet-layer.open .pet-drawer { transform: translateY(0); }
 .pet-drawer > header { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
 .pet-drawer > header strong { font-size: 16px; }

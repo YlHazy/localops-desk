@@ -52,7 +52,7 @@ test("Codex deep link contains only the reviewable minimal-disclosure prompt", (
   assert.match(link, /^codex:\/\/new\?prompt=/);
   const prompt = decodeURIComponent(new URL(link).searchParams.get("prompt"));
   assert.match(prompt, /最小披露摘要/);
-  assert.match(prompt, /未知状态不按正常处理/);
+  assert.match(prompt, /上次检查已过期/);
   assert.match(prompt, /不要执行任何变更/);
   assert.doesNotMatch(prompt, /https?:\/\/|sshAlias|composeProject/);
 });
@@ -87,8 +87,8 @@ test("resource pressure explains an otherwise healthy offline warning", () => {
   }, Date.parse("2026-08-24T00:05:00.000Z"));
 
   assert.match(brief, /资源压力：存在需要复核的信号/);
-  assert.match(brief, /资源占用接近关注阈值/);
-  assert.match(brief, /不要因为黄色状态就直接重启服务/);
+  assert.match(brief, /资源使用接近设定上限/);
+  assert.match(brief, /先不要重启服务/);
 });
 
 test("expired discussion evidence downgrades every shareable signal atomically", () => {
@@ -106,7 +106,7 @@ test("expired discussion evidence downgrades every shareable signal atomically",
   assert.match(brief, /证据时效：当前对象证据已过期/);
   assert.equal((brief.match(/没有足够的新鲜证据/g) ?? []).length, 4);
   assert.doesNotMatch(brief, /有效证据显示正常|有效证据显示失败|存在需要复核的信号/);
-  assert.match(brief, /未知状态不按正常处理/);
+  assert.match(brief, /上次检查已过期/);
 });
 
 test("a fresh check on another host cannot revive this host's expired categories", () => {
