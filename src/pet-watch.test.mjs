@@ -23,6 +23,7 @@ test("watch mode copy explains active, quiet, blocked, and unsupported states", 
     state: "blocked"
   });
   assert.match(watchModeCopy({ supported: true, blocked: true, enabled: false }).detail, /浏览器站点权限/);
+  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, permissionSurface: "windows" }).detail, /Windows 托盘提醒/);
   assert.equal(watchModeCopy({ supported: false, blocked: false, enabled: false }).state, "unsupported");
 });
 

@@ -164,6 +164,7 @@ body:has(.pet-window) {
 
 .pet-watch { margin: 0 0 12px; }
 .pet-watch-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.pet-watch-tools { display: flex; gap: 6px; }
 .pet-watch-toggle {
   display: flex;
   align-items: center;
@@ -186,6 +187,8 @@ body:has(.pet-window) {
 .pet-watch p { margin: 6px 3px 0; color: var(--pet-muted); font-size: 10px; line-height: 1.45; }
 .pet-quiet-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; color: #6e5730; border: 1px solid rgba(173, 128, 55, .24); border-radius: 12px; background: rgba(255, 249, 236, .82); font-size: 9px; font-weight: 800; white-space: nowrap; }
 .pet-quiet-toggle[aria-pressed="true"] { color: #8a5b16; border-color: rgba(196, 128, 28, .38); background: #fff0ca; }
+.pet-notification-test { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; color: var(--pet-teal); border: 1px solid rgba(36, 121, 111, .2); border-radius: 12px; background: rgba(255, 255, 255, .78); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.pet-notification-test:disabled { cursor: wait; opacity: .6; }
 .pet-alert-receipt { display: grid; gap: 5px; margin-top: 8px; padding: 10px 11px; border: 1px solid rgba(36, 121, 111, .19); border-left: 4px solid var(--pet-teal); border-radius: 11px; background: rgba(244, 251, 249, .9); }
 .pet-alert-receipt.suppressed { border-color: rgba(228, 168, 69, .25); border-left-color: var(--pet-warn); background: rgba(255, 249, 237, .9); }
 .pet-alert-receipt.failed { border-color: rgba(215, 90, 87, .24); border-left-color: var(--pet-danger); background: rgba(255, 246, 244, .92); }
@@ -231,7 +234,8 @@ body:has(.pet-window) {
   .pet-recovery { grid-template-columns: 1fr; }
   .pet-recovery button { grid-column: 1; grid-row: auto; justify-content: center; }
   .pet-watch-controls { grid-template-columns: 1fr; }
-  .pet-quiet-toggle { min-height: 34px; }
+  .pet-watch-tools { display: grid; grid-template-columns: 1fr 1fr; }
+  .pet-quiet-toggle, .pet-notification-test { min-height: 34px; }
   .pet-window-context { grid-template-columns: 1fr; gap: 3px; }
   .pet-pin-note { text-align: left; }
 }

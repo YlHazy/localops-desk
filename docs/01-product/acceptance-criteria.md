@@ -29,9 +29,10 @@
 - A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
 - The full desk uses the same explicit manual-focus contract: deliberate non-priority selection is labeled without changing the global headline, and one action restores automatic highest-priority focus. A removed selection falls back safely after refresh.
 - While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
-- System anomaly notifications require a user gesture and browser permission, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count.
+- System anomaly notifications require an explicit user gesture, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count. Browser preview additionally requires browser permission; the packaged desktop app uses its bounded native tray bridge.
 - A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, runtime, and resource conclusions instead of retaining any healthy/failed category from expired evidence.
 - Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
+- In the packaged desktop app, an explicit opt-in uses the existing Windows tray rather than browser site permissions. Renderer IPC can request only fixed ready/test copy or bounded aggregate critical/warning/unknown counts; the main process owns all displayed text, respects Windows quiet time, and clicking the balloon opens the full desk. Browser preview keeps the Web Notification fallback.
 - Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
 - The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.
 - Full-desk sync exposes syncing, current, and recovering states; failure preserves and timestamps the last trustworthy result, truthfully states that automatic retry continues after 30 seconds, and offers immediate local-status retry rather than replacing the desk with a spinner.
@@ -55,6 +56,7 @@
 - Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
 - The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
 - The packaged desktop host is single-instance, keeps native capabilities behind an exact loopback renderer check, and uses a native tray and always-on-top control instead of Edge title matching or a PowerShell helper.
+- The sandboxed renderer loads a CommonJS preload compatible with Electron's sandbox; desktop smoke must observe the exact bridge methods, read the native tray/topmost state, and prove an unallow-listed notification request is rejected before claiming native behavior works.
 - Closing the packaged pet hides it to the tray without stopping its owned API, explains that behavior once, and requires the explicit tray action “退出 LocalOps（停止本次值守）” to end the desktop-owned watch.
 - A pet opened from the full desk uses a random validated memory-only session, sends the same bounded presence heartbeat as a launcher-opened pet, and is therefore visible to aggregate ordinary duplicate-window refusal without exposing a server or user identity.
 - The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.

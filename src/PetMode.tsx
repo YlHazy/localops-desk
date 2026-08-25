@@ -31,6 +31,14 @@ type AlertReceipt = {
   at: number;
 };
 
+type DesktopNotificationRequest = { kind: "ready" | "test" } | { kind: "status"; critical: number; warning: number; unknown: number };
+
+type NotificationDelivery = {
+  accepted: boolean;
+  message: string;
+  browserNotification?: Notification;
+};
+
 function readNotificationPreference() {
   try {
     return window.localStorage.getItem(notificationPreferenceKey) === "1";
@@ -80,11 +88,19 @@ function writePinnedPreference(enabled: boolean) {
   }
 }
 
-function showSystemNotification(title: string, options: NotificationOptions) {
+async function deliverSystemNotification(title: string, options: NotificationOptions, desktopRequest: DesktopNotificationRequest): Promise<NotificationDelivery> {
+  if (window.localOpsDesktop) {
+    try {
+      return await window.localOpsDesktop.showNotification(desktopRequest);
+    } catch {
+      return { accepted: false, message: "Windows 托盘提醒没有响应；状态仍保留在小哨里。" };
+    }
+  }
   try {
-    return new Notification(title, options);
+    const browserNotification = new Notification(title, options);
+    return { accepted: true, message: "已交给浏览器系统提醒；系统勿扰模式可能延后显示。", browserNotification };
   } catch {
-    return null;
+    return { accepted: false, message: "浏览器提醒没有成功发出；状态仍保留在小哨里。" };
   }
 }
 
@@ -123,12 +139,14 @@ export function PetMode({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
-  const notificationsSupported = "Notification" in window;
-  const notificationsBlocked = notificationsSupported && Notification.permission === "denied";
+  const desktopNotifications = Boolean(window.localOpsDesktop);
+  const notificationsSupported = desktopNotifications || "Notification" in window;
+  const notificationsBlocked = !desktopNotifications && notificationsSupported && Notification.permission === "denied";
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationsSupported
-    && Notification.permission === "granted"
+    && (desktopNotifications || Notification.permission === "granted")
     && readNotificationPreference());
   const [notificationNote, setNotificationNote] = useState("");
+  const [notificationTesting, setNotificationTesting] = useState(false);
   const [quietUntil, setQuietUntil] = useState(readQuietPreference);
   const [alertReceipt, setAlertReceipt] = useState<AlertReceipt | null>(null);
   const previousSignal = useRef<MonitorSignal | null>(null);
@@ -224,26 +242,34 @@ export function PetMode({
     const current = monitorSignal(trustedDashboard, Boolean(syncError));
     const decision = notificationDecision(previousSignal.current, current, {
       enabled: notificationsEnabled,
-      permission: notificationsSupported ? Notification.permission : "default",
+      permission: desktopNotifications ? "granted" : notificationsSupported ? Notification.permission : "default",
       quietUntil,
       now
     });
     if (decision.notice && decision.outcome !== "none") {
+      const notice = decision.notice;
       if (decision.outcome === "suppressed") {
-        setAlertReceipt({ outcome: "suppressed", title: decision.notice.title, body: decision.notice.body, at: now });
+        setAlertReceipt({ outcome: "suppressed", title: notice.title, body: notice.body, at: now });
       } else {
-        const notification = showSystemNotification(decision.notice.title, { body: decision.notice.body, tag: "localops-status" });
-        setAlertReceipt({ outcome: notification ? "sent" : "failed", title: decision.notice.title, body: decision.notice.body, at: now });
-        if (notification) {
-          notification.onclick = () => {
-            notification.close();
-            onOpenDesk(priorityHost?.id, "overview", "pet-alert");
-          };
-        } else setNotificationNote("系统提醒没有成功弹出；异常已记录在桌宠中，可直接打开控制台。");
+        void deliverSystemNotification(notice.title, { body: notice.body, tag: "localops-status" }, {
+          kind: "status",
+          critical: current.critical,
+          warning: current.warning,
+          unknown: current.unknown
+        }).then((delivery) => {
+          setAlertReceipt({ outcome: delivery.accepted ? "sent" : "failed", title: notice.title, body: notice.body, at: now });
+          setNotificationNote(delivery.message);
+          if (delivery.browserNotification) {
+            delivery.browserNotification.onclick = () => {
+              delivery.browserNotification?.close();
+              onOpenDesk(priorityHost?.id, "overview", "pet-alert");
+            };
+          }
+        });
       }
     }
     previousSignal.current = current;
-  }, [trustedDashboard, syncError, notificationsEnabled, notificationsSupported, quietUntil, now, priorityHost?.id, onOpenDesk]);
+  }, [trustedDashboard, syncError, notificationsEnabled, notificationsSupported, desktopNotifications, quietUntil, now, priorityHost?.id, onOpenDesk]);
 
   useEffect(() => {
     if (!quietUntil || quietUntil > now) return;
@@ -265,7 +291,7 @@ export function PetMode({
       setNotificationNote("异常提醒已关闭，自动同步仍在继续。");
       return;
     }
-    const permission = await Notification.requestPermission();
+    const permission = desktopNotifications ? "granted" : await Notification.requestPermission();
     if (permission !== "granted") {
       writeNotificationPreference(false);
       setNotificationNote(window.localOpsDesktop ? "系统没有允许提醒。可在 Windows 通知设置中重新开启。" : "系统没有允许提醒。可在浏览器的站点权限中重新开启。");
@@ -275,13 +301,27 @@ export function PetMode({
     writeQuietPreference(0);
     setQuietUntil(0);
     setNotificationsEnabled(true);
-    setNotificationNote(preferenceSaved
-      ? "异常提醒已开启；只显示数量，不显示服务器地址或命令。"
-      : "本次已开启提醒，但浏览器不允许保存偏好；下次打开需重新开启。");
-    showSystemNotification("LocalOps 已开始值守", {
+    const delivery = await deliverSystemNotification("LocalOps 已开始值守", {
       body: "状态恶化时会提醒你；通知不包含地址、命令或检查证据。",
       tag: "localops-notifications-ready"
-    });
+    }, { kind: "ready" });
+    setNotificationNote(preferenceSaved
+      ? delivery.message
+      : `本次已开启提醒，但偏好没有保存；下次打开需重新开启。${delivery.accepted ? " 测试提醒已发出。" : ""}`);
+  }
+
+  async function testNotification() {
+    if (!notificationsEnabled || notificationTesting) return;
+    setNotificationTesting(true);
+    try {
+      const delivery = await deliverSystemNotification("LocalOps 测试提醒", {
+        body: "提醒通道校准中；这条消息不包含服务器身份或检查证据。",
+        tag: "localops-notifications-test"
+      }, { kind: "test" });
+      setNotificationNote(delivery.message);
+    } finally {
+      setNotificationTesting(false);
+    }
   }
 
   function toggleQuietTime() {
@@ -415,9 +455,14 @@ export function PetMode({
             <span><strong>{watchMode.label}</strong><small>{watchMode.detail}</small></span>
           </button>
           {notificationsEnabled && !notificationsBlocked ? (
-            <button className="pet-quiet-toggle" onClick={toggleQuietTime} aria-pressed={quietUntil > now}>
-              <Clock3 size={15} />{quietUntil > now ? "恢复提醒" : "安静 1 小时"}
-            </button>
+            <div className="pet-watch-tools">
+              <button className="pet-notification-test" onClick={testNotification} disabled={notificationTesting}>
+                <Bell size={14} />{notificationTesting ? "发送中" : "测试"}
+              </button>
+              <button className="pet-quiet-toggle" onClick={toggleQuietTime} aria-pressed={quietUntil > now}>
+                <Clock3 size={15} />{quietUntil > now ? "恢复提醒" : "安静 1 小时"}
+              </button>
+            </div>
           ) : null}
         </div>
         {notificationNote ? <p>{notificationNote}</p> : null}

@@ -7,6 +7,39 @@ export const firstTrayNotice = Object.freeze({
   content: "LocalOps 已缩到系统托盘。右键托盘图标可打开控制台，或明确退出本次值守。"
 });
 
+function boundedAlertCount(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 999) throw new TypeError("desktop alert counts must be integers between 0 and 999");
+  return value;
+}
+
+export function desktopAlertCopy(request) {
+  if (!request || typeof request !== "object" || Array.isArray(request)) throw new TypeError("desktop alert request must be an object");
+  const keys = Object.keys(request).sort().join(",");
+  if (request.kind === "ready" && keys === "kind") {
+    return {
+      title: "LocalOps 提醒已就位",
+      content: "以后只在状态变差时提醒；不会显示服务器名称、地址、命令或原始证据。",
+      iconType: "info"
+    };
+  }
+  if (request.kind === "test" && keys === "kind") {
+    return {
+      title: "LocalOps 测试提醒",
+      content: "提醒通道校准中；这条消息不包含服务器身份或检查证据。",
+      iconType: "info"
+    };
+  }
+  if (request.kind !== "status" || keys !== "critical,kind,unknown,warning") throw new TypeError("desktop alert request is not allow-listed");
+  const critical = boundedAlertCount(request.critical);
+  const warning = boundedAlertCount(request.warning);
+  const unknown = boundedAlertCount(request.unknown);
+  return {
+    title: critical > 0 ? "LocalOps 发现故障" : warning > 0 ? "LocalOps 需要关注" : "LocalOps 需要重新确认",
+    content: `故障 ${critical} · 关注 ${warning} · 待确认 ${unknown}。打开小哨查看证据。`,
+    iconType: critical > 0 ? "error" : warning > 0 ? "warning" : "info"
+  };
+}
+
 export function desktopPetUrl(sessionId = randomUUID()) {
   return `${desktopOrigin}/?mode=pet&session=${encodeURIComponent(sessionId)}&runtime=desktop`;
 }

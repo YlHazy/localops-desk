@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray, utilityProcess } from "electron";
-import { desktopDeskUrl, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopAlertCopy, desktopDeskUrl, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const smokeCheck = process.argv.includes("--smoke-check");
 const smokeReportPath = smokeCheck ? process.env.LOCALOPS_SMOKE_REPORT : null;
@@ -77,7 +77,7 @@ function secureWindowOptions(extra = {}) {
     backgroundColor: "#0d1715",
     icon: appPath("build", "icon.png"),
     webPreferences: {
-      preload: appPath("desktop", "preload.mjs"),
+      preload: appPath("desktop", "preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
@@ -250,7 +250,16 @@ function createTray() {
     else showPet();
     rebuildTrayMenu();
   });
+  tray.on("balloon-click", () => showDesk());
   rebuildTrayMenu();
+}
+
+function showDesktopNotification(request) {
+  const copy = desktopAlertCopy(request);
+  if (process.platform !== "win32") return { accepted: false, channel: "unsupported", message: "当前系统不支持 LocalOps 托盘提醒。" };
+  if (!tray || tray.isDestroyed()) return { accepted: false, channel: "windows-tray", message: "LocalOps 托盘尚未就绪，提醒没有发出。" };
+  tray.displayBalloon({ ...copy, largeIcon: false, respectQuietTime: true });
+  return { accepted: true, channel: "windows-tray", message: "已交给 Windows 托盘提醒；专注助手可能延后显示。" };
 }
 
 async function waitForApi(attempts = 60) {
@@ -264,8 +273,8 @@ async function waitForApi(attempts = 60) {
 async function waitForPetRenderer(attempts = 40) {
   let result = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    result = await petWindow.webContents.executeJavaScript("({ title: document.title, runtime: new URLSearchParams(location.search).get('runtime'), hasApp: Boolean(document.querySelector('.pet-window')) })");
-    if (result.title === "LocalOps Guardian" && result.runtime === "desktop" && result.hasApp) return result;
+    result = await petWindow.webContents.executeJavaScript("(async () => { const desktopBridgeKeys = Object.keys(window.localOpsDesktop || {}).sort(); const hasNotificationBridge = typeof window.localOpsDesktop?.showNotification === 'function'; const state = typeof window.localOpsDesktop?.getState === 'function' ? await window.localOpsDesktop.getState().catch(() => null) : null; const bridgeState = state ? { desktop: state.desktop, closeBehavior: state.closeBehavior, topmost: state.topmost } : null; return { title: document.title, runtime: new URLSearchParams(location.search).get('runtime'), hasApp: Boolean(document.querySelector('.pet-window')), desktopBridgeKeys, bridgeState, hasNotificationBridge, rejectsUnsafeNotification: hasNotificationBridge ? await window.localOpsDesktop.showNotification({ kind: 'custom' }).then((value) => value?.accepted === false && value?.channel === 'rejected', () => false) : false }; })()");
+    if (result.title === "LocalOps Guardian" && result.runtime === "desktop" && result.hasApp && result.bridgeState?.desktop === true && result.bridgeState?.closeBehavior === "tray" && result.bridgeState?.topmost === true && result.hasNotificationBridge && result.rejectsUnsafeNotification) return result;
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
   throw new Error(`Desktop renderer smoke result was incomplete: ${JSON.stringify(result)}`);
@@ -305,6 +314,14 @@ ipcMain.handle("desktop:show-pet", (event) => {
   assertTrustedIpc(event);
   showPet();
   return { opened: true };
+});
+ipcMain.handle("desktop:show-notification", (event, request) => {
+  assertTrustedIpc(event);
+  try {
+    return showDesktopNotification(request);
+  } catch {
+    return { accepted: false, channel: "rejected", message: "提醒请求不在 LocalOps 允许的聚合范围内。" };
+  }
 });
 ipcMain.handle("desktop:show-desk", (event, path) => {
   assertTrustedIpc(event);

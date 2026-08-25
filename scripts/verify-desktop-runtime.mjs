@@ -32,7 +32,7 @@ for (let attempt = 0; attempt < 80; attempt += 1) {
   }
 }
 
-if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.apiOwnership !== "owned" || report.runtime !== "desktop" || report.title !== "LocalOps Guardian" || report.hasApp !== true || report.hasTray !== true || report.hiddenToTray !== true || report.closeNoticePersisted !== true) {
+if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.apiOwnership !== "owned" || report.runtime !== "desktop" || report.title !== "LocalOps Guardian" || report.hasApp !== true || report.bridgeState?.desktop !== true || report.bridgeState?.closeBehavior !== "tray" || report.bridgeState?.topmost !== true || report.hasNotificationBridge !== true || report.rejectsUnsafeNotification !== true || report.hasTray !== true || report.hiddenToTray !== true || report.closeNoticePersisted !== true) {
   throw new Error(`Packaged desktop smoke check did not confirm the renderer: ${JSON.stringify(report)}`);
 }
 

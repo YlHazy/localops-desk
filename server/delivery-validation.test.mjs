@@ -93,16 +93,28 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const watchSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
   const navigationSource = readFileSync(new URL("../src/pet-navigation.mjs", import.meta.url), "utf8");
+  const desktopSource = readFileSync(new URL("../desktop/main.mjs", import.meta.url), "utf8");
+  const preloadSource = readFileSync(new URL("../desktop/preload.cjs", import.meta.url), "utf8");
   assert.match(petSource, /安静 1 小时/);
   assert.match(petSource, /QUIET LOG \/ 安静期记录/);
   assert.match(petSource, /onOpenDesk\(priorityHost\?\.id, "overview", "pet-alert"\)/);
   assert.match(petSource, /visibleCounts\.unknown/);
   assert.match(petSource, /permissionSurface: window\.localOpsDesktop \? "windows" : "browser"/);
+  assert.match(petSource, /kind: "status"[\s\S]*critical: current\.critical[\s\S]*warning: current\.warning[\s\S]*unknown: current\.unknown/);
+  assert.match(desktopSource, /preload: appPath\("desktop", "preload\.cjs"\)/);
+  assert.match(preloadSource, /require\("electron"\)/);
+  assert.doesNotMatch(preloadSource, /\bimport\b/);
+  assert.match(preloadSource, /showNotification: \(request\) => ipcRenderer\.invoke\("desktop:show-notification", request\)/);
+  assert.match(desktopSource, /desktopAlertCopy\(request\)/);
+  assert.match(desktopSource, /tray\.displayBalloon\(\{ \.\.\.copy, largeIcon: false, respectQuietTime: true \}\)/);
+  assert.match(desktopSource, /tray\.on\("balloon-click", \(\) => showDesk\(\)\)/);
+  assert.match(desktopSource, /rejectsUnsafeNotification/);
   assert.match(watchSource, /outcome: "suppressed"/);
   assert.doesNotMatch(watchSource, /Edge 站点权限/);
   assert.match(appSource, /petDeskIntent\(window\.location\.hash\)/);
   assert.match(navigationSource, /return `\/#\$\{params\.toString\(\)}`/);
   assert.doesNotMatch(navigationSource, /healthUrl|sshAlias|composeProject|evidence/);
+  assert.doesNotMatch(preloadSource, /title|body|content|host|address|command|evidence/);
 });
 
 test("desktop pinning is session-scoped, reversible, and bounded to one exact Edge title", () => {

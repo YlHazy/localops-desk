@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { desktopDeskUrl, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { desktopAlertCopy, desktopDeskUrl, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -27,4 +27,21 @@ test("navigation allowlist separates LocalOps desk links, Codex discussion, and 
 test("first close copy explains tray persistence and the explicit exit boundary", () => {
   assert.match(firstTrayNotice.content, /系统托盘/);
   assert.match(firstTrayNotice.content, /明确退出/);
+});
+
+test("desktop tray alerts accept only aggregate counts and fixed copy", () => {
+  assert.deepEqual(desktopAlertCopy({ kind: "ready" }), {
+    title: "LocalOps 提醒已就位",
+    content: "以后只在状态变差时提醒；不会显示服务器名称、地址、命令或原始证据。",
+    iconType: "info"
+  });
+  assert.deepEqual(desktopAlertCopy({ kind: "status", critical: 1, warning: 2, unknown: 3 }), {
+    title: "LocalOps 发现故障",
+    content: "故障 1 · 关注 2 · 待确认 3。打开小哨查看证据。",
+    iconType: "error"
+  });
+  assert.match(desktopAlertCopy({ kind: "test" }).content, /不包含服务器身份或检查证据/);
+  assert.throws(() => desktopAlertCopy({ kind: "status", critical: 1, warning: 2, unknown: 3, host: "secret" }), /allow-listed/);
+  assert.throws(() => desktopAlertCopy({ kind: "status", critical: -1, warning: 0, unknown: 0 }), /between 0 and 999/);
+  assert.throws(() => desktopAlertCopy({ kind: "custom", title: "arbitrary" }), /allow-listed/);
 });

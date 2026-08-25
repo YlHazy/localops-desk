@@ -21,7 +21,11 @@ export function watchModeCopy({ supported, blocked, enabled, permissionSurface =
     const minutes = Math.max(1, Math.ceil((quietUntil - now) / 60_000));
     return { label: "提醒暂时安静", detail: `${minutes} 分钟后自动恢复；状态仍在同步`, state: "quiet" };
   }
-  return { label: "异常提醒已开", detail: "状态恶化才提醒；稳定异常不会重复打扰", state: "active" };
+  return {
+    label: "异常提醒已开",
+    detail: permissionSurface === "windows" ? "状态变差才弹出 Windows 托盘提醒" : "状态恶化才提醒；稳定异常不会重复打扰",
+    state: "active"
+  };
 }
 
 export function readQuietUntil(storage, now = Date.now()) {
