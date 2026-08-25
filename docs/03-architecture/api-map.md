@@ -108,7 +108,7 @@ Returns bounded local action receipts without adding a command surface.
 
 `POST /api/actions/prepare`
 
-Validates both runtime gates, a fresh abnormal manual diagnosis, and the exact supported action. Returns a two-minute single-use approval bound to the host configuration, target snapshot, evidence, and fixed commands.
+Validates both runtime gates, a fresh abnormal manual diagnosis whose deterministic layer is `entry`, and the exact supported action. Other diagnosis layers return `ACTION_NOT_RECOMMENDED`. Returns a two-minute single-use approval bound to the host configuration, target snapshot, diagnosis layer, evidence, and fixed commands.
 
 `POST /api/actions/execute`
 

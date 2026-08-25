@@ -380,6 +380,7 @@ export function App() {
   const detailPanelRef = useRef<HTMLElement>(null);
   const detailCloseRef = useRef<HTMLButtonElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const navigationRef = useRef<HTMLElement>(null);
   const [selectedTab, setSelectedTab] = useState<string>(deskIntentAtLoad.tab ?? "overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
@@ -589,6 +590,14 @@ export function App() {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const navigation = navigationRef.current;
+    const active = navigation?.querySelector<HTMLElement>("button.active");
+    if (!navigation || !active || navigation.scrollWidth <= navigation.clientWidth) return;
+    const left = active.offsetLeft - (navigation.clientWidth - active.offsetWidth) / 2;
+    navigation.scrollTo({ left: Math.max(0, left), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [selectedTab]);
 
   useEffect(() => {
     if (petMode || !detailsOpen) return undefined;
@@ -1090,6 +1099,11 @@ export function App() {
     setActionFlowError("");
   }
 
+  function returnToSelectedHost() {
+    setSelectedTab("overview");
+    setDetailsOpen(true);
+  }
+
   async function runAutomaticDiagnosis() {
     if (pendingOperation || !selectedHost || !selectedReadiness?.canCollect) return;
     const hostId = selectedHost.id;
@@ -1270,7 +1284,7 @@ export function App() {
             <span>服务器状态助手</span>
           </div>
         </div>
-        <nav>
+        <nav ref={navigationRef}>
           {[
             ["overview", Activity, "首页"],
             ["hosts", Server, "服务器"],
@@ -1310,7 +1324,7 @@ export function App() {
               </section>
             ) : null}
           </div>
-          <div className="topbar-actions">
+          {selectedTab === "overview" ? <div className="topbar-actions">
             <div className={`batch-check-action ${batchCoverage.blocked ? "partial" : "complete"}`}>
               <button className="primary" onClick={() => batchCoverage.collectible > 0 ? runLightCheck() : startEditHost(selectedHost)} disabled={operationBusy} title={batchCoverage.blocked ? `${batchCoverage.blocked} 台缺少当前可用的证据来源` : undefined}>
                 {checking ? <RefreshCcw className="spin" size={18} /> : batchCoverage.collectible > 0 ? <Play size={18} /> : <Pencil size={18} />}
@@ -1322,11 +1336,11 @@ export function App() {
               <MonitorUp size={18} />
               <span>打开桌宠</span>
             </button>
-          </div>
+          </div> : null}
         </header>
 
         {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
-        {lastCheckOutcome ? (
+        {lastCheckOutcome && selectedTab === "overview" ? (
           <div className={`check-outcome ${lastCheckOutcome.coverage.blocked ? "partial" : "complete"}`} role="status">
             <CheckCircle2 size={17} />
             <div><strong>{lastCheckOutcome.coverage.collectible} 台已取得证据</strong><small>{lastCheckOutcome.summary}</small></div>
@@ -1399,6 +1413,11 @@ export function App() {
                     <h3>{selectedDiagnosis.diagnosis.headline}</h3>
                     <p>{selectedDiagnosis.diagnosis.detail}</p>
                     <div><strong>下一步</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
+                    {selectedDiagnosis.diagnosis.layer === "entry" ? (
+                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><ShieldCheck size={16} />审阅 Nginx 重载</button>
+                    ) : selectedDiagnosis.diagnosis.layer === "none" ? null : (
+                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><TerminalSquare size={16} />查看只读检查</button>
+                    )}
                   </section>
                   <details className={`diagnostic-proof ${selectedDiagnosis.deepEvidence.state}`}>
                     <summary><strong>技术详情</strong><span>{deepEvidenceSourceLabels[selectedDiagnosis.deepEvidence.source]}</span></summary>
@@ -1733,8 +1752,8 @@ export function App() {
         {selectedTab === "actions" && (
           <section className="action-layout">
             <header className="action-intro">
-              <h2>命令与变更预案</h2>
-              <p>只读命令可以复制；Nginx 重载只有在独立通道开启、证据仍新鲜且你逐次确认后才会执行。</p>
+              <div><button className="action-back" onClick={returnToSelectedHost}>← 返回 {selectedHost.name}</button><h2>安全操作</h2></div>
+              <p>先核对排查结论，再决定是否执行。没有对应证据的变更会被拒绝。</p>
             </header>
             <div className="action-menu">
               <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
@@ -1772,6 +1791,7 @@ export function App() {
                           <p>{actionExecution.receipt.summary}</p>
                           {actionExecution.steps.length ? <ol>{actionExecution.steps.map((step) => <li className={step.status} key={step.key}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol> : null}
                           {actionExecution.receipt.status === "succeeded" ? null : <small>不要直接重复执行；先返回服务器详情查看最新证据。</small>}
+                          <button className="secondary slim receipt-return" onClick={returnToSelectedHost}>查看最新状态</button>
                         </div>
                       ) : actionApproval ? (
                         <div className="action-approval" role="group" aria-label="最后确认 Nginx 重载">
@@ -1780,6 +1800,7 @@ export function App() {
                             <span><b>1</b>先验证配置</span><span><b>2</b>通过后才重载</span><span><b>3</b>自动重新检查</span>
                           </div>
                           <p>{actionApproval.impact}</p>
+                          <p className="approval-basis"><CheckCircle2 size={16} />{actionApproval.basis}</p>
                           <pre>{actionApproval.commands.join("\n")}</pre>
                           <p className="approval-stop"><ShieldCheck size={16} />{actionApproval.stopCondition}</p>
                           <label className="approval-check"><input type="checkbox" checked={actionConsent} onChange={(event) => setActionConsent(event.target.checked)} /><span>我已核对目标、两条命令和影响；异常时不会连续点击。</span></label>
@@ -1812,7 +1833,7 @@ export function App() {
                   ) : null}
                 </>
               ) : (
-                <p>这里不会直接连接服务器执行操作。先看命令和验证步骤，后续版本再接入二次确认。</p>
+                <p className="action-empty">先从服务器详情运行“自动查原因”，或者在左侧选择只读检查。变更操作不会在没有对应证据时开放。</p>
               )}
             </div>
             {actionReceipts.length ? (

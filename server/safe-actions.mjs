@@ -34,7 +34,7 @@ function digestForApproval(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-export function createNginxReloadApproval({ host, approvalId, evidenceCheckId, now = Date.now(), ttlMs = ACTION_APPROVAL_TTL_MS }) {
+export function createNginxReloadApproval({ host, approvalId, evidenceCheckId, diagnosisLayer, now = Date.now(), ttlMs = ACTION_APPROVAL_TTL_MS }) {
   const sshAlias = validateSshAlias(host.sshAlias, { allowEmpty: false });
   const preparedAt = new Date(now).toISOString();
   const expiresAt = new Date(now + ttlMs).toISOString();
@@ -46,6 +46,7 @@ export function createNginxReloadApproval({ host, approvalId, evidenceCheckId, n
     sshAlias,
     actionKey: "reload-nginx",
     evidenceCheckId,
+    diagnosisLayer,
     preparedAt,
     expiresAt,
     target,
@@ -56,6 +57,7 @@ export function createNginxReloadApproval({ host, approvalId, evidenceCheckId, n
     ...digestInput,
     planDigest,
     requiredPhrase: NGINX_RELOAD_PHRASE,
+    basis: "最近一次自动排查定位到网页/API 入口；Nginx 只是候选处理，仍需核对目标和命令。",
     displayCommands: [
       `ssh ${sshAlias} '${nginxCommands.preflight}'`,
       `ssh ${sshAlias} '${nginxCommands.reload}'`
@@ -167,11 +169,13 @@ export function publicApproval(approval) {
     approvalId: approval.approvalId,
     actionKey: approval.actionKey,
     evidenceCheckId: approval.evidenceCheckId,
+    diagnosisLayer: approval.diagnosisLayer,
     target: approval.target,
     preparedAt: approval.preparedAt,
     expiresAt: approval.expiresAt,
     planDigest: approval.planDigest,
     requiredPhrase: approval.requiredPhrase,
+    basis: approval.basis,
     commands: approval.displayCommands,
     impact: approval.impact,
     stopCondition: approval.stopCondition,

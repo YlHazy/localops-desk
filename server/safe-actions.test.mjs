@@ -11,10 +11,11 @@ test("action capability requires both independent runtime gates", () => {
 });
 
 test("approval is short-lived, exact, and contains only fixed commands", () => {
-  const approval = createNginxReloadApproval({ host, approvalId: "approval-1", evidenceCheckId: 9, now: 1_000, ttlMs: 120_000 });
+  const approval = createNginxReloadApproval({ host, approvalId: "approval-1", evidenceCheckId: 9, diagnosisLayer: "entry", now: 1_000, ttlMs: 120_000 });
   const visible = publicApproval(approval);
   assert.equal(visible.expiresAt, new Date(121_000).toISOString());
   assert.equal(visible.evidenceCheckId, 9);
+  assert.equal(visible.diagnosisLayer, "entry");
   assert.deepEqual(visible.commands, [
     "ssh safe-host 'sudo -n nginx -t'",
     "ssh safe-host 'sudo -n systemctl reload nginx'"
@@ -22,11 +23,11 @@ test("approval is short-lived, exact, and contains only fixed commands", () => {
   assert.equal(nginxActionCommand("reload"), "sudo -n systemctl reload nginx");
   assert.notEqual(
     approval.planDigest,
-    createNginxReloadApproval({ host: { ...host, name: "Changed" }, approvalId: "approval-1", evidenceCheckId: 9, now: 1_000, ttlMs: 120_000 }).planDigest
+    createNginxReloadApproval({ host: { ...host, name: "Changed" }, approvalId: "approval-1", evidenceCheckId: 9, diagnosisLayer: "entry", now: 1_000, ttlMs: 120_000 }).planDigest
   );
   assert.notEqual(
     approval.planDigest,
-    createNginxReloadApproval({ host: { ...host, updatedAt: "2026-08-26T00:01:00.000Z" }, approvalId: "approval-1", evidenceCheckId: 9, now: 1_000, ttlMs: 120_000 }).planDigest
+    createNginxReloadApproval({ host: { ...host, updatedAt: "2026-08-26T00:01:00.000Z" }, approvalId: "approval-1", evidenceCheckId: 9, diagnosisLayer: "entry", now: 1_000, ttlMs: 120_000 }).planDigest
   );
   assert.throws(() => nginxActionCommand("restart"), /not allowlisted/);
   assert.equal(validateNginxApproval(approval, { phrase: visible.requiredPhrase, planDigest: visible.planDigest }, 2_000), approval);

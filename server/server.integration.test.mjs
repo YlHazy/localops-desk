@@ -854,6 +854,23 @@ test("remote actions stay off by default and enabled preparation requires fresh 
   assert.equal(diagnosis.status, 200);
   assert.ok(["warning", "critical"].includes((await diagnosis.json()).status));
 
+  const unrelatedPrepare = await fetch(`${api.base}/api/actions/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId, actionKey: "reload-nginx" })
+  });
+  assert.equal(unrelatedPrepare.status, 409);
+  assert.equal((await unrelatedPrepare.json()).error, "ACTION_NOT_RECOMMENDED");
+
+  const evidenceDb = new DatabaseSync(join(api.dataDir, "localops.sqlite"));
+  evidenceDb.prepare(`
+    UPDATE host_checks
+    SET status = 'critical', httpStatus = 'failed', sshStatus = 'ok', dockerStatus = 'running',
+        cpuPercent = 20, memoryPercent = 30, diskPercent = 40
+    WHERE id = (SELECT id FROM host_checks WHERE hostId = ? ORDER BY id DESC LIMIT 1)
+  `).run(hostId);
+  evidenceDb.close();
+
   const preparedResponse = await fetch(`${api.base}/api/actions/prepare`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -863,6 +880,8 @@ test("remote actions stay off by default and enabled preparation requires fresh 
   const prepared = await preparedResponse.json();
   assert.equal(prepared.capability.enabled, true);
   assert.equal(prepared.approval.actionKey, "reload-nginx");
+  assert.equal(prepared.approval.diagnosisLayer, "entry");
+  assert.match(prepared.approval.basis, /网页\/API 入口/);
   assert.match(prepared.approval.commands.join("\n"), /nginx -t.*systemctl reload nginx/s);
   assert.ok(prepared.approval.expiresAt);
 

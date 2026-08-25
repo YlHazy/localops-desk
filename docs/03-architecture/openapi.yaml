@@ -185,9 +185,9 @@ paths:
       summary: Prepare a short-lived single-use Nginx reload approval
       responses:
         "200":
-          description: Approval bound to fresh abnormal evidence, target configuration, and fixed commands
+          description: Approval bound to a fresh entry-layer diagnosis, target configuration, and fixed commands
         "409":
-          description: Capability, evidence, target, or action prerequisite failed closed
+          description: Capability, evidence, diagnosis layer, target, or action prerequisite failed closed
   /api/actions/execute:
     post:
       summary: Execute one approved fixed Nginx reload with preflight and verification

@@ -1436,6 +1436,14 @@ th {
 .action-receipts article strong { font-size: 14px; }
 .action-receipts article p { margin: 0; color: #66736e; font-size: 13px; }
 .action-receipts article time { color: #818b86; font-size: 12px; }
+.diagnosis-next-action { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; margin-top: 14px; padding: 8px 11px; color: #244f40; border: 1px solid #b7d1c6; border-radius: 9px; background: #f3f8f5; font-size: 13px; font-weight: 750; }
+.diagnosis-next-action:hover:not(:disabled) { border-color: #7faa98; background: #eaf3ee; }
+.action-back { margin: 0 0 10px; padding: 0; color: #557068; border: 0; background: transparent; font-size: 13px; font-weight: 700; }
+.action-back:hover { color: #245c49; }
+.approval-basis { display: flex; gap: 8px; align-items: flex-start; padding: 10px 11px; color: #365d4e !important; border-radius: 9px; background: #f0f7f3; }
+.approval-basis svg { flex: 0 0 auto; margin-top: 2px; }
+.receipt-return { margin-top: 14px; }
+.action-empty { max-width: 560px; margin: 14px 0 0; color: #60706a; line-height: 1.65; }
 
 .scheduler-layout {
   display: grid;

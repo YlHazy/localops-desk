@@ -51,7 +51,7 @@ The only implemented mutating command path is fixed in code:
 - `sudo -n nginx -t` preflight.
 - `sudo -n systemctl reload nginx`, only after successful preflight.
 
-It is disabled unless both SSH and actions are enabled. It requires a fresh abnormal manual diagnosis, a two-minute single-use approval bound to the unchanged host configuration and exact target snapshot, explicit consent, and the typed phrase `确认重载 Nginx`. Every attempt creates a durable receipt and a reload is followed by bounded verification. An uncertain result is never retried automatically.
+It is disabled unless both SSH and actions are enabled. It requires a fresh abnormal manual diagnosis whose deterministic layer is the Web/API entry; unrelated resource, runtime, management, connectivity, or unknown findings cannot prepare the action. An eligible request receives a two-minute single-use approval bound to the unchanged host configuration, exact target snapshot, diagnosis layer, evidence, and commands, followed by explicit consent and the typed phrase `确认重载 Nginx`. Every attempt creates a durable receipt and a reload is followed by bounded verification. An uncertain result is never retried automatically.
 
 `docker compose restart` remains a non-executable preview because the product does not yet have a sufficiently strong service, working-directory, and rollback identity.
 
@@ -75,6 +75,6 @@ Before any output is shown, stored, exported, or sent to an agent:
 ## Action Tiers
 
 - L0: read-only diagnostics. Default allowed.
-- L1: fixed Nginx config test and reload. Requires both runtime gates, fresh abnormal evidence, two-step confirmation, single-use approval, and verification.
+- L1: fixed Nginx config test and reload. Requires both runtime gates, fresh entry-layer diagnosis evidence, two-step confirmation, single-use approval, and verification.
 - L2: rolling service restart or rollback switch. Not executable in the current product.
 - L3: ECS restart, migration, DNS/TLS, object/data mutation, rollback deletion. MVP forbidden; show runbook only.

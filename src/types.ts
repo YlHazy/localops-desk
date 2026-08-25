@@ -142,11 +142,13 @@ export interface ActionApproval {
   approvalId: string;
   actionKey: "reload-nginx";
   evidenceCheckId: number;
+  diagnosisLayer: "entry";
   target: { name: string; environment: string; role: string };
   preparedAt: string;
   expiresAt: string;
   planDigest: string;
   requiredPhrase: string;
+  basis: string;
   commands: string[];
   impact: string;
   stopCondition: string;

@@ -71,6 +71,8 @@ test("secondary work pages keep the live status compact", () => {
   assert.match(appSource, /className=\{`topbar \$\{selectedTab === "overview" \? "" : "compact"\}`\}/);
   assert.match(styles, /\.topbar\.compact/);
   assert.match(styles, /\.work-tab \.practice-banner/);
+  assert.match(appSource, /lastCheckOutcome && selectedTab === "overview"/);
+  assert.match(appSource, /navigation\.scrollTo/);
 });
 
 test("first watch uses beginner language for the recommended evidence source", () => {
@@ -101,6 +103,9 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.match(appSource, /<dl className="server-facts">/);
   assert.match(appSource, /<details className={`diagnostic-proof/);
   assert.match(appSource, /<summary><strong>技术详情<\/strong>/);
+  assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "entry"/);
+  assert.match(appSource, /审阅 Nginx 重载/);
+  assert.match(appSource, /查看只读检查/);
   assert.match(appSource, /无法连接本地 LocalOps 服务/);
   assert.doesNotMatch(appSource, /查看排查步骤/);
   assert.doesNotMatch(appSource, /memoryPercent \?\? "—"\}%/);

@@ -1117,7 +1117,7 @@ function dryRunAction(input) {
       safetyBoundary: capability.enabled
         ? "当前仍是占位预案；只有单独准备后才显示目标和完整命令，并要求输入确认短语。"
         : "变更类预案固定使用占位符，不携带真实 SSH alias，也不提供一键复制。",
-      commands: ["ssh <ssh-alias> 'sudo nginx -t'", "ssh <ssh-alias> 'sudo systemctl reload nginx'"],
+      commands: ["ssh <ssh-alias> 'sudo -n nginx -t'", "ssh <ssh-alias> 'sudo -n systemctl reload nginx'"],
       verification: ["先通过 nginx -t。", "重载后检查 HTTP 健康状态。", "失败时不继续执行后续动作。"],
       blockedReason: capability.enabled
         ? "远程执行不会从这份模板直接发生；请在下方进入两步确认。"
@@ -1157,7 +1157,8 @@ function actionRequestError(code, message, httpStatus = 409) {
 
 function latestActionableDiagnosis(hostId) {
   const row = db.prepare(`
-    SELECT cr.id AS checkId, cr.finishedAt, hc.status
+    SELECT cr.id AS checkId, cr.finishedAt, hc.status, hc.httpStatus, hc.sshStatus,
+           hc.dockerStatus, hc.cpuPercent, hc.memoryPercent, hc.diskPercent
     FROM check_runs cr
     JOIN host_checks hc ON hc.runId = cr.id
     WHERE cr.trigger = 'manual-diagnosis' AND hc.hostId = ?
@@ -1168,7 +1169,7 @@ function latestActionableDiagnosis(hostId) {
   const ageMs = Date.now() - new Date(row.finishedAt).getTime();
   if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 10 * 60 * 1000) return null;
   if (!["warning", "critical"].includes(row.status)) return null;
-  return row;
+  return { ...row, diagnosis: diagnoseHost(row) };
 }
 
 function actionReceiptRow(row) {
@@ -1212,6 +1213,9 @@ function prepareAction(input) {
   if (!evidence) {
     throw actionRequestError("FRESH_DIAGNOSIS_REQUIRED", "请先对这台异常服务器运行一次自动排查；只有十分钟内的异常证据可以进入变更确认。");
   }
+  if (evidence.diagnosis.layer !== "entry") {
+    throw actionRequestError("ACTION_NOT_RECOMMENDED", "最近一次排查没有把问题定位到网页/API 入口，因此不建议重载 Nginx。请按排查结果处理，不要尝试无关变更。");
+  }
   const now = Date.now();
   for (const [id, approval] of actionApprovals) {
     if (approval.hostId === hostItem.id || new Date(approval.expiresAt).getTime() <= now) actionApprovals.delete(id);
@@ -1220,6 +1224,7 @@ function prepareAction(input) {
     host: hostItem,
     approvalId: randomUUID(),
     evidenceCheckId: evidence.checkId,
+    diagnosisLayer: evidence.diagnosis.layer,
     now
   });
   actionApprovals.set(approval.approvalId, approval);
