@@ -45,11 +45,39 @@ test("private identity scanner recognizes former project infrastructure without 
 
 test("report sharing keeps internal and minimal-disclosure paths visibly separate", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-  assert.match(appSource, /INTERNAL \/ 仅内部/);
-  assert.match(appSource, /确认复制包含服务器身份的内部材料/);
-  assert.match(appSource, /MINIMAL \/ 可讨论/);
+  assert.match(appSource, /可安全讨论/);
+  assert.match(appSource, /className="internal-report-details"/);
+  assert.match(appSource, /这份材料包含服务器身份/);
+  assert.match(appSource, /查看完整脱敏内容/);
   assert.match(appSource, /selectedBrief/);
+  assert.doesNotMatch(appSource, /INTERNAL \/ 仅内部|MINIMAL \/ 可讨论/);
   assert.doesNotMatch(appSource, /适合复制给同事|请打开文本报告并手动复制/);
+});
+
+test("Codex connection explains bounded capability before developer endpoints", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /连接 Codex/);
+  assert.match(appSource, /Codex 可以/);
+  assert.match(appSource, /Codex 不可以/);
+  assert.match(appSource, /不能|不可以/);
+  assert.match(appSource, /className="agent-api-details"/);
+  assert.match(appSource, /codex plugin add localops-guardian@localops-desk/);
+});
+
+test("secondary work pages keep the live status compact", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(appSource, /selectedTab === "overview" \? "overview-tab" : "work-tab"/);
+  assert.match(appSource, /className=\{`topbar \$\{selectedTab === "overview" \? "" : "compact"\}`\}/);
+  assert.match(styles, /\.topbar\.compact/);
+  assert.match(styles, /\.work-tab \.practice-banner/);
+});
+
+test("first watch uses beginner language for the recommended evidence source", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /健康检查地址 · 推荐/);
+  assert.match(appSource, /只向这个地址发送 HTTP GET/);
+  assert.doesNotMatch(appSource, /只写名称和 Health URL/);
 });
 
 test("the desk cannot keep a healthy headline after evidence expires", () => {

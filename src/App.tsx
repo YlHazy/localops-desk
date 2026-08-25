@@ -183,6 +183,12 @@ function friendlyEvidence(value: string) {
   return shortSignal(value);
 }
 
+function discussionBriefField(value: string, label: string) {
+  const prefix = `${label}：`;
+  const line = value.split("\n").find((item) => item.startsWith(prefix));
+  return line?.slice(prefix.length).trim() || "当前摘要没有提供这一项。";
+}
+
 function evidenceFreshnessAt(observedAt: string | null, staleAfterMs: number, now = Date.now()) {
   if (!observedAt) return { state: "unknown", label: "没有观测证据" };
   const ageMs = now - new Date(observedAt).getTime();
@@ -299,7 +305,7 @@ function HostForm({
       </div>
       <div className="form-grid host-form-essential">
         <label>服务器名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" /><small>只用于本机显示。</small></label>
-        <label className="wide">Health URL · 推荐<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>只发送 HTTP GET；请勿填写账号、Token 或查询参数。</small></label>
+        <label className="wide">健康检查地址 · 推荐<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>只向这个地址发送 HTTP GET；不要填写账号、Token 或查询参数。</small></label>
         <label>SSH 别名 · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>{sshCollectionEnabled ? "读取 CPU、内存、磁盘和 Docker。" : "已登记也不会在当前模式连接。"}</small></label>
       </div>
       <details className="host-form-advanced" open={editing || undefined}>
@@ -356,6 +362,7 @@ export function App() {
   const [briefCopied, setBriefCopied] = useState(false);
   const [reportCopyPending, setReportCopyPending] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
+  const [agentSetupCopied, setAgentSetupCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [deskSyncState, setDeskSyncState] = useState<DeskSyncState>("idle");
   const [lastDeskSyncAt, setLastDeskSyncAt] = useState<number | null>(null);
@@ -728,6 +735,17 @@ export function App() {
     }
   }
 
+  async function copyAgentSetup() {
+    const commands = "codex plugin marketplace add .\ncodex plugin add localops-guardian@localops-desk";
+    try {
+      await navigator.clipboard.writeText(commands);
+      setAgentSetupCopied(true);
+      window.setTimeout(() => setAgentSetupCopied(false), 2_000);
+    } catch {
+      setError("Codex 插件安装命令复制失败，请检查系统剪贴板权限。");
+    }
+  }
+
   async function runLightCheck(hostId?: string) {
     if (pendingOperation) return;
     setPendingOperation("check");
@@ -998,7 +1016,7 @@ export function App() {
           {!showHostForm ? <div className="empty-host-intro">
             <div>
               <h1>先添加你要看的服务器</h1>
-              <p>推荐填写一个 Health URL，LocalOps 就能判断服务是否可用。也可以先只填名称，不会自动扫描或连接任何设备。</p>
+              <p>推荐填写一个健康检查地址，LocalOps 就能判断服务是否可用。也可以先只填名称，不会自动扫描或连接任何设备。</p>
               <div className="onboarding-cta">
                 <button className="primary" onClick={startCreateHost}><Plus size={16} />添加服务器</button>
                 <button className="practice-entry" onClick={() => setPracticePending("install")}><ShieldCheck size={16} />看看离线示例</button>
@@ -1013,7 +1031,7 @@ export function App() {
             <div className="onboarding-form-stage">
               <div>
                 <h2>添加第一台服务器</h2>
-                <p>不确定怎么填时，只写名称和 Health URL；其他信息以后再补。</p>
+                <p>不确定怎么填时，只写名称和健康检查地址；其他信息以后再补。</p>
               </div>
               <HostForm
                 form={hostForm}
@@ -1061,7 +1079,7 @@ export function App() {
             ["checks", History, "检查记录"],
             ["actions", TerminalSquare, "安全操作"],
             ["reports", FileText, "报告"],
-            ["agent", Bot, "给 Agent 用"]
+            ["agent", Bot, "Codex 接入"]
           ].map(([key, Icon, label]) => (
             <button key={key as string} className={selectedTab === key ? "active" : ""} onClick={() => setSelectedTab(key as string)}>
               <Icon size={18} />
@@ -1076,8 +1094,8 @@ export function App() {
         </div>
       </aside>
 
-      <main className="main" id="localops-main" tabIndex={-1}>
-        <header className="topbar">
+      <main className={`main ${selectedTab === "overview" ? "overview-tab" : "work-tab"}`} id="localops-main" tabIndex={-1}>
+        <header className={`topbar ${selectedTab === "overview" ? "" : "compact"}`}>
           <div>
             <h1>{currentMessage.title}</h1>
             <p>{currentMessage.description} · {freshness.label}</p>
@@ -1101,10 +1119,10 @@ export function App() {
               </button>
               {batchCoverage.blocked ? <small>{batchCoverage.blocked} 台缺少监控来源，本次会跳过</small> : null}
             </div>
-            <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
+            {selectedTab === "overview" ? <button className="secondary" onClick={startCreateHost} disabled={dashboard.practiceMode || operationBusy} title={dashboard.practiceMode ? "退出离线练习后再配置真实服务器" : undefined}>
               <Plus size={18} />
               <span>{dashboard.practiceMode ? "练习中" : "添加服务器"}</span>
-            </button>
+            </button> : null}
             <button className="secondary" onClick={openPetWindow}>
               <MonitorUp size={18} />
               <span>打开桌宠</span>
@@ -1536,29 +1554,41 @@ export function App() {
         )}
 
         {selectedTab === "reports" && (
-          <section className="report-panel">
-            <div className="report-head">
-              <FileText />
-              <div>
-                <h2>报告与安全分享</h2>
-                <p>内部诊断保留现场细节；对外讨论只使用隐私版摘要。</p>
+          <section className="report-panel report-workbench">
+            <header className="report-page-head">
+              <div><h2>分享当前状态</h2><p>默认只分享脱敏结论；需要逐机排查时，再打开内部材料。</p></div>
+              <span><ShieldCheck size={16} />本机生成</span>
+            </header>
+
+            <section className="safe-share-primary" aria-label="可安全讨论的状态摘要">
+              <div className="safe-share-heading">
+                <div><span className="share-safety-label"><ShieldCheck size={15} />可安全讨论</span><h3>当前焦点摘要</h3></div>
+                {selectedHost ? <StatusPill status={selectedHost.status} /> : null}
               </div>
-            </div>
-            <div className="report-share-grid">
-              <section className="internal-report-card" aria-label="内部诊断报告">
-                <div className="share-card-head">
-                  <div>
-                    <span className="disclosure-badge internal">INTERNAL / 仅内部</span>
-                    <h3>完整诊断报告</h3>
-                  </div>
-                  <ShieldCheck size={20} />
-                </div>
-                <p className="share-boundary">包含服务器名称、逐机状态和诊断摘要。用于本机或受控内部排查，不应直接发到群聊、公开 Issue 或外部 AI。</p>
+              <div className="safe-brief-keypoints">
+                <div><span>当前判断</span><p>{discussionBriefField(selectedBrief, "当前判断")}</p></div>
+                <div><span>下一步</span><p>{discussionBriefField(selectedBrief, "建议")}</p></div>
+                <div><span>先不要做</span><p>{discussionBriefField(selectedBrief, "避免")}</p></div>
+              </div>
+              <div className="safe-share-actions">
+                <button className="primary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制脱敏摘要"}</button>
+                <a className="discuss-link" href={discussLink}><MessageCircle size={16} />让 Codex 帮我分析</a>
+              </div>
+              <details className="safe-brief-details"><summary>查看完整脱敏内容</summary><pre>{selectedBrief}</pre></details>
+              <p className="share-privacy-note">已省略服务器名称、地址、SSH 别名、命令和原始证据。发送前仍可完整检查。</p>
+            </section>
+
+            <details className="internal-report-details">
+              <summary>
+                <span><FileText size={18} /><span><strong>内部诊断材料</strong><small>包含服务器名称和逐机状态，只用于本机或受控内部排查。</small></span></span>
+                <em>含服务器信息</em>
+              </summary>
+              <div className="internal-report-body">
                 <pre>{report}</pre>
                 {reportCopyPending ? (
                   <div className="report-copy-confirm" role="group" aria-label="确认复制内部诊断报告">
-                    <strong>确认复制包含服务器身份的内部材料？</strong>
-                    <small>请只粘贴到受控内部位置；需要讨论时优先使用右侧安全摘要。</small>
+                    <strong>这份材料包含服务器身份</strong>
+                    <small>请只粘贴到受控内部位置；需要讨论时优先使用上方脱敏摘要。</small>
                     <div>
                       <button className="primary slim" onClick={copyInternalReport}><Copy size={16} />确认复制</button>
                       <button className="secondary slim" onClick={() => setReportCopyPending(false)}>取消</button>
@@ -1566,54 +1596,46 @@ export function App() {
                   </div>
                 ) : (
                   <button className="secondary slim" onClick={() => setReportCopyPending(true)}>
-                    {reportCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{reportCopied ? "已复制" : "复制内部报告"}
+                    {reportCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{reportCopied ? "已复制" : "复制内部材料"}
                   </button>
                 )}
-              </section>
-              <section className="safe-share-card" aria-label="最小披露安全分享">
-                <div className="share-card-head">
-                  <div>
-                    <span className="disclosure-badge safe">MINIMAL / 可讨论</span>
-                    <h3>当前焦点的安全摘要</h3>
-                  </div>
-                  <MessageCircle size={20} />
-                </div>
-                <p className="share-boundary">已省略名称、环境、角色、地址、SSH alias、命令、原始证据和现场摘要；只保留分类状态、时效与安全下一步。</p>
-                <pre>{selectedBrief}</pre>
-                <div className="safe-share-actions">
-                  <button className="primary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制安全摘要"}</button>
-                  <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
-                </div>
-              </section>
-            </div>
+              </div>
+            </details>
           </section>
         )}
 
         {selectedTab === "agent" && (
-          <section className="report-panel">
-            <div className="report-head">
-              <Bot />
-              <div>
-                <h2>给 Agent 调用的接口</h2>
-                <p>高级用法：让本地自动化或 Codex 调这个工具读取状态。</p>
+          <section className="report-panel agent-connect-panel">
+            <header className="agent-connect-head">
+              <div><h2>连接 Codex</h2><p>让 Codex 基于 LocalOps 的本机证据解释问题，不必手动复制整份日志。</p></div>
+              <span><Bot size={17} />本地插件</span>
+            </header>
+
+            <div className="agent-boundaries">
+              <section><strong>Codex 可以</strong><ul><li>读取当前状态和最近检查</li><li>发起固定范围的轻量检查</li><li>生成只读排查或变更预案</li></ul></section>
+              <section><strong>Codex 不可以</strong><ul><li>执行任意 Shell 命令</li><li>直接重启、部署或删除</li><li>从摘要中取得服务器地址</li></ul></section>
+            </div>
+
+            <div className="agent-discuss-row">
+              <div><strong>只想让 Codex 看一下？</strong><span>先用脱敏摘要开始任务，发送前可以检查内容。</span></div>
+              <a className="discuss-link" href={discussLink}><MessageCircle size={16} />分析当前状态</a>
+            </div>
+
+            <details className="agent-setup-details">
+              <summary><span><strong>在 Codex 中启用 LocalOps</strong><small>需要在 LocalOps 源码目录中执行一次</small></span><em>2 步</em></summary>
+              <div className="agent-setup-body">
+                <ol><li>将当前仓库注册为本地插件市场。</li><li>安装 LocalOps Guardian 插件，然后新建一个 Codex 任务。</li></ol>
+                <pre>codex plugin marketplace add .{`\n`}codex plugin add localops-guardian@localops-desk</pre>
+                <button className="secondary slim" onClick={copyAgentSetup}>{agentSetupCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{agentSetupCopied ? "已复制" : "复制安装命令"}</button>
               </div>
-            </div>
-            <div className="api-grid">
-              {[
-                "GET /api/status",
-                "POST /api/checks/light",
-                "POST /api/checks/light/:hostId",
-                "GET /api/scheduler",
-                "PUT /api/scheduler",
-                "POST /api/maintenance/retention",
-                "POST /api/actions/dry-run",
-                "GET /api/reports/current",
-                "GET /api/agent/manifest",
-                "GET /api/agent/status"
-              ].map((item) => (
-                <code key={item}>{item}</code>
-              ))}
-            </div>
+            </details>
+
+            <details className="agent-api-details">
+              <summary><span><strong>本地 API</strong><small>供自有脚本和集成开发使用</small></span><em>开发者</em></summary>
+              <div className="api-grid">
+                {["GET /api/status", "POST /api/checks/light", "POST /api/checks/light/:hostId", "GET /api/scheduler", "PUT /api/scheduler", "POST /api/maintenance/retention", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest", "GET /api/agent/status"].map((item) => <code key={item}>{item}</code>)}
+              </div>
+            </details>
           </section>
         )}
       </main>
