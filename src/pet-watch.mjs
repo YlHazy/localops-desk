@@ -9,9 +9,13 @@ export function notificationDecision(previous, current, { enabled, permission, q
   return { outcome: "sent", notice };
 }
 
-export function watchModeCopy({ supported, blocked, enabled, quietUntil = 0, now = Date.now() }) {
+export function watchModeCopy({ supported, blocked, enabled, permissionSurface = "browser", quietUntil = 0, now = Date.now() }) {
   if (!supported) return { label: "当前窗口不支持提醒", detail: "仍会每 30 秒同步本地状态", state: "unsupported" };
-  if (blocked) return { label: "系统提醒已阻止", detail: "在 Edge 站点权限中重新允许", state: "blocked" };
+  if (blocked) return {
+    label: "系统提醒已阻止",
+    detail: permissionSurface === "windows" ? "在 Windows 通知设置中重新允许" : "在浏览器站点权限中重新允许",
+    state: "blocked"
+  };
   if (!enabled) return { label: "开启异常提醒", detail: "只显示状态数量，不显示服务器身份", state: "off" };
   if (quietUntil > now) {
     const minutes = Math.max(1, Math.ceil((quietUntil - now) / 60_000));

@@ -215,6 +215,7 @@ export function PetMode({
     supported: notificationsSupported,
     blocked: notificationsBlocked,
     enabled: notificationsEnabled,
+    permissionSurface: window.localOpsDesktop ? "windows" : "browser",
     quietUntil,
     now
   });
@@ -403,6 +404,7 @@ export function PetMode({
       <section className="pet-stats" aria-label="状态统计">
         <span><strong>{visibleCounts.critical ?? 0}</strong>故障</span>
         <span><strong>{visibleCounts.warning ?? 0}</strong>关注</span>
+        <span><strong>{visibleCounts.unknown ?? 0}</strong>未知</span>
         <span><strong>{visibleCounts.healthy ?? 0}</strong>正常</span>
       </section>
 

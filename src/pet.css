@@ -157,7 +157,7 @@ body:has(.pet-window) {
 .pet-host-row small { margin-top: 2px; color: var(--pet-muted); font-size: 10px; }
 .pet-host-row em { color: var(--pet-muted); font-size: 10px; font-style: normal; }
 
-.pet-stats { display: grid; grid-template-columns: repeat(3, 1fr); padding: 14px 0; }
+.pet-stats { display: grid; grid-template-columns: repeat(4, 1fr); padding: 14px 0; }
 .pet-stats span { color: var(--pet-muted); font-size: 11px; text-align: center; border-right: 1px solid rgba(25, 51, 60, 0.09); }
 .pet-stats span:last-child { border-right: 0; }
 .pet-stats strong { display: block; margin-bottom: 2px; color: var(--pet-ink); font: 700 19px/1 Consolas, monospace; }

@@ -96,7 +96,10 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   assert.match(petSource, /安静 1 小时/);
   assert.match(petSource, /QUIET LOG \/ 安静期记录/);
   assert.match(petSource, /onOpenDesk\(priorityHost\?\.id, "overview", "pet-alert"\)/);
+  assert.match(petSource, /visibleCounts\.unknown/);
+  assert.match(petSource, /permissionSurface: window\.localOpsDesktop \? "windows" : "browser"/);
   assert.match(watchSource, /outcome: "suppressed"/);
+  assert.doesNotMatch(watchSource, /Edge 站点权限/);
   assert.match(appSource, /petDeskIntent\(window\.location\.hash\)/);
   assert.match(navigationSource, /return `\/#\$\{params\.toString\(\)}`/);
   assert.doesNotMatch(navigationSource, /healthUrl|sshAlias|composeProject|evidence/);

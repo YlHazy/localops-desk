@@ -17,7 +17,12 @@ test("quiet watch records deterioration without sending a system notification", 
 test("watch mode copy explains active, quiet, blocked, and unsupported states", () => {
   assert.equal(watchModeCopy({ supported: true, blocked: false, enabled: true, quietUntil: 70_000, now: 10_000 }).state, "quiet");
   assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, quietUntil: 70_000, now: 10_000 }).detail, /1 分钟后/);
-  assert.equal(watchModeCopy({ supported: true, blocked: true, enabled: false }).state, "blocked");
+  assert.deepEqual(watchModeCopy({ supported: true, blocked: true, enabled: false, permissionSurface: "windows" }), {
+    label: "系统提醒已阻止",
+    detail: "在 Windows 通知设置中重新允许",
+    state: "blocked"
+  });
+  assert.match(watchModeCopy({ supported: true, blocked: true, enabled: false }).detail, /浏览器站点权限/);
   assert.equal(watchModeCopy({ supported: false, blocked: false, enabled: false }).state, "unsupported");
 });
 
