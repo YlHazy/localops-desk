@@ -51,14 +51,14 @@ export function desktopDeskUrl(path = "/") {
   return target.toString();
 }
 
-export function safeWindowBounds(value, fallback = { width: 380, height: 760 }) {
+export function safeWindowBounds(value, fallback = { width: 360, height: 620 }) {
   if (!value || typeof value !== "object") return fallback;
   const x = Number(value.x);
   const y = Number(value.y);
   const width = Number(value.width);
   const height = Number(value.height);
   if (![x, y, width, height].every(Number.isFinite)) return fallback;
-  if (width < 320 || width > 900 || height < 520 || height > 1200) return fallback;
+  if (width < 320 || width > 420 || height < 520 || height > 680) return fallback;
   return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
 }
 

@@ -18,10 +18,13 @@ test("copyable SSH preview is generated from the executor's exact read-only allo
     "ssh safe-alias uptime",
     "ssh safe-alias free -m",
     "ssh safe-alias df -P /",
-    "ssh safe-alias \"docker ps --format '{{.Names}} {{.Status}}'\""
+    "ssh safe-alias \"docker ps --format '{{.Names}} {{.Status}}'\"",
+    "ssh safe-alias \"sudo -n docker ps --format '{{.Names}} {{.Status}}'\""
   ]);
   assert.equal(preview.length, Object.keys(readOnlySshCommands).length);
-  assert.doesNotMatch(preview.join("\n"), /compose|sudo|restart|systemctl/i);
+  assert.equal(preview.filter((command) => /sudo/i.test(command)).length, 1);
+  assert.match(preview.at(-1), /sudo -n docker ps/);
+  assert.doesNotMatch(preview.join("\n"), /compose|restart|systemctl/i);
   assert.throws(() => readOnlySshPreview("-oProxyCommand=bad"), /SSH alias/);
 });
 

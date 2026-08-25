@@ -31,7 +31,6 @@ import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, 
 import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
-import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
@@ -45,24 +44,15 @@ import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
 import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
-import { httpSignalStatus, resourceSignalStatus, resourceSignalSummary, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
+import { resourceSignalStatus, resourceSignalSummary } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
 
 const statusLabels: Record<Status, string> = {
   healthy: "正常",
-  warning: "需处理",
+  warning: "关注",
   critical: "故障",
   unknown: "未知"
-};
-
-const statusOrder: Status[] = ["critical", "warning", "unknown", "healthy"];
-
-const signalLabels = {
-  http: "入口信号",
-  ssh: "管理通道",
-  runtime: "运行时",
-  resource: "资源压力"
 };
 
 const emptyHostForm: HostConfigInput = {
@@ -199,39 +189,20 @@ function StatusPill({ status }: { status: Status }) {
   return <span className={`status-pill ${status}`}>{statusLabels[status]}</span>;
 }
 
-function MetricBar({ label, value }: { label: string; value: number | null }) {
-  const safeValue = value ?? 0;
-  return (
-    <div className="metric">
-      <div className="metric-head">
-        <span>{label}</span>
-        <strong>{value == null ? "N/A" : `${value}%`}</strong>
-      </div>
-      <div className="metric-track">
-        <div className="metric-fill" style={{ width: `${Math.min(safeValue, 100)}%` }} />
-      </div>
-    </div>
-  );
-}
-
 function HostPanel({ host, selected, onSelect }: { host: HostState; selected: boolean; onSelect: () => void }) {
   return (
     <button className={`host-panel ${selected ? "selected" : ""}`} onClick={onSelect}>
       <div className="host-panel-top">
-        <span className="host-name">{host.name}</span>
+        <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
         <StatusPill status={host.status} />
       </div>
-      <div className="host-meta">
-        <span>{host.environment}</span>
-        <span>{host.role}</span>
-        <span>{host.sshAlias}</span>
+      <div className="host-glance">
+        <span>HTTP <strong>{shortSignal(host.httpStatus)}</strong></span>
+        <span>内存 <strong>{host.memoryPercent == null ? "—" : `${host.memoryPercent}%`}</strong></span>
+        <span>磁盘 <strong>{host.diskPercent == null ? "—" : `${host.diskPercent}%`}</strong></span>
+        <span aria-hidden="true">›</span>
       </div>
-      <p>{host.summary}</p>
-      <div className="host-mini-grid">
-        <span>网页/API：{shortSignal(host.httpStatus)}{host.httpLatencyMs == null ? "" : ` · ${host.httpLatencyMs}ms`}</span>
-        <span>SSH：{friendlySshStatus(host.sshStatus)}</span>
-        <span>Docker：{friendlyDockerStatus(host.dockerStatus)}</span>
-      </div>
+      {host.status === "healthy" ? null : <p>{host.summary}</p>}
     </button>
   );
 }
@@ -342,6 +313,7 @@ export function App() {
   const [checkDetailState, setCheckDetailState] = useState<"idle" | "loading" | "current" | "error">("idle");
   const [checkDetailError, setCheckDetailError] = useState("");
   const [selectedHostId, setSelectedHostId] = useState<string | null>(deskIntentAtLoad.hostId);
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(deskIntentAtLoad.hostId));
   const [selectedTab, setSelectedTab] = useState<string>(deskIntentAtLoad.tab ?? "overview");
   const [pendingOperation, setPendingOperation] = useState<PendingOperation>(null);
   const [petSyncing, setPetSyncing] = useState(false);
@@ -575,7 +547,7 @@ export function App() {
       void window.localOpsDesktop.showPet();
       return;
     }
-    const pet = window.open(petModePath(crypto.randomUUID(), "existing"), "localops-pet", "popup=yes,width=380,height=760,resizable=yes");
+    const pet = window.open(petModePath(crypto.randomUUID(), "existing"), "localops-pet", "popup=yes,width=360,height=620,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
   }
 
@@ -604,7 +576,6 @@ export function App() {
   const selectedCheck = useMemo(() => checks.find((check) => check.id === selectedCheckId) ?? null, [checks, selectedCheckId]);
   const priorityHosts = useMemo(() => prioritizeHosts(displayDashboard?.hosts ?? []), [displayDashboard]);
   const selectedHost = useMemo(() => selectFocusHost(priorityHosts, selectedHostId), [priorityHosts, selectedHostId]);
-  const manuallyFocused = Boolean(selectedHostId && selectedHost?.id === selectedHostId && selectedHost.id !== priorityHosts[0]?.id);
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
   const selectedFreshness = useMemo(
     () => dashboard && selectedHost
@@ -625,10 +596,6 @@ export function App() {
       partialEvidenceCount
     ),
     [displayDashboard, freshness.state, dashboard?.observedAt, partialEvidenceCount]
-  );
-  const selectedGuidance = useMemo(
-    () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
-    [selectedHost, selectedFreshness.state]
   );
   const selectedBrief = useMemo(() => displayDashboard && selectedHost ? discussionBrief(displayDashboard, selectedHost, now) : "", [displayDashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
@@ -656,6 +623,10 @@ export function App() {
 
   function chooseFocusHost(hostId: string) {
     setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
+    setDetailsOpen(true);
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      window.setTimeout(() => document.getElementById("server-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    }
   }
 
   function chooseCheckFilter(nextFilter: CheckHistoryFilter) {
@@ -1039,11 +1010,11 @@ export function App() {
         <nav>
           {[
             ["overview", Activity, "首页"],
-            ["hosts", Server, "服务器配置"],
-            ["scheduler", Settings2, "值守设置"],
+            ["hosts", Server, "服务器"],
+            ["scheduler", Settings2, "提醒与值守"],
             ["checks", History, "检查记录"],
-            ["actions", TerminalSquare, "操作预案"],
-            ["reports", FileText, "报告与分享"],
+            ["actions", TerminalSquare, "安全操作"],
+            ["reports", FileText, "报告"],
             ["agent", Bot, "给 Agent 用"]
           ].map(([key, Icon, label]) => (
             <button key={key as string} className={selectedTab === key ? "active" : ""} onClick={() => setSelectedTab(key as string)}>
@@ -1062,9 +1033,8 @@ export function App() {
       <main className="main" id="localops-main" tabIndex={-1}>
         <header className="topbar">
           <div>
-            <span className="topbar-kicker">WATCH FLOOR / 本地值守台</span>
-            <h1>先看结论，再决定要不要动</h1>
-            <p>页面刷新：{formatTime(dashboard.generatedAt)} · 最近一次观测：{freshness.label}</p>
+            <h1>{currentMessage.title}</h1>
+            <p>{currentMessage.description} · {freshness.label}</p>
             {deskSyncState === "offline" ? (
               <section className="sync-recovery-card" aria-live="polite" aria-label="本地状态恢复">
                 <AlertTriangle size={17} aria-hidden="true" />
@@ -1088,7 +1058,7 @@ export function App() {
             <div className={`batch-check-action ${batchCoverage.blocked ? "partial" : "complete"}`}>
               <button className="primary" onClick={() => batchCoverage.collectible > 0 ? runLightCheck() : startEditHost(selectedHost)} disabled={operationBusy} title={batchCoverage.blocked ? `${batchCoverage.blocked} 台缺少当前可用的证据来源` : undefined}>
                 {checking ? <RefreshCcw className="spin" size={18} /> : batchCoverage.collectible > 0 ? <Play size={18} /> : <Pencil size={18} />}
-                <span>{checking ? "检查中" : dashboard.practiceMode ? "运行离线练习" : batchCoverage.collectible === 0 ? "补充证据来源" : batchCoverage.blocked > 0 ? `刷新可采集 ${batchCoverage.collectible} 台` : "刷新全部"}</span>
+                <span>{checking ? "正在检查" : dashboard.practiceMode ? "运行离线练习" : batchCoverage.collectible === 0 ? "补充监控来源" : batchCoverage.blocked > 0 ? `检查 ${batchCoverage.collectible} 台` : "一键检查全部"}</span>
               </button>
               <small>{batchCoverage.collectible}/{batchCoverage.total} 台可采集{batchCoverage.blocked ? ` · ${batchCoverage.blocked} 台将跳过` : " · 全部覆盖"}</small>
             </div>
@@ -1131,209 +1101,59 @@ export function App() {
           </section>
         ) : null}
 
-        <section className={`guardian-brief ${currentDashboard.counts.critical ? "critical" : currentDashboard.counts.warning ? "warning" : currentDashboard.counts.unknown ? "unknown" : "healthy"}`}>
-          {selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? (
-            <div className="evidence-expiry-seal" role="status">
-              <AlertTriangle size={19} />
-              <div>
-                <span>EVIDENCE HOLD / 证据封条</span>
-                <strong>上次结果已过期，不能证明当前正常</strong>
-                <small>数值与说明仍保留供比较；当前状态已统一降级为“未知”。</small>
-              </div>
-              <button disabled={operationBusy} onClick={runOrConfigureSelected}>
-                {selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={15} /> : <Pencil size={15} />}{checking ? "正在取证" : selectedReadiness?.canCollect ? "重新取得证据" : "补充证据来源"}
-              </button>
-            </div>
-          ) : null}
-          <div className="guardian-brief-copy">
-            <span className="brief-index">GUARDIAN BRIEF · {selectedFreshness.state === "fresh" ? "LIVE" : "STALE"}</span>
-            <h2>{currentMessage.title}</h2>
-            <p>{currentMessage.description}</p>
-            <div className="brief-focus">
-              <span>{manuallyFocused ? "手动查看 · 全局优先级未改变" : "自动焦点 · 跟随最高优先级"}</span>
-              <strong>{selectedHost.name}</strong>
-              <em>{selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? `上次结果（已过期）：${selectedHost.summary}` : selectedHost.summary}</em>
-              {manuallyFocused ? (
-                <button className="brief-focus-return" onClick={() => setSelectedHostId(null)}>
-                  回到最高优先级 · {priorityHosts[0]?.name}
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="guardian-decision">
-            <span>建议</span>
-            <strong>{selectedGuidance?.title}</strong>
-            <p className="guardian-why"><b>为什么：</b>{selectedGuidance?.reason}</p>
-            <p>{selectedGuidance?.detail}</p>
-            <em className="guardian-avoid">安全边界：{selectedGuidance?.avoid}</em>
-            {selectedReadiness ? (
-              <div className={`evidence-gate ${selectedReadiness.canCollect ? "ready" : "blocked"}`}>
-                <span>{selectedReadiness.label}</span>
-                <small>{selectedReadiness.detail}</small>
-              </div>
-            ) : null}
-            <div className="guardian-actions">
-              <button className="primary slim" onClick={runOrConfigureSelected} disabled={operationBusy}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.actionLabel ?? "刷新证据"}</button>
-              <button className="secondary slim" onClick={copyBrief}>{briefCopied ? <ClipboardCheck size={16} /> : <Copy size={16} />}{briefCopied ? "已复制" : "复制最小披露摘要"}</button>
-              <a className="discuss-link" href={discussLink}><MessageCircle size={16} />交给 Codex 讨论</a>
-            </div>
-            <small>不含本地名称、环境、角色、地址、SSH alias、命令或原始证据；只预填，不会自动发送或执行。</small>
-          </div>
-        </section>
-
-        <section className="status-strip compact">
-          {statusOrder.map((status) => (
-            <button className={`status-tile ${status}`} key={status} onClick={() => {
-              const target = priorityHosts.find((host) => host.status === status);
-              if (target) chooseFocusHost(target.id);
-            }}>
-              <span>{statusLabels[status]}</span>
-              <strong>{currentDashboard.counts[status] ?? 0}</strong>
-            </button>
-          ))}
-        </section>
-
         {selectedTab === "overview" && (
-          <>
-            <section className="setup-runway" aria-label="持续值守配置路径">
-              <div className="setup-runway-copy">
-                <span className="topbar-kicker">WATCH PATH / 从一次查看到持续值守</span>
-                <h2>不用记命令，也不会把“没查到”涂成绿色</h2>
-                <p>LocalOps 保存证据时效、解释判断依据，并把可能有风险的动作停在预案阶段；需要讨论时才交给 Codex。</p>
-                <div className="setup-differences" aria-label="LocalOps 核心优势">
-                  <span>未知 ≠ 正常</span><span>证据带时效</span><span>操作先 dry-run</span><span>摘要脱敏后讨论</span>
-                </div>
-              </div>
-              <div className="setup-track">
-                <button className="complete" onClick={() => setSelectedTab("hosts")}>
-                  <span>01</span><CheckCircle2 size={18} /><strong>服务器已登记</strong><small>{dashboard.hosts.length} 台对象，只保存明确提交的配置</small>
-                </button>
-                <button
-                  className={selectedFreshness.state === "fresh" ? "complete" : "current"}
-                  disabled={operationBusy}
-                  onClick={runOrConfigureSelected}
-                >
-                  <span>02</span>{selectedFreshness.state === "fresh" ? <CheckCircle2 size={18} /> : selectedReadiness?.canCollect ? <RefreshCcw size={18} /> : <Pencil size={18} />}<strong>{selectedFreshness.state === "fresh" ? "已有当前证据" : selectedHost.lastCheckedAt && selectedReadiness?.canCollect ? "重新取得证据" : selectedReadiness?.canCollect ? "取得第一份证据" : "选择证据来源"}</strong><small>{selectedReadiness?.detail}</small>
-                </button>
-                <button className={scheduler?.enabled ? "complete" : ""} onClick={() => setSelectedTab("scheduler")}>
-                  <span>03</span>{scheduler?.enabled ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}<strong>{scheduler?.enabled ? "自动巡检已开启" : "开启自动巡检"}</strong><small>本地调度，可随时暂停与调整频率</small>
-                </button>
-                <button
-                  className={startup?.enabled ? "complete" : startup?.status === "conflict" ? "attention" : "optional"}
-                  onClick={() => startup?.enabled || startup?.ready || startup?.status === "conflict" ? setSelectedTab("scheduler") : openPetWindow()}
-                >
-                  <span>04 · 可选</span>{startup?.enabled ? <CheckCircle2 size={18} /> : <MonitorUp size={18} />}<strong>{startup?.enabled ? "登录桌宠已就位" : startup?.status === "conflict" ? "登录启动需处理" : "把值守放到桌面"}</strong><small>{startup?.status === "conflict" ? startup.message : startup?.ready ? "打开桌宠，或设置登录后自动出现" : "先按需打开桌宠；就绪后可设登录启动"}</small>
-                </button>
-              </div>
-            </section>
-            <section className="home-grid">
-            <div className="todo-panel">
+          <section className={`home-grid ${detailsOpen ? "details-open" : ""}`}>
+            {incidentHosts.length ? <div className="todo-panel" aria-label="需要关注">
               <div className="panel-head">
-                <div>
-                  <h2>先看这里</h2>
-                  <p>按严重程度排序，点一行查看详情。</p>
-                </div>
+                <h2>需要关注</h2>
               </div>
-              {incidentHosts.length ? (
-                priorityHosts.filter((host) => host.status !== "healthy").map((host) => (
-                  <button key={host.id} className={host.id === selectedHost.id ? "selected" : ""} onClick={() => chooseFocusHost(host.id)}>
-                    <div>
-                      <strong>{host.name}</strong>
-                      <span>{host.environment} · {host.role}</span>
-                    </div>
-                    <StatusPill status={host.status} />
-                    <p>{host.summary}</p>
-                  </button>
-                ))
-              ) : (
-                <div className="empty-state">
-                  <CheckCircle2 size={20} />
-                  <strong>没有待处理问题</strong>
-                  <span>可以稍后再刷新一次，或打开自动检查。</span>
-                </div>
-              )}
-            </div>
-
-            <div className="detail-panel main-detail">
-              <div className="detail-head">
-                <div>
-                  <h2>{selectedHost.name}</h2>
-                  <p>{selectedHost.environment} / {selectedHost.role}</p>
-                </div>
-                <StatusPill status={selectedHost.status} />
-              </div>
-              <div className="signal-grid">
-                <div className="metric">
-                  <div className="metric-head"><span>网页/API</span><strong>{selectedHost.httpLatencyMs == null ? "未检查" : `${selectedHost.httpLatencyMs}ms`}</strong></div>
-                  <p className="metric-note">{shortSignal(selectedHost.httpStatus)}</p>
-                </div>
-                <div className="metric">
-                  <div className="metric-head"><span>SSH</span><strong>{selectedHost.sshStatus === "ok" ? "正常" : "需确认"}</strong></div>
-                  <p className="metric-note">{friendlySshStatus(selectedHost.sshStatus)}</p>
-                </div>
-                <div className="metric">
-                  <div className="metric-head"><span>Docker</span><strong>{selectedHost.dockerStatus === "docker checked" ? "已检查" : "未完成"}</strong></div>
-                  <p className="metric-note">{friendlyDockerStatus(selectedHost.dockerStatus)}</p>
-                </div>
-              </div>
-              <div className="proof-path" aria-label="LocalOps 判断链">
-                <div className={`proof-node ${httpSignalStatus(selectedHost)}`}>
-                  <span>01</span>
-                  <small>{signalLabels.http}</small>
-                  <strong>{shortSignal(selectedHost.httpStatus)}</strong>
-                </div>
-                <div className={`proof-node ${sshSignalStatus(selectedHost)}`}>
-                  <span>02</span>
-                  <small>{signalLabels.ssh}</small>
-                  <strong>{friendlySshStatus(selectedHost.sshStatus)}</strong>
-                </div>
-                <div className={`proof-node ${runtimeSignalStatus(selectedHost)}`}>
-                  <span>03</span>
-                  <small>{signalLabels.runtime}</small>
-                  <strong>{friendlyDockerStatus(selectedHost.dockerStatus)}</strong>
-                </div>
-                <div className={`proof-node ${resourceSignalStatus(selectedHost)}`}>
-                  <span>04</span>
-                  <small>{signalLabels.resource}</small>
-                  <strong>{resourceSignalSummary(selectedHost)}</strong>
-                </div>
-              </div>
-              <div className="metrics-grid compact-metrics">
-                <MetricBar label="CPU" value={selectedHost.cpuPercent} />
-                <MetricBar label="内存" value={selectedHost.memoryPercent} />
-                <MetricBar label="磁盘" value={selectedHost.diskPercent} />
-              </div>
-              <div className="evidence">
-                <h3>{selectedFreshness.state === "unknown" && selectedHost.lastCheckedAt ? "上次检查说明（已过期）" : "检查说明"}</h3>
-                {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
-              </div>
-              <div className="quick-actions">
-                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.actionLabel ?? "刷新这台"}</button>
-                <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />修改配置</button>
-                <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>生成检查命令</button>
-              </div>
-            </div>
+              {priorityHosts.filter((host) => host.status !== "healthy").map((host) => (
+                <button key={host.id} className={host.id === selectedHost.id && detailsOpen ? "selected" : ""} onClick={() => chooseFocusHost(host.id)}>
+                  <div><strong>{host.name}</strong><span>{host.summary}</span></div>
+                  <StatusPill status={host.status} />
+                </button>
+              ))}
+            </div> : null}
 
             <div className="all-hosts-panel">
               <div className="panel-head">
-                <div>
-                  <h2>全部服务器</h2>
-                  <p>一行一台，先看状态，再看 HTTP/SSH。</p>
-                </div>
+                <h2>服务器</h2>
+                <span>{priorityHosts.length} 台</span>
               </div>
               <div className="host-list simple">
                 {priorityHosts.map((host) => (
                   <HostPanel
                     key={host.id}
                     host={host}
-                    selected={host.id === selectedHost.id}
+                    selected={detailsOpen && host.id === selectedHost.id}
                     onSelect={() => chooseFocusHost(host.id)}
                   />
                 ))}
               </div>
             </div>
-            </section>
-          </>
+
+            {detailsOpen ? <aside className="detail-panel main-detail" id="server-detail" aria-label={`${selectedHost.name} 详情`}>
+              <div className="detail-head">
+                <div><h2>{selectedHost.name}</h2><p>{selectedFreshness.label}</p></div>
+                <div className="detail-head-actions"><StatusPill status={selectedHost.status} /><button className="detail-close" onClick={() => setDetailsOpen(false)} aria-label="关闭详情"><X size={18} /></button></div>
+              </div>
+              <p className="server-detail-summary">{selectedHost.summary}</p>
+              <dl className="server-facts">
+                <div><dt>网页/API</dt><dd><strong>{shortSignal(selectedHost.httpStatus)}</strong>{selectedHost.httpLatencyMs == null ? null : <span>{selectedHost.httpLatencyMs}ms</span>}</dd></div>
+                <div><dt>SSH / Docker</dt><dd><strong>{friendlySshStatus(selectedHost.sshStatus)}</strong><span>{friendlyDockerStatus(selectedHost.dockerStatus)}</span></dd></div>
+                <div className={resourceSignalStatus(selectedHost)}><dt>资源</dt><dd><strong>{resourceSignalSummary(selectedHost)}</strong><span>内存 {selectedHost.memoryPercent ?? "—"}% · 磁盘 {selectedHost.diskPercent ?? "—"}%</span></dd></div>
+              </dl>
+              <div className="quick-actions">
+                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedHost.status === "healthy" ? "重新检查" : "自动查原因"}</button>
+                <button onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
+                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>查看检查命令</button>}
+              </div>
+              <details className="technical-details">
+                <summary>技术细节</summary>
+                <div>{selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}</div>
+              </details>
+            </aside> : null}
+          </section>
         )}
 
         {selectedTab === "hosts" && (
@@ -1674,6 +1494,18 @@ export function App() {
 
         {selectedTab === "actions" && (
           <section className="action-layout">
+            <header className="action-intro">
+              <div>
+                <span>需要处理时</span>
+                <h2>先自动查原因，再决定要不要动服务器</h2>
+                <p>只读诊断可以一键运行；会改变服务器的命令必须先展示目标、影响和验证步骤，再由你明确同意。</p>
+              </div>
+              <ol aria-label="操作安全流程">
+                <li className="done"><b>1</b><span>自动诊断<small>只读执行</small></span></li>
+                <li><b>2</b><span>查看方案<small>命令与影响</small></span></li>
+                <li><b>3</b><span>高危确认<small>逐条同意</small></span></li>
+              </ol>
+            </header>
             <div className="action-menu">
               <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "生成检查命令"}</button>
               <button disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />生成 Nginx 重载计划</button>
@@ -1702,6 +1534,13 @@ export function App() {
                   </button>
                   <h3>验证步骤</h3>
                   <ul>{dryRun.verification.map((item) => <li key={item}>{item}</li>)}</ul>
+                  {!dryRun.copyAllowed ? (
+                    <div className="danger-consent" role="note">
+                      <AlertTriangle size={22} />
+                      <div><strong>这类命令会改变服务器</strong><p>当前版本只生成方案，不开放远程执行。接入执行后，也必须再次显示目标、完整命令、可能影响和回退方法，由你逐条确认。</p></div>
+                      <button disabled>执行通道未开启</button>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <p>这里不会直接连接服务器执行操作。先看命令和验证步骤，后续版本再接入二次确认。</p>

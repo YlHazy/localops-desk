@@ -10,10 +10,10 @@ test("desktop URLs stay on the fixed loopback origin and identify the tray runti
   assert.throws(() => desktopDeskUrl("https://example.com"), /loopback/);
 });
 
-test("persisted pet bounds are accepted only inside a bounded desktop size", () => {
-  assert.deepEqual(safeWindowBounds({ x: 12.2, y: 24.8, width: 380, height: 760 }), { x: 12, y: 25, width: 380, height: 760 });
-  assert.deepEqual(safeWindowBounds({ x: 0, y: 0, width: 10, height: 10 }), { width: 380, height: 760 });
-  assert.deepEqual(safeWindowBounds(null), { width: 380, height: 760 });
+test("persisted pet bounds stay within the compact companion window", () => {
+  assert.deepEqual(safeWindowBounds({ x: 12.2, y: 24.8, width: 360, height: 620 }), { x: 12, y: 25, width: 360, height: 620 });
+  assert.deepEqual(safeWindowBounds({ x: 0, y: 0, width: 380, height: 760 }), { width: 360, height: 620 });
+  assert.deepEqual(safeWindowBounds(null), { width: 360, height: 620 });
 });
 
 test("navigation allowlist separates LocalOps desk links, Codex discussion, and everything else", () => {

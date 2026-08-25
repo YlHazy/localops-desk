@@ -109,7 +109,8 @@ export const readOnlySshCommands = Object.freeze({
   uptime: "uptime",
   memory: "free -m",
   disk: "df -P /",
-  docker: "docker ps --format '{{.Names}} {{.Status}}'"
+  docker: "docker ps --format '{{.Names}} {{.Status}}'",
+  dockerSudo: "sudo -n docker ps --format '{{.Names}} {{.Status}}'"
 });
 
 export function readOnlySshPreview(sshAlias) {
@@ -225,21 +226,29 @@ function parseDiskPercent(output) {
 async function collectSshReadOnly(host) {
   const evidence = [];
   try {
-    const [uptime, memory, disk, docker] = await Promise.all([
+    const [uptime, memory, disk, dockerResult] = await Promise.all([
       runSshReadOnly(host, "uptime", 5000),
       runSshReadOnly(host, "memory", 5000),
       runSshReadOnly(host, "disk", 5000),
-      runSshReadOnly(host, "docker", 5000).catch((error) => `docker unavailable: ${sanitizeError(error.message)}`)
+      runSshReadOnly(host, "docker", 5000)
+        .then((output) => ({ output, access: "direct" }))
+        .catch(() => runSshReadOnly(host, "dockerSudo", 5000)
+          .then((output) => ({ output, access: "sudo-readonly" })))
+        .catch((error) => ({ output: `docker unavailable: ${sanitizeError(error.message)}`, access: "unavailable" }))
     ]);
+    const docker = dockerResult.output;
     evidence.push(`SSH uptime: ${uptime.split("\n")[0]}`);
     evidence.push(`SSH memory: ${memory.split("\n")[0]}; ${memory.split("\n")[1] || ""}`.trim());
     evidence.push(`SSH disk: ${disk.split("\n").slice(0, 2).join(" | ")}`);
     evidence.push(`SSH docker: ${docker.split("\n").slice(0, 4).join(" | ") || "no docker output"}`);
+    if (dockerResult.access === "sudo-readonly") {
+      evidence.push("Docker evidence used the allowlisted sudo -n read-only fallback after direct access was denied.");
+    }
     return {
       sshStatus: "ok",
       memoryPercent: parseMemoryPercent(memory),
       diskPercent: parseDiskPercent(disk),
-      dockerStatus: docker.startsWith("docker unavailable") ? "docker unavailable" : "docker checked",
+      dockerStatus: dockerResult.access === "unavailable" ? "docker unavailable" : "docker checked",
       evidence
     };
   } catch (error) {

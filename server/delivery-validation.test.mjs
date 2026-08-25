@@ -57,9 +57,8 @@ test("the desk cannot keep a healthy headline after evidence expires", () => {
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const discussionSource = readFileSync(new URL("../src/discussion-brief.mjs", import.meta.url), "utf8");
   assert.match(appSource, /trustworthyDashboard\(dashboard, now\)/);
-  assert.match(appSource, /EVIDENCE HOLD \/ 证据封条/);
-  assert.match(appSource, /上次结果已过期，不能证明当前正常/);
-  assert.match(appSource, /currentDashboard\.counts/);
+  assert.match(appSource, /上次结果已超过可信时效/);
+  assert.match(appSource, /<h1>\{currentMessage\.title\}<\/h1>/);
   assert.match(appSource, /hostEvidenceTimestamp\(dashboard, selectedHost\)/);
   assert.match(appSource, /<PetMode[\s\S]*now=\{now\}/);
   assert.match(petSource, /trustworthyDashboard\(dashboard, now\)/);
@@ -95,9 +94,9 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   const navigationSource = readFileSync(new URL("../src/pet-navigation.mjs", import.meta.url), "utf8");
   const desktopSource = readFileSync(new URL("../desktop/main.mjs", import.meta.url), "utf8");
   const preloadSource = readFileSync(new URL("../desktop/preload.cjs", import.meta.url), "utf8");
-  assert.match(petSource, /安静 1 小时/);
-  assert.match(petSource, /QUIET LOG \/ 安静期记录/);
-  assert.match(petSource, /onOpenDesk\(priorityHost\?\.id, "overview", "pet-alert"\)/);
+  assert.match(petSource, /setAlertReceipt\(\{ outcome: "suppressed"/);
+  assert.match(petSource, /className={`pet-sheet-layer \$\{expanded \? "open" : ""\}`}/);
+  assert.match(petSource, /打开控制台/);
   assert.match(petSource, /visibleCounts\.unknown/);
   assert.match(petSource, /permissionSurface: window\.localOpsDesktop \? "windows" : "browser"/);
   assert.match(petSource, /kind: "status"[\s\S]*critical: current\.critical[\s\S]*warning: current\.warning[\s\S]*unknown: current\.unknown/);
@@ -122,7 +121,7 @@ test("value watch settings derive a three-layer relay from bounded local state",
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const watchSource = readFileSync(new URL("../src/watch-readiness.mjs", import.meta.url), "utf8");
   const preferenceSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
-  assert.match(appSource, /\["scheduler", Settings2, "值守设置"\]/);
+  assert.match(appSource, /\["scheduler", Settings2, "提醒与值守"\]/);
   assert.match(appSource, /DAILY WATCH \/ 值守接力/);
   assert.match(appSource, /readNotificationPreference\(window\.localStorage\)/);
   assert.match(appSource, /readNotificationCalibration\(window\.localStorage\)/);
@@ -133,9 +132,7 @@ test("value watch settings derive a three-layer relay from bounded local state",
   assert.match(watchSource, /当前是浏览器预览；原生托盘提醒只在桌面版可校准/);
   assert.match(preferenceSource, /localops\.pet\.notifications/);
   assert.match(preferenceSource, /localops\.pet\.notifications-calibrated/);
-  assert.match(petSource, /看见刚才的测试提醒了吗/);
-  assert.match(petSource, /confirmNotificationCalibration\(true\)/);
-  assert.match(petSource, /confirmNotificationCalibration\(false\)/);
+  assert.match(petSource, /readNotificationPreference\(window\.localStorage\)/);
   assert.doesNotMatch(watchSource, /healthUrl|sshAlias|composeProject|hostName|command|address/);
 });
 
@@ -151,6 +148,16 @@ test("desktop pinning is session-scoped, reversible, and bounded to one exact Ed
   assert.match(helperSource, /MainWindowTitle -ceq \$WindowTitle/);
   assert.match(helperSource, /SetWindowPos/);
   assert.doesNotMatch(helperSource, /\bregistry\b|\bservice\b|\bschtasks\b|Invoke-Expression|Start-Process/i);
+});
+
+test("packaged SSH launcher opts in only for the child process and restores the shell", () => {
+  const launcherSource = readFileSync(new URL("../scripts/start-packaged-ssh.ps1", import.meta.url), "utf8");
+  assert.match(launcherSource, /Test-Path -LiteralPath \$taskExecutable -PathType Leaf/);
+  assert.match(launcherSource, /\$env:LOCALOPS_ENABLE_SSH = '1'/);
+  assert.match(launcherSource, /Start-Process -FilePath \$taskExecutable -PassThru/);
+  assert.match(launcherSource, /Remove-Item Env:LOCALOPS_ENABLE_SSH/);
+  assert.match(launcherSource, /\$env:LOCALOPS_ENABLE_SSH = \$taskPreviousMode/);
+  assert.doesNotMatch(launcherSource, /setx|registry|schtasks|service|Invoke-Expression|DownloadString|Invoke-WebRequest/i);
 });
 
 test("desk and pet expose one truthful local-status recovery contract", () => {
@@ -186,8 +193,8 @@ test("desk and pet share automatic priority focus instead of trusting API row or
   const prioritySource = readFileSync(new URL("../src/host-priority.mjs", import.meta.url), "utf8");
   assert.match(appSource, /prioritizeHosts\(displayDashboard\?\.hosts \?\? \[\]\)/);
   assert.match(appSource, /selectFocusHost\(priorityHosts, selectedHostId\)/);
-  assert.match(appSource, /手动查看 · 全局优先级未改变/);
-  assert.match(appSource, /回到最高优先级/);
+  assert.match(appSource, /setDetailsOpen\(true\)/);
+  assert.match(appSource, /className={`home-grid \$\{detailsOpen \? "details-open" : ""\}`}/);
   assert.match(petSource, /prioritizeHosts\(trustedDashboard\.hosts\)/);
   assert.match(prioritySource, /critical: 0, warning: 1, unknown: 2, healthy: 3/);
   assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);
@@ -202,7 +209,6 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.match(appSource, /selectedReadiness\.canCollect/);
   assert.match(appSource, /证据仍不完整/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
-  assert.match(petSource, /控制台补充证据/);
   assert.match(petSource, /资源与管理通道还没有证据/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
   assert.match(readinessSource, /state: "ssh-disabled"/);

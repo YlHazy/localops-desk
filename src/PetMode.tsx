@@ -1,6 +1,6 @@
-import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, Pin, PinOff, RefreshCcw, Server } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Bell, BellOff, Check, ChevronDown, Clock3, MessageCircle, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
+import { hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
@@ -114,7 +114,7 @@ export function PetMode({
   syncing: boolean;
   syncError: string;
   actionError: string;
-  onRefresh: (hostId: string) => void;
+  onRefresh: (hostId?: string) => void;
   onRetrySync: () => void;
   onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void | Promise<void>;
   onDiscuss: (hostId: string) => void;
@@ -200,13 +200,11 @@ export function PetMode({
   const priorityFresh = priorityHost ? hostEvidenceIsFresh(dashboard, priorityHost, now) : false;
   const focusFresh = focusHost ? hostEvidenceIsFresh(dashboard, focusHost, now) : false;
   const priorityGuidance = priorityHost ? hostGuidance(priorityHost, priorityFresh) : null;
-  const focusGuidance = focusHost ? hostGuidance(focusHost, focusFresh) : null;
   const hasNonCurrentHost = dashboard.hosts.some((host) => !hostEvidenceIsFresh(dashboard, host, now));
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const copy = statusCopy[overallStatus];
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
-  const collectionMode = collectionModeCopy(dashboard);
   const focusReadiness = evidenceReadiness(dashboard, focusHost);
   const batchCoverage = collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode });
   const visibleCopy = overallStatus === "healthy" && focusReadiness.state === "http"
@@ -351,49 +349,60 @@ export function PetMode({
     setNotificationNote(saved ? "接下来一小时不弹系统提醒；状态恶化仍会留在桌宠收据中。" : "本次已进入安静期，但浏览器没有保存设置。");
   }
 
+  const headline = syncError
+    ? "我和本地服务断开了"
+    : dashboard.hosts.length === 0
+      ? "还没告诉我要看谁"
+      : overallStatus === "healthy"
+        ? `${visibleCounts.healthy ?? 0} 台都稳`
+        : overallStatus === "critical"
+          ? "发现明确故障"
+          : overallStatus === "warning"
+            ? "有一台需要看看"
+            : "现在还看不清";
+  const primaryAction = dashboard.hosts.length === 0
+    ? "去添加服务器"
+    : overallStatus === "warning" || overallStatus === "critical"
+      ? "自动查原因"
+      : "帮我看一下";
+
+  function hidePet() {
+    if (window.localOpsDesktop?.hidePet) {
+      void window.localOpsDesktop.hidePet();
+      return;
+    }
+    window.close();
+  }
+
   return (
     <main className={`pet-window ${overallStatus}`}>
       <div className="pet-window-bar">
-        <span className={`pet-runtime ${lifecycle.tone}`} title={lifecycle.detail}>
-          <i aria-hidden="true" />{lifecycle.label}
-        </span>
+        <span className={`pet-runtime ${lifecycle.tone}`} title={lifecycle.detail} aria-label={lifecycle.label}><i aria-hidden="true" /></span>
         <div className="pet-grab" aria-hidden="true" />
-        <button
-          className={`pet-pin ${topmostActive ? "active" : ""}`}
-          onClick={() => void applyTopmost(!topmostActive)}
-          disabled={!topmostSupported || topmostPending}
-          aria-pressed={topmostActive}
-          title={topmostNote}
-        >
-          {topmostActive ? <PinOff size={13} /> : <Pin size={13} />}
-          {topmostPending ? "确认中" : topmostActive ? "取消置顶" : "桌面置顶"}
-        </button>
+        <div className="pet-window-tools">
+          <button className={`pet-pin ${topmostActive ? "active" : ""}`} onClick={() => void applyTopmost(!topmostActive)} disabled={!topmostSupported || topmostPending} aria-pressed={topmostActive} title={topmostNote}>
+            {topmostActive ? <PinOff size={15} /> : <Pin size={15} />}<span className="sr-only">{topmostActive ? "取消置顶" : "桌面置顶"}</span>
+          </button>
+          <button className="pet-hide" onClick={hidePet} title="收进系统托盘"><X size={16} /><span className="sr-only">收进系统托盘</span></button>
+        </div>
       </div>
-      <div className="pet-window-context" aria-live="polite">
-        <p className="pet-runtime-note">{lifecycle.detail}</p>
-        <p className={`pet-pin-note ${topmostActive ? "active" : ""}`}>{topmostNote}</p>
-      </div>
-      <section className="pet-identity" aria-label={`LocalOps 守护宠物：${visibleCopy.label}`}>
+
+      <section className="pet-stage" aria-label={`LocalOps 守护宠物：${headline}`}>
+        <div className="pet-speech" aria-live="polite">
+          <strong>{headline}</strong>
+          <p>{syncError
+            ? "服务器没有因此被检查或改动。"
+            : dashboard.hosts.length === 0
+              ? "添加后，我会定时替你看。"
+              : priorityHost && !priorityFresh
+                ? "证据过期了，重新看一次才算数。"
+                : overallStatus === "healthy"
+                  ? "没有发现问题，我继续替你盯着。"
+                  : priorityGuidance?.reason ?? visibleCopy.line}</p>
+        </div>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
           <img src={sentryOtterUrl} alt="" />
-          <span className="pet-signal pet-signal-one" />
-          <span className="pet-signal pet-signal-two" />
         </div>
-        <div className="pet-title">
-          <span>LOCALOPS · 小哨值守中</span>
-          <strong>{visibleCopy.label}</strong>
-        </div>
-      </section>
-
-      <section className="pet-speech" aria-live="polite">
-        {syncError ? <AlertTriangle size={17} /> : overallStatus === "healthy" ? <Check size={17} /> : <Server size={17} />}
-        <p>{syncError
-          ? "本地值守连接中断。服务器没有因此被检查或改动。"
-          : dashboard.hosts.length === 0
-            ? "尚未配置服务器，请先打开控制台添加一台。"
-            : priorityHost && !priorityFresh
-              ? "最高优先级对象的证据不是当前状态，先刷新这一台。"
-              : priorityGuidance?.reason ?? visibleCopy.line}</p>
       </section>
 
       {syncError ? (
@@ -416,106 +425,40 @@ export function PetMode({
         </section>
       ) : null}
 
-      {focusHost ? (
-        <>
-          <button className="pet-focus" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-            <span className={`pet-status-dot ${focusHost.status}`} />
-            <span className="pet-focus-copy">
-              <strong>{focusHost.name}{manuallyFocused ? <em>手动查看</em> : null}</strong>
-              <small>{focusGuidance?.reason}</small>
-            </span>
-            <ChevronDown className={expanded ? "is-expanded" : ""} size={18} />
-          </button>
-          {manuallyFocused ? (
-            <button className="pet-return-priority" onClick={() => setSelectedHostId(null)}>
-              回到最高优先级 · {priorityHost.name}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-
-      {expanded ? (
-        <section className="pet-hosts" aria-label="服务器状态列表">
-          {hosts.map((host) => (
-            <button
-              className="pet-host-row"
-              key={host.id}
-              aria-current={host.id === focusHost?.id ? "true" : undefined}
-              onClick={() => {
-                setSelectedHostId(manualFocusSelection(hosts, host.id));
-                setExpanded(false);
-              }}
-            >
-              <span className={`pet-status-dot ${host.status}`} />
-              <span><strong>{host.name}</strong><small>{host.environment} · {host.role}</small></span>
-              <em>{statusCopy[host.status].label}</em>
-            </button>
-          ))}
-        </section>
-      ) : null}
-
-      <section className="pet-stats" aria-label="状态统计">
-        <span><strong>{visibleCounts.critical ?? 0}</strong>故障</span>
-        <span><strong>{visibleCounts.warning ?? 0}</strong>关注</span>
-        <span><strong>{visibleCounts.unknown ?? 0}</strong>未知</span>
-        <span><strong>{visibleCounts.healthy ?? 0}</strong>正常</span>
-      </section>
-
-      <section className={`pet-watch ${watchMode.state}`} aria-live="polite">
-        <div className="pet-watch-controls">
-          <button className="pet-watch-toggle" onClick={toggleNotifications} aria-pressed={notificationsEnabled}>
-            {notificationsEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-            <span><strong>{watchMode.label}</strong><small>{watchMode.detail}</small></span>
-          </button>
-          {notificationsEnabled && !notificationsBlocked ? (
-            <div className="pet-watch-tools">
-              {notificationCalibrated ? <span className="pet-calibration-badge"><Check size={12} />已确认</span> : null}
-              <button className="pet-notification-test" onClick={testNotification} disabled={notificationTesting}>
-                <Bell size={14} />{notificationTesting ? "发送中" : "测试"}
-              </button>
-              <button className="pet-quiet-toggle" onClick={toggleQuietTime} aria-pressed={quietUntil > now}>
-                <Clock3 size={15} />{quietUntil > now ? "恢复提醒" : "安静 1 小时"}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        {notificationNote ? <p>{notificationNote}</p> : null}
-        {notificationCalibrationPending ? (
-          <div className="pet-notification-calibration" role="group" aria-label="确认测试提醒">
-            <span><strong>看见刚才的测试提醒了吗？</strong><small>只有你确认可见，值守设置才会把桌面提醒算作已接通。</small></span>
-            <div>
-              <button className="seen" onClick={() => confirmNotificationCalibration(true)}><Check size={13} />看到了</button>
-              <button onClick={() => confirmNotificationCalibration(false)}>没看到</button>
-            </div>
-          </div>
-        ) : null}
-        {alertReceipt ? (
-          <div className={`pet-alert-receipt ${alertReceipt.outcome}`}>
-            <span>{alertReceipt.outcome === "sent" ? "LAST ALERT / 已提醒" : alertReceipt.outcome === "suppressed" ? "QUIET LOG / 安静期记录" : "ALERT FALLBACK / 提醒未弹出"}<time>{latestTime(new Date(alertReceipt.at).toISOString())}</time></span>
-            <strong>{alertReceipt.title}</strong>
-            <p>{alertReceipt.body}</p>
-            <button onClick={() => onOpenDesk(priorityHost?.id, "overview", "pet-alert")} disabled={!priorityHost}>打开当前最高优先级 <ArrowUpRight size={13} /></button>
-          </div>
-        ) : null}
-      </section>
-
       <footer className="pet-actions">
-        <div className={`pet-evidence-gate ${focusReadiness.canCollect ? "ready" : "blocked"}`}>
-          <strong>{focusReadiness.label}</strong>
-          <small>{focusReadiness.detail}</small>
-        </div>
-        <button className="pet-refresh" onClick={() => focusHost && (focusReadiness.canCollect ? onRefresh(focusHost.id) : onOpenDesk(focusHost.id, "hosts"))} disabled={loading || !focusHost}>
-          {focusReadiness.canCollect ? <RefreshCcw className={loading ? "spin" : ""} size={17} /> : <ArrowUpRight size={17} />}
-          {loading ? "巡检中" : focusReadiness.canCollect ? focusReadiness.actionLabel : "控制台补充证据"}
+        <button className="pet-refresh" onClick={() => dashboard.hosts.length === 0 ? onOpenDesk(undefined, "hosts") : onRefresh()} disabled={loading || syncing}>
+          {loading ? <RefreshCcw className="spin" size={18} /> : overallStatus === "healthy" ? <Check size={18} /> : <Server size={18} />}
+          {loading ? "我正在看" : primaryAction}
         </button>
-        <button className="pet-discuss" title="只预填不含名称、地址或原始证据的最小披露摘要" onClick={() => focusHost && onDiscuss(focusHost.id)} disabled={!focusHost}>
-          <MessageCircle size={16} /> 和 Codex 讨论
-        </button>
-        <button className="pet-open" onClick={() => onOpenDesk(focusHost?.id, "overview")}>
-          控制台 <ArrowUpRight size={16} />
-        </button>
-        <small>{latestTime(dashboard.observedAt)} 观测 · {snapshotTrust.label} · {dashboard.hosts.length === 0 ? "等待配置" : `${collectionMode.compact} · 可采集 ${batchCoverage.collectible}/${batchCoverage.total}`} · 自动同步不触发巡检</small>
       </footer>
+
+      <button className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
+        <span className={`pet-status-dot ${overallStatus}`} />
+        <strong>{visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
+        <span>{latestTime(dashboard.observedAt)} 检查</span>
+        <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
+      </button>
+
+      <div className={`pet-sheet-layer ${expanded ? "open" : ""}`} aria-hidden={!expanded}>
+        <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={() => setExpanded(false)} aria-label="关闭快速查看" />
+        <section className="pet-drawer" id="pet-quick-view" aria-label="服务器快速查看">
+          <header><strong>服务器</strong><button onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1} aria-label="关闭"><X size={17} /></button></header>
+          <div className="pet-hosts">
+            {hosts.map((host) => (
+              <button className="pet-host-row" key={host.id} disabled={!expanded} aria-current={host.id === focusHost?.id ? "true" : undefined} onClick={() => setSelectedHostId(manualFocusSelection(hosts, host.id))}>
+                <span className={`pet-status-dot ${host.status}`} />
+                <span><strong>{host.name}</strong><small>{statusCopy[host.status].label}</small></span>
+                <em>{host.memoryPercent == null ? "—" : `内存 ${host.memoryPercent}%`}</em>
+              </button>
+            ))}
+          </div>
+          <div className="pet-sheet-actions">
+            <button className="pet-open-console" disabled={!expanded} onClick={() => onOpenDesk(focusHost?.id, "overview")}>打开控制台 <ArrowUpRight size={15} /></button>
+            <button className="pet-open-settings" disabled={!expanded} onClick={() => onOpenDesk(undefined, "scheduler")}>提醒设置</button>
+          </div>
+          {(overallStatus === "warning" || overallStatus === "critical") && focusHost ? <button className="pet-discuss" disabled={!expanded} onClick={() => onDiscuss(focusHost.id)}><MessageCircle size={15} />让 Codex 分析</button> : null}
+        </section>
+      </div>
     </main>
   );
 }

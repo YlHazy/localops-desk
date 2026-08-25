@@ -121,11 +121,17 @@ function createPetWindow() {
   if (petWindow && !petWindow.isDestroyed()) return petWindow;
   petWindow = new BrowserWindow(secureWindowOptions({
     ...readPetBounds(),
-    minWidth: 340,
-    minHeight: 600,
+    minWidth: 320,
+    minHeight: 520,
+    maxWidth: 420,
+    maxHeight: 680,
     title: "LocalOps Guardian",
     autoHideMenuBar: true,
-    alwaysOnTop
+    alwaysOnTop,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false
   }));
   attachNavigationGuard(petWindow);
   petWindow.on("close", (event) => {
@@ -305,6 +311,12 @@ ipcMain.handle("desktop:get-state", (event) => {
 ipcMain.handle("desktop:set-always-on-top", (event, enabled) => {
   assertTrustedIpc(event);
   return setAlwaysOnTop(enabled);
+});
+ipcMain.handle("desktop:hide-pet", (event) => {
+  assertTrustedIpc(event);
+  petWindow?.hide();
+  rebuildTrayMenu();
+  return { hidden: true };
 });
 ipcMain.handle("desktop:set-login-startup", (event, enabled) => {
   assertTrustedIpc(event);
