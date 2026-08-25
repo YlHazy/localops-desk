@@ -17,7 +17,7 @@ body:has(.pet-window) {
 .pet-window {
   position: relative;
   box-sizing: border-box;
-  width: min(100vw, 380px);
+  width: min(100%, 380px);
   min-height: 100vh;
   margin: 0 auto;
   padding: 12px 18px 18px;
@@ -179,6 +179,7 @@ body:has(.pet-window) {
   cursor: pointer;
 }
 .pet-watch-toggle[aria-pressed="true"] { border-color: rgba(36, 121, 111, 0.3); background: rgba(142, 217, 194, 0.13); }
+.pet-watch.calibrating .pet-watch-toggle { border-color: rgba(228, 168, 69, .35); background: rgba(255, 242, 214, .65); }
 .pet-watch.quiet .pet-watch-toggle { border-color: rgba(228, 168, 69, 0.35); background: rgba(255, 242, 214, 0.65); }
 .pet-watch-toggle svg { flex: 0 0 auto; color: var(--pet-teal); }
 .pet-watch span, .pet-watch strong, .pet-watch small { display: block; }
@@ -189,6 +190,13 @@ body:has(.pet-window) {
 .pet-quiet-toggle[aria-pressed="true"] { color: #8a5b16; border-color: rgba(196, 128, 28, .38); background: #fff0ca; }
 .pet-notification-test { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; color: var(--pet-teal); border: 1px solid rgba(36, 121, 111, .2); border-radius: 12px; background: rgba(255, 255, 255, .78); font-size: 9px; font-weight: 800; white-space: nowrap; }
 .pet-notification-test:disabled { cursor: wait; opacity: .6; }
+.pet-calibration-badge { display: inline-flex !important; align-items: center; gap: 3px; padding: 0 7px; color: #246f63; border: 1px solid rgba(36, 121, 111, .18); border-radius: 999px; background: rgba(218, 244, 235, .8); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.pet-notification-calibration { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 8px; padding: 9px 10px; border: 1px solid rgba(228, 168, 69, .3); border-left: 4px solid var(--pet-warn); border-radius: 11px; background: rgba(255, 248, 229, .92); }
+.pet-notification-calibration strong { color: #5f4825; font-size: 10px; }
+.pet-notification-calibration small { max-width: 230px; color: #75613f; line-height: 1.35; }
+.pet-notification-calibration > div { display: flex; gap: 5px; }
+.pet-notification-calibration button { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-height: 29px; padding: 0 8px; color: #6f5934; border: 1px solid rgba(137, 103, 48, .22); border-radius: 8px; background: rgba(255, 255, 255, .78); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.pet-notification-calibration button.seen { color: #1f665c; border-color: rgba(36, 121, 111, .25); background: #f7fffc; }
 .pet-alert-receipt { display: grid; gap: 5px; margin-top: 8px; padding: 10px 11px; border: 1px solid rgba(36, 121, 111, .19); border-left: 4px solid var(--pet-teal); border-radius: 11px; background: rgba(244, 251, 249, .9); }
 .pet-alert-receipt.suppressed { border-color: rgba(228, 168, 69, .25); border-left-color: var(--pet-warn); background: rgba(255, 249, 237, .9); }
 .pet-alert-receipt.failed { border-color: rgba(215, 90, 87, .24); border-left-color: var(--pet-danger); background: rgba(255, 246, 244, .92); }
@@ -235,7 +243,10 @@ body:has(.pet-window) {
   .pet-recovery button { grid-column: 1; grid-row: auto; justify-content: center; }
   .pet-watch-controls { grid-template-columns: 1fr; }
   .pet-watch-tools { display: grid; grid-template-columns: 1fr 1fr; }
+  .pet-calibration-badge { grid-column: 1 / -1; justify-content: center; min-height: 24px; }
   .pet-quiet-toggle, .pet-notification-test { min-height: 34px; }
+  .pet-notification-calibration { grid-template-columns: 1fr; }
+  .pet-notification-calibration > div { display: grid; grid-template-columns: 1fr 1fr; }
   .pet-window-context { grid-template-columns: 1fr; gap: 3px; }
   .pet-pin-note { text-align: left; }
 }

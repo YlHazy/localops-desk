@@ -119,16 +119,23 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
 
 test("value watch settings derive a three-layer relay from bounded local state", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const watchSource = readFileSync(new URL("../src/watch-readiness.mjs", import.meta.url), "utf8");
   const preferenceSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
   assert.match(appSource, /\["scheduler", Settings2, "值守设置"\]/);
   assert.match(appSource, /DAILY WATCH \/ 值守接力/);
   assert.match(appSource, /readNotificationPreference\(window\.localStorage\)/);
+  assert.match(appSource, /readNotificationCalibration\(window\.localStorage\)/);
   assert.match(appSource, /event\.key === petNotificationPreferenceKey/);
+  assert.match(appSource, /event\.key === petNotificationCalibrationKey/);
   assert.match(watchSource, /coverage\.collectible > 0/);
-  assert.match(watchSource, /desktopRuntime && notificationsEnabled/);
+  assert.match(watchSource, /desktopRuntime && notificationsEnabled && notificationsCalibrated/);
   assert.match(watchSource, /当前是浏览器预览；原生托盘提醒只在桌面版可校准/);
   assert.match(preferenceSource, /localops\.pet\.notifications/);
+  assert.match(preferenceSource, /localops\.pet\.notifications-calibrated/);
+  assert.match(petSource, /看见刚才的测试提醒了吗/);
+  assert.match(petSource, /confirmNotificationCalibration\(true\)/);
+  assert.match(petSource, /confirmNotificationCalibration\(false\)/);
   assert.doesNotMatch(watchSource, /healthUrl|sshAlias|composeProject|hostName|command|address/);
 });
 

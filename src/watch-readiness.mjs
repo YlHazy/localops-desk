@@ -1,7 +1,7 @@
-export function watchReadiness({ coverage, schedulerEnabled, desktopRuntime, notificationsEnabled }) {
+export function watchReadiness({ coverage, schedulerEnabled, desktopRuntime, notificationsEnabled, notificationsCalibrated }) {
   const evidenceReady = coverage.collectible > 0;
   const rhythmReady = evidenceReady && schedulerEnabled;
-  const attentionReady = desktopRuntime && notificationsEnabled;
+  const attentionReady = desktopRuntime && notificationsEnabled && notificationsCalibrated;
   const items = [
     {
       key: "evidence",
@@ -30,8 +30,12 @@ export function watchReadiness({ coverage, schedulerEnabled, desktopRuntime, not
       tone: attentionReady ? "ready" : desktopRuntime ? "waiting" : "preview",
       detail: !desktopRuntime
         ? "当前是浏览器预览；原生托盘提醒只在桌面版可校准。"
-        : notificationsEnabled ? "桌宠已记录提醒偏好；状态变差才通知。" : "打开桌宠校准提醒，稳定异常不会重复打扰。",
-      actionLabel: desktopRuntime ? "打开桌宠校准" : "预览桌宠"
+        : !notificationsEnabled
+          ? "打开桌宠开启提醒，稳定异常不会重复打扰。"
+          : notificationsCalibrated
+            ? "已人工确认测试提醒可见；状态变差才通知。"
+            : "提醒已开启，但还没有确认测试消息是否真正可见。",
+      actionLabel: desktopRuntime ? notificationsCalibrated ? "查看桌宠" : "打开桌宠校准" : "预览桌宠"
     }
   ];
   const readyCount = items.filter((item) => item.ready).length;

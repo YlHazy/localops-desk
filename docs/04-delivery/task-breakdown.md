@@ -40,5 +40,6 @@
 - Add and verify an in-product, zero-network first-run practice profile with exclusive state, visible labeling, collision-safe cleanup, and legacy-row compatibility.
 - Add and verify explicit current-user Windows login-start with readiness checks, two-step UI confirmation, exact ownership matching, and fail-closed removal.
 - Consolidate evidence coverage, scheduling, desktop attention, and optional login-start into one beginner-readable Watch Settings relay without adding another backend state model.
+- Require an explicit local “seen” receipt after a test reminder before the relay claims desktop attention is connected; never infer visibility from the notification API response.
 - Evaluate a native always-on-top shell only after the pet workflow is validated; avoid taking Electron/Tauri weight by default.
 - Add local encrypted configuration if needed.

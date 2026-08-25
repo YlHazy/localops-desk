@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { monitorSignal } from "./pet-monitor.mjs";
-import { notificationDecision, petNotificationPreferenceKey, petQuietDurationMs, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
+import { notificationDecision, petNotificationCalibrationKey, petNotificationPreferenceKey, petQuietDurationMs, readNotificationCalibration, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationCalibration, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 
 const signal = (counts) => monitorSignal({ counts });
 const healthy = signal({ healthy: 2 });
@@ -15,15 +15,17 @@ test("quiet watch records deterioration without sending a system notification", 
 });
 
 test("watch mode copy explains active, quiet, blocked, and unsupported states", () => {
-  assert.equal(watchModeCopy({ supported: true, blocked: false, enabled: true, quietUntil: 70_000, now: 10_000 }).state, "quiet");
-  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, quietUntil: 70_000, now: 10_000 }).detail, /1 分钟后/);
+  assert.equal(watchModeCopy({ supported: true, blocked: false, enabled: true, calibrated: true, quietUntil: 70_000, now: 10_000 }).state, "quiet");
+  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, calibrated: true, quietUntil: 70_000, now: 10_000 }).detail, /1 分钟后/);
   assert.deepEqual(watchModeCopy({ supported: true, blocked: true, enabled: false, permissionSurface: "windows" }), {
     label: "系统提醒已阻止",
     detail: "在 Windows 通知设置中重新允许",
     state: "blocked"
   });
   assert.match(watchModeCopy({ supported: true, blocked: true, enabled: false }).detail, /浏览器站点权限/);
-  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, permissionSurface: "windows" }).detail, /Windows 托盘提醒/);
+  assert.equal(watchModeCopy({ supported: true, blocked: false, enabled: true }).state, "calibrating");
+  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true }).detail, /不等于消息可见/);
+  assert.match(watchModeCopy({ supported: true, blocked: false, enabled: true, calibrated: true, permissionSurface: "windows" }).detail, /Windows 托盘提醒/);
   assert.equal(watchModeCopy({ supported: false, blocked: false, enabled: false }).state, "unsupported");
 });
 
@@ -49,4 +51,17 @@ test("notification preference is shared without broadening stored data", () => {
   assert.equal(values.get(petNotificationPreferenceKey), "0");
   assert.equal(writeNotificationPreference({ setItem() { throw new Error("blocked"); } }, true), false);
   assert.equal(readNotificationPreference({ getItem() { throw new Error("blocked"); } }), false);
+});
+
+test("notification calibration stores only an explicit local receipt and fails closed", () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+  assert.equal(readNotificationCalibration(storage), false);
+  assert.equal(writeNotificationCalibration(storage, true), true);
+  assert.equal(values.get(petNotificationCalibrationKey), "1");
+  assert.equal(readNotificationCalibration(storage), true);
+  assert.equal(writeNotificationCalibration(storage, false), true);
+  assert.equal(values.has(petNotificationCalibrationKey), false);
+  assert.equal(writeNotificationCalibration({ setItem() { throw new Error("blocked"); }, removeItem() {} }, true), false);
+  assert.equal(readNotificationCalibration({ getItem() { throw new Error("blocked"); } }), false);
 });

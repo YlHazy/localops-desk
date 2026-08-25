@@ -9,7 +9,7 @@ import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
-import { notificationDecision, petQuietDurationMs, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
+import { notificationDecision, petQuietDurationMs, readNotificationCalibration, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationCalibration, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, Status } from "./types";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
@@ -127,6 +127,8 @@ export function PetMode({
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => notificationsSupported
     && (desktopNotifications || Notification.permission === "granted")
     && readNotificationPreference(window.localStorage));
+  const [notificationCalibrated, setNotificationCalibrated] = useState(() => readNotificationCalibration(window.localStorage));
+  const [notificationCalibrationPending, setNotificationCalibrationPending] = useState(false);
   const [notificationNote, setNotificationNote] = useState("");
   const [notificationTesting, setNotificationTesting] = useState(false);
   const [quietUntil, setQuietUntil] = useState(readQuietPreference);
@@ -215,6 +217,7 @@ export function PetMode({
     supported: notificationsSupported,
     blocked: notificationsBlocked,
     enabled: notificationsEnabled,
+    calibrated: notificationCalibrated,
     permissionSurface: window.localOpsDesktop ? "windows" : "browser",
     quietUntil,
     now
@@ -267,9 +270,12 @@ export function PetMode({
     }
     if (notificationsEnabled) {
       writeNotificationPreference(window.localStorage, false);
+      writeNotificationCalibration(window.localStorage, false);
       writeQuietPreference(0);
       setQuietUntil(0);
       setNotificationsEnabled(false);
+      setNotificationCalibrated(false);
+      setNotificationCalibrationPending(false);
       setNotificationNote("异常提醒已关闭，自动同步仍在继续。");
       return;
     }
@@ -280,30 +286,55 @@ export function PetMode({
       return;
     }
     const preferenceSaved = writeNotificationPreference(window.localStorage, true);
+    writeNotificationCalibration(window.localStorage, false);
     writeQuietPreference(0);
     setQuietUntil(0);
     setNotificationsEnabled(true);
+    setNotificationCalibrated(false);
+    setNotificationCalibrationPending(false);
     const delivery = await deliverSystemNotification("LocalOps 已开始值守", {
       body: "状态恶化时会提醒你；通知不包含地址、命令或检查证据。",
       tag: "localops-notifications-ready"
     }, { kind: "ready" });
     setNotificationNote(preferenceSaved
-      ? delivery.message
+      ? `${delivery.message} 请点“测试”并确认看到了，才算校准完成。`
       : `本次已开启提醒，但偏好没有保存；下次打开需重新开启。${delivery.accepted ? " 测试提醒已发出。" : ""}`);
   }
 
   async function testNotification() {
     if (!notificationsEnabled || notificationTesting) return;
+    writeNotificationCalibration(window.localStorage, false);
+    setNotificationCalibrated(false);
+    setNotificationCalibrationPending(false);
     setNotificationTesting(true);
     try {
       const delivery = await deliverSystemNotification("LocalOps 测试提醒", {
         body: "提醒通道校准中；这条消息不包含服务器身份或检查证据。",
         tag: "localops-notifications-test"
       }, { kind: "test" });
-      setNotificationNote(delivery.message);
+      setNotificationCalibrationPending(delivery.accepted);
+      setNotificationNote(delivery.accepted
+        ? "测试提醒已交给系统。请按实际情况确认，不确定就选“没看到”。"
+        : delivery.message);
     } finally {
       setNotificationTesting(false);
     }
+  }
+
+  function confirmNotificationCalibration(seen: boolean) {
+    if (!notificationCalibrationPending) return;
+    const saved = writeNotificationCalibration(window.localStorage, seen);
+    setNotificationCalibrationPending(false);
+    setNotificationCalibrated(seen && saved);
+    if (!seen) {
+      setNotificationNote(saved
+        ? "未确认提醒显示。请检查 Windows 通知与专注助手后再测试；状态仍保留在小哨里。"
+        : "未确认提醒显示，且浏览器没有保存校准结果；请检查通知设置后再测试。");
+      return;
+    }
+    setNotificationNote(saved
+      ? "已确认看到测试提醒；桌面提醒校准完成。"
+      : "这次看到了提醒，但校准结果没有保存；请允许本地存储后再测试。");
   }
 
   function toggleQuietTime() {
@@ -438,6 +469,7 @@ export function PetMode({
           </button>
           {notificationsEnabled && !notificationsBlocked ? (
             <div className="pet-watch-tools">
+              {notificationCalibrated ? <span className="pet-calibration-badge"><Check size={12} />已确认</span> : null}
               <button className="pet-notification-test" onClick={testNotification} disabled={notificationTesting}>
                 <Bell size={14} />{notificationTesting ? "发送中" : "测试"}
               </button>
@@ -448,6 +480,15 @@ export function PetMode({
           ) : null}
         </div>
         {notificationNote ? <p>{notificationNote}</p> : null}
+        {notificationCalibrationPending ? (
+          <div className="pet-notification-calibration" role="group" aria-label="确认测试提醒">
+            <span><strong>看见刚才的测试提醒了吗？</strong><small>只有你确认可见，值守设置才会把桌面提醒算作已接通。</small></span>
+            <div>
+              <button className="seen" onClick={() => confirmNotificationCalibration(true)}><Check size={13} />看到了</button>
+              <button onClick={() => confirmNotificationCalibration(false)}>没看到</button>
+            </div>
+          </div>
+        ) : null}
         {alertReceipt ? (
           <div className={`pet-alert-receipt ${alertReceipt.outcome}`}>
             <span>{alertReceipt.outcome === "sent" ? "LAST ALERT / 已提醒" : alertReceipt.outcome === "suppressed" ? "QUIET LOG / 安静期记录" : "ALERT FALLBACK / 提醒未弹出"}<time>{latestTime(new Date(alertReceipt.at).toISOString())}</time></span>

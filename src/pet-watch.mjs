@@ -2,6 +2,7 @@ import { worseningNotice } from "./pet-monitor.mjs";
 
 export const petQuietDurationMs = 60 * 60 * 1000;
 export const petNotificationPreferenceKey = "localops.pet.notifications";
+export const petNotificationCalibrationKey = "localops.pet.notifications-calibrated";
 
 export function notificationDecision(previous, current, { enabled, permission, quietUntil = 0, now = Date.now() }) {
   const notice = worseningNotice(previous, current);
@@ -27,7 +28,25 @@ export function writeNotificationPreference(storage, enabled) {
   }
 }
 
-export function watchModeCopy({ supported, blocked, enabled, permissionSurface = "browser", quietUntil = 0, now = Date.now() }) {
+export function readNotificationCalibration(storage) {
+  try {
+    return storage.getItem(petNotificationCalibrationKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeNotificationCalibration(storage, calibrated) {
+  try {
+    if (calibrated) storage.setItem(petNotificationCalibrationKey, "1");
+    else storage.removeItem(petNotificationCalibrationKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function watchModeCopy({ supported, blocked, enabled, calibrated = false, permissionSurface = "browser", quietUntil = 0, now = Date.now() }) {
   if (!supported) return { label: "当前窗口不支持提醒", detail: "仍会每 30 秒同步本地状态", state: "unsupported" };
   if (blocked) return {
     label: "系统提醒已阻止",
@@ -35,6 +54,7 @@ export function watchModeCopy({ supported, blocked, enabled, permissionSurface =
     state: "blocked"
   };
   if (!enabled) return { label: "开启异常提醒", detail: "只显示状态数量，不显示服务器身份", state: "off" };
+  if (!calibrated) return { label: "提醒已开 · 待确认", detail: "点“测试”并确认看到了；系统接受请求不等于消息可见", state: "calibrating" };
   if (quietUntil > now) {
     const minutes = Math.max(1, Math.ceil((quietUntil - now) / 60_000));
     return { label: "提醒暂时安静", detail: `${minutes} 分钟后自动恢复；状态仍在同步`, state: "quiet" };

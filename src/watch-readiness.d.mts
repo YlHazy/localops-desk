@@ -14,6 +14,7 @@ export function watchReadiness(options: {
   schedulerEnabled: boolean;
   desktopRuntime: boolean;
   notificationsEnabled: boolean;
+  notificationsCalibrated: boolean;
 }): {
   readyCount: number;
   total: number;

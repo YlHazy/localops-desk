@@ -33,7 +33,7 @@
   - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
   - Mixed-age evidence tests prove a fresh check on one host cannot revive another host's expired status or categorized signals; desk counts, selected guidance, pet priority/notification input, and minimal-disclosure discussion use each host's own timestamp.
   - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, runtime, and resource categories to downgrade together and reject any expired healthy/failed wording.
-  - Value-watch readiness tests keep evidence, saved scheduling, and native opted-in attention as three distinct ordered layers; browser preview cannot satisfy the native layer, and the desk observes only the shared boolean notification preference.
+  - Value-watch readiness tests keep evidence, saved scheduling, and native confirmed-visible attention as three distinct ordered layers; an enabled-but-unconfirmed channel and browser preview cannot satisfy the native layer, and failed storage reads fail closed.
 - Security smoke:
   - Search outputs for obvious secret placeholders.
   - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.

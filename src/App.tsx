@@ -40,7 +40,7 @@ import type { PendingOperation } from "./operation-state.mjs";
 import { petDeskIntent, petDeskPath } from "./pet-navigation.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petModePath } from "./pet-presence.mjs";
-import { petNotificationPreferenceKey, readNotificationPreference } from "./pet-watch.mjs";
+import { petNotificationCalibrationKey, petNotificationPreferenceKey, readNotificationCalibration, readNotificationPreference } from "./pet-watch.mjs";
 import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
@@ -359,6 +359,7 @@ export function App() {
   const [startupPending, setStartupPending] = useState<boolean | null>(null);
   const [startupLoading, setStartupLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreference(window.localStorage));
+  const [notificationsCalibrated, setNotificationsCalibrated] = useState(() => readNotificationCalibration(window.localStorage));
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
@@ -419,9 +420,12 @@ export function App() {
 
   useEffect(() => {
     if (petMode) return undefined;
-    const refreshNotificationPreference = () => setNotificationsEnabled(readNotificationPreference(window.localStorage));
+    const refreshNotificationPreference = () => {
+      setNotificationsEnabled(readNotificationPreference(window.localStorage));
+      setNotificationsCalibrated(readNotificationCalibration(window.localStorage));
+    };
     const handleStorage = (event: StorageEvent) => {
-      if (event.key == null || event.key === petNotificationPreferenceKey) refreshNotificationPreference();
+      if (event.key == null || event.key === petNotificationPreferenceKey || event.key === petNotificationCalibrationKey) refreshNotificationPreference();
     };
     window.addEventListener("storage", handleStorage);
     window.addEventListener("focus", refreshNotificationPreference);
@@ -643,8 +647,9 @@ export function App() {
     coverage: batchCoverage,
     schedulerEnabled: Boolean(scheduler?.enabled),
     desktopRuntime,
-    notificationsEnabled
-  }), [batchCoverage, scheduler?.enabled, desktopRuntime, notificationsEnabled]);
+    notificationsEnabled,
+    notificationsCalibrated
+  }), [batchCoverage, scheduler?.enabled, desktopRuntime, notificationsEnabled, notificationsCalibrated]);
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
