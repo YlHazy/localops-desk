@@ -747,6 +747,7 @@ test("dry-run plans enforce read-only copying and placeholder-only mutations", a
   assert.equal(reload.riskTier, "medium");
   assert.equal(reload.executionState, "blocked-template");
   assert.equal(reload.copyAllowed, false);
+  assert.equal(reload.blockedReason, "当前只生成预案，不执行 Nginx 重载。");
   assert.ok(reload.commands.every((command) => command.includes("<ssh-alias>")));
   assert.ok(reload.commands.every((command) => !command.includes("safe-readonly")));
 
@@ -759,6 +760,7 @@ test("dry-run plans enforce read-only copying and placeholder-only mutations", a
   const restart = await restartResponse.json();
   assert.equal(restart.riskTier, "high");
   assert.equal(restart.copyAllowed, false);
+  assert.equal(restart.blockedReason, "当前只生成预案，不执行服务重启。");
   assert.ok(restart.commands.every((command) => command.includes("<ssh-alias>")));
   assert.ok(restart.commands.every((command) => !command.includes("safe-readonly")));
   assert.match(restart.commands.join("\n"), /<app>.*<service>/s);

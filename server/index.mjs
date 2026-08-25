@@ -1036,8 +1036,8 @@ function dryRunAction(input) {
       copyAllowed: false,
       safetyBoundary: "变更类预案固定使用占位符，不携带真实 SSH alias，也不提供一键复制。",
       commands: ["ssh <ssh-alias> 'sudo nginx -t'", "ssh <ssh-alias> 'sudo systemctl reload nginx'"],
-      verification: ["先通过 nginx -t。", "reload 后检查 HTTP health。", "失败时不继续执行后续动作。"],
-      blockedReason: "MVP 只生成 dry-run，不执行真实 reload。"
+      verification: ["先通过 nginx -t。", "重载后检查 HTTP 健康状态。", "失败时不继续执行后续动作。"],
+      blockedReason: "当前只生成预案，不执行 Nginx 重载。"
     },
     "restart-compose-service": {
       actionKey,
@@ -1050,8 +1050,8 @@ function dryRunAction(input) {
         "ssh <ssh-alias> 'cd /opt/<app>/compose && docker compose ps'",
         "ssh <ssh-alias> 'cd /opt/<app>/compose && docker compose restart <service>'"
       ],
-      verification: ["重启前记录当前 release。", "重启后检查 readiness。", "保留回滚边界。"],
-      blockedReason: "MVP 禁止真实重启；后续需二次确认和审计。"
+      verification: ["重启前记录当前版本。", "重启后检查就绪状态。", "保留明确的回退方法。"],
+      blockedReason: "当前只生成预案，不执行服务重启。"
     }
   };
 

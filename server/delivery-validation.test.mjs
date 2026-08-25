@@ -259,10 +259,19 @@ test("check history renders a local-only evidence receipt instead of raw interna
   assert.match(serverSource, /safeEvidenceList/);
   assert.match(serverSource, /CHECK_RUN_NOT_FOUND/);
   assert.doesNotMatch(serverSource.match(/function checkDetail[\s\S]*?\n}\n/)?.[0] || "", /sshAlias|healthUrl|composeProject|tags/);
-  assert.match(appSource, /WATCH LOG \/ 值守航迹/);
-  assert.match(appSource, /不会发起服务器检查/);
-  assert.match(appSource, /为什么这样判断/);
+  assert.match(appSource, /最近 20 次检查保存在本机；查看记录不会重新连接服务器/);
+  assert.match(appSource, /friendlyCheckSummary\(check\.summary\)/);
+  assert.match(appSource, /本次结论/);
+  assert.match(appSource, /history-host-card/);
   assert.match(historySource, /不能把服务器当作正常/);
+});
+
+test("action plans distinguish read-only templates from mutating commands", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(appSource, /dryRun\.riskTier !== "read-only"/);
+  assert.match(appSource, /这是会改变服务器的操作/);
+  assert.match(appSource, /当前版本不会执行/);
+  assert.match(appSource, /dryRun\?\.actionKey === "inspect-service" \? "selected"/);
 });
 
 function pngFixture({ width, height, colorType }) {

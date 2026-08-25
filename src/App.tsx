@@ -27,7 +27,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
-import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, retainCheckSelection } from "./check-history.mjs";
+import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, friendlyCheckSummary, retainCheckSelection } from "./check-history.mjs";
 import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
@@ -1249,11 +1249,10 @@ export function App() {
           <section className="history-workbench">
             <header className="history-heading">
               <div>
-                <span>WATCH LOG / 值守航迹</span>
-                <h2>每次判断，都能回到当时的证据</h2>
-                <p>这里只读取本机最近 20 次检查记录；打开详情不会重新连接服务器。</p>
+                <h2>检查记录</h2>
+                <p>最近 20 次检查保存在本机；查看记录不会重新连接服务器。</p>
               </div>
-              <div className="history-retention"><History size={18} /><span>本地保留</span><strong>{scheduler?.retentionDays ?? 7} 天</strong></div>
+              <div className="history-retention"><History size={18} /><span>保留</span><strong>{scheduler?.retentionDays ?? 7} 天</strong></div>
             </header>
 
             <div className="history-filters" role="group" aria-label="筛选检查历史">
@@ -1290,9 +1289,9 @@ export function App() {
                       >
                         <span className={`history-node ${check.overallStatus}`} aria-hidden="true" />
                         <span className="history-card-head"><b>{trigger.label}</b><StatusPill status={check.overallStatus} /></span>
-                        <small>{formatTime(check.finishedAt)} · {check.durationMs}ms</small>
-                        <strong>{check.summary}</strong>
-                        <em>{checkKindCopy(check.kind)} · {checkScopeCopy(check.hostScope)}</em>
+                        <small>{formatTime(check.finishedAt)}</small>
+                        <strong>{friendlyCheckSummary(check.summary)}</strong>
+                        <em>{checkScopeCopy(check.hostScope)}</em>
                       </button>
                     );
                   }) : (
@@ -1309,38 +1308,42 @@ export function App() {
                     <>
                       <div className="history-receipt-head">
                         <div>
-                          <span>CHECK RECEIPT #{checkDetail.check.id}</span>
+                          <span>{formatTime(checkDetail.check.finishedAt)}</span>
                           <h3>{checkTriggerCopy(checkDetail.check.trigger).label}</h3>
                           <p>{checkTriggerCopy(checkDetail.check.trigger).detail}</p>
                         </div>
                         <StatusPill status={checkDetail.check.overallStatus} />
                       </div>
                       <div className="history-receipt-facts">
-                        <span>完成时间<strong>{formatTime(checkDetail.check.finishedAt)}</strong></span>
+                        <span>耗时<strong>{checkDetail.check.durationMs}ms</strong></span>
                         <span>检查范围<strong>{checkScopeCopy(checkDetail.check.hostScope)}</strong></span>
-                        <span>证据对象<strong>{checkDetail.hosts.length} 台</strong></span>
+                        <span>服务器<strong>{checkDetail.hosts.length} 台</strong></span>
                       </div>
                       <section className={`history-decision ${checkDetail.check.overallStatus}`}>
-                        <span>为什么这样判断</span>
+                        <span>本次结论</span>
                         <strong>{checkDecisionCopy(checkDetail.check.overallStatus)}</strong>
-                        <p>{checkDetail.check.summary}</p>
+                        <p>{friendlyCheckSummary(checkDetail.check.summary)}</p>
                       </section>
                       <div className="history-host-evidence">
                         {checkDetail.hosts.map((hostEvidence) => (
-                          <section className="history-host-card" key={hostEvidence.hostId}>
-                            <header><div><strong>{hostEvidence.hostName}</strong><span>{hostEvidence.environment} · {hostEvidence.role} · {hostEvidence.identitySnapshot ? "检查时记录" : "当前配置回填"}</span></div><StatusPill status={hostEvidence.status} /></header>
-                            <p>{hostEvidence.summary}</p>
-                            <div className="history-signal-ledger">
-                              <span>网页/API<strong>{friendlyHttpStatus(hostEvidence.httpStatus)}{hostEvidence.httpLatencyMs == null ? "" : ` · ${hostEvidence.httpLatencyMs}ms`}</strong></span>
-                              <span>只读 SSH<strong>{friendlySshStatus(hostEvidence.sshStatus)}</strong></span>
-                              <span>Docker<strong>{friendlyDockerStatus(hostEvidence.dockerStatus)}</strong></span>
-                              <span>资源<strong>CPU {hostEvidence.cpuPercent == null ? "未采集" : `${hostEvidence.cpuPercent}%`} · 内存 {hostEvidence.memoryPercent == null ? "未采集" : `${hostEvidence.memoryPercent}%`} · 磁盘 {hostEvidence.diskPercent == null ? "未采集" : `${hostEvidence.diskPercent}%`}</strong></span>
+                          <details className={`history-host-card ${hostEvidence.status}`} key={hostEvidence.hostId} open={hostEvidence.status === "warning" || hostEvidence.status === "critical" || undefined}>
+                            <summary>
+                              <span><i className={`host-dot ${hostEvidence.status}`} aria-hidden="true" /><strong>{hostEvidence.hostName}</strong><small>{hostEvidence.summary}</small></span>
+                              <StatusPill status={hostEvidence.status} />
+                            </summary>
+                            <div className="history-host-body">
+                              <div className="history-signal-ledger">
+                                <span>网页/API<strong>{friendlyHttpStatus(hostEvidence.httpStatus)}{hostEvidence.httpLatencyMs == null ? "" : ` · ${hostEvidence.httpLatencyMs}ms`}</strong></span>
+                                <span>只读 SSH<strong>{friendlySshStatus(hostEvidence.sshStatus)}</strong></span>
+                                <span>Docker<strong>{friendlyDockerStatus(hostEvidence.dockerStatus)}</strong></span>
+                                <span>资源<strong>CPU {hostEvidence.cpuPercent == null ? "未采集" : `${hostEvidence.cpuPercent}%`} · 内存 {hostEvidence.memoryPercent == null ? "未采集" : `${hostEvidence.memoryPercent}%`} · 磁盘 {hostEvidence.diskPercent == null ? "未采集" : `${hostEvidence.diskPercent}%`}</strong></span>
+                              </div>
+                              <details className="history-evidence-list"><summary>查看判断依据</summary><ul>{hostEvidence.evidence.map((item, index) => <li key={`${hostEvidence.hostId}-${index}`}>{friendlyEvidence(item)}</li>)}</ul></details>
                             </div>
-                            <div className="history-evidence-list"><span>本次依据</span><ul>{hostEvidence.evidence.map((item, index) => <li key={`${hostEvidence.hostId}-${index}`}>{friendlyEvidence(item)}</li>)}</ul></div>
-                          </section>
+                          </details>
                         ))}
                       </div>
-                      <footer className="history-boundary"><ShieldCheck size={16} /><span>详情来自本机已保存的脱敏结果；不含 Health URL、SSH alias、Compose 名称或标签，也不会触发新检查。</span></footer>
+                      <details className="history-boundary"><summary><ShieldCheck size={16} />隐私说明</summary><p>详情来自本机保存的脱敏结果，不含地址、SSH 别名或项目名称，也不会触发新检查。</p></details>
                     </>
                   ) : (
                     <div className="history-detail-state"><History size={20} /><strong>选择一条检查记录</strong><span>右侧会解释当时看到了什么、为什么这样判断。</span></div>
@@ -1486,17 +1489,16 @@ export function App() {
         {selectedTab === "actions" && (
           <section className="action-layout">
             <header className="action-intro">
-              <span>安全操作</span>
-              <h2>先看证据，再准备命令</h2>
-              <p>首页的一键检查会执行固定的只读采集。这里可以继续生成排查命令或变更计划，但 LocalOps 当前不会替你执行任何会改变服务器的命令。</p>
+              <h2>命令与变更预案</h2>
+              <p>只读命令可以检查后复制；重载和重启只展示计划，当前版本不会执行。</p>
             </header>
             <div className="action-menu">
-              <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "生成检查命令"}</button>
-              <button disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />生成 Nginx 重载计划</button>
-              <button disabled={operationBusy} onClick={() => runDryAction("restart-compose-service")}><AlertTriangle size={17} />生成服务重启计划</button>
+              <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
+              <button className={dryRun?.actionKey === "reload-nginx" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />Nginx 重载</button>
+              <button className={dryRun?.actionKey === "restart-compose-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("restart-compose-service")}><AlertTriangle size={17} />重启服务</button>
             </div>
             <div className="detail-panel">
-              <h2>{dryRun?.title ?? "选择左侧操作，先生成计划"}</h2>
+              <h2>{dryRun ? dryRun.actionKey === "inspect-service" ? `只读检查：${selectedHost.name}` : dryRun.actionKey === "reload-nginx" ? `Nginx 重载预案：${selectedHost.name}` : `服务重启预案：${selectedHost.name}` : "选择一种操作"}</h2>
               {dryRun ? (
                 <>
                   <div className={`action-contract ${dryRun.executionState}`}>
@@ -1518,10 +1520,10 @@ export function App() {
                   </button>
                   <h3>验证步骤</h3>
                   <ul>{dryRun.verification.map((item) => <li key={item}>{item}</li>)}</ul>
-                  {!dryRun.copyAllowed ? (
+                  {dryRun.riskTier !== "read-only" ? (
                     <div className="danger-consent" role="note">
                       <AlertTriangle size={22} />
-                      <div><strong>这类命令会改变服务器</strong><p>当前版本只生成方案，不开放远程执行。接入执行后，也必须再次显示目标、完整命令、可能影响和回退方法，由你逐条确认。</p></div>
+                      <div><strong>这是会改变服务器的操作</strong><p>当前只生成预案，不开放远程执行。未来接入执行时，仍需再次显示目标、完整命令、影响和回退方法，由你逐条确认。</p></div>
                       <button disabled>执行通道未开启</button>
                     </div>
                   ) : null}

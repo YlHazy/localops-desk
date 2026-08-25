@@ -28,6 +28,16 @@ export function checkDecisionCopy(status) {
   return "本次证据不足，不能把服务器当作正常；应补充来源或重新检查。";
 }
 
+export function friendlyCheckSummary(value) {
+  const outcomeLabels = {
+    healthy: "本次未发现问题",
+    warning: "有需要关注的信号",
+    critical: "发现明确故障",
+    unknown: "仍有状态无法确认"
+  };
+  return value.replace(/总体状态：(healthy|warning|critical|unknown)/g, (_, status) => outcomeLabels[status]);
+}
+
 export function filterChecks(checks, filter) {
   if (filter === "attention") return checks.filter((check) => check.overallStatus !== "healthy");
   if (filter === "healthy") return checks.filter((check) => check.overallStatus === "healthy");
