@@ -39,7 +39,7 @@
     "test:evidence-readiness": "node --test src/evidence-readiness.test.mjs",
     "test:scheduler-outcome": "node --test src/scheduler-outcome.test.mjs",
     "test:check-history": "node --test src/check-history.test.mjs",
-    "test:judgment": "node --test shared/evidence-judgment.test.mjs src/guardian-guidance.test.mjs",
+    "test:judgment": "node --test shared/evidence-judgment.test.mjs shared/host-diagnosis.test.mjs src/guardian-guidance.test.mjs",
     "test:discussion-brief": "node --test src/discussion-brief.test.mjs",
     "test:operation-state": "node --test src/operation-state.test.mjs",
     "test:latest-request-gate": "node --test src/latest-request-gate.test.mjs"

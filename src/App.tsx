@@ -44,7 +44,7 @@ import { petNotificationCalibrationKey, petNotificationPreferenceKey, readNotifi
 import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
-import type { CheckDetail, CheckRun, DashboardStatus, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
+import type { CheckDetail, CheckRun, DashboardStatus, DiagnosisRun, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
 import { resourceSignalStatus, resourceSignalSummary } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
@@ -66,6 +66,16 @@ const emptyHostForm: HostConfigInput = {
   tags: []
 };
 
+const diagnosisLayerLabels: Record<DiagnosisRun["diagnosis"]["layer"], string> = {
+  connectivity: "连接链路",
+  entry: "网页/API",
+  resources: "资源",
+  runtime: "服务",
+  management: "SSH",
+  none: "未发现异常",
+  unknown: "暂未定位"
+};
+
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
 const onboardingPetUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
@@ -82,6 +92,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (error) {
     if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
       throw new Error(`本地 API ${Math.round(timeoutMs / 1000)} 秒内没有响应`);
+    }
+    if (error instanceof TypeError) {
+      throw new Error("无法连接本地 LocalOps 服务");
     }
     throw error;
   }
@@ -344,6 +357,8 @@ export function App() {
   const [lastCheckOutcome, setLastCheckOutcome] = useState<{ status: Status; summary: string; coverage: CollectionCoverage } | null>(null);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
   const [dryRunCopied, setDryRunCopied] = useState(false);
+  const [diagnosisResult, setDiagnosisResult] = useState<{ hostId: string; run: DiagnosisRun } | null>(null);
+  const [diagnosisError, setDiagnosisError] = useState("");
   const [report, setReport] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
@@ -706,8 +721,14 @@ export function App() {
   const operationState = operationUiState(pendingOperation);
   const operationBusy = operationState.busy;
   const checking = operationState.checking;
+  const diagnosing = operationState.diagnosing;
+  const selectedDiagnosis = diagnosisResult && diagnosisResult.hostId === selectedHost?.id ? diagnosisResult.run : null;
 
   function chooseFocusHost(hostId: string) {
+    if (hostId !== selectedHostId) {
+      setDiagnosisResult(null);
+      setDiagnosisError("");
+    }
     setSelectedHostId(manualFocusSelection(priorityHosts, hostId));
     setDetailsOpen(true);
     if (window.matchMedia("(max-width: 980px)").matches) {
@@ -925,6 +946,30 @@ export function App() {
         )}
       </main>
     );
+  }
+
+  async function runAutomaticDiagnosis() {
+    if (pendingOperation || !selectedHost || !selectedReadiness?.canCollect) return;
+    const hostId = selectedHost.id;
+    setPendingOperation("diagnosis");
+    setDiagnosisResult(null);
+    setDiagnosisError("");
+    setError("");
+    try {
+      const run = await api<DiagnosisRun>(`/api/diagnostics/${encodeURIComponent(hostId)}`, { method: "POST", body: "{}" });
+      setDiagnosisResult({ hostId, run });
+      try {
+        await load();
+      } catch (refreshError) {
+        setError(`排查完成，但读取新状态失败：${refreshError instanceof Error ? refreshError.message : "本地监控没有响应"}`);
+      }
+      setSelectedHostId(hostId);
+      setDetailsOpen(true);
+    } catch (err) {
+      setDiagnosisError(err instanceof Error ? err.message : "自动排查失败");
+    } finally {
+      setPendingOperation(null);
+    }
   }
 
   async function verifySchedulerNow() {
@@ -1195,20 +1240,35 @@ export function App() {
                 <div className="detail-head-actions"><StatusPill status={selectedHost.status} /><button className="detail-close" onClick={() => setDetailsOpen(false)} aria-label="关闭详情"><X size={18} /></button></div>
               </div>
               {selectedGuidance ? null : <p className="server-detail-summary">{selectedHost.summary}</p>}
-              {selectedHost.status === "healthy" || !selectedGuidance ? null : (
+              {diagnosing ? (
+                <section className="diagnosis-running" role="status">
+                  <RefreshCcw className="spin" size={19} />
+                  <div><strong>正在重新检查这台服务器</strong><p>检查网页、SSH、服务和资源；不会执行修复命令。</p></div>
+                </section>
+              ) : selectedDiagnosis ? (
+                <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
+                  <header><span><CheckCircle2 size={17} />自动排查完成</span><em>定位：{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
+                  <h3>{selectedDiagnosis.diagnosis.headline}</h3>
+                  <p>{selectedDiagnosis.diagnosis.detail}</p>
+                  <div><strong>建议</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
+                  <small>{selectedDiagnosis.safetyBoundary}</small>
+                </section>
+              ) : selectedHost.status === "healthy" || !selectedGuidance ? null : (
                 <section className={`server-diagnosis ${selectedHost.status}`} aria-label="状态说明">
                   <strong>{selectedGuidance.reason}</strong>
                   <p>{selectedGuidance.detail}</p>
                 </section>
               )}
+              {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>自动排查没有完成</strong><p>{diagnosisError}</p></span><button onClick={runAutomaticDiagnosis}>重试</button></div> : null}
               <dl className="server-facts">
                 <div><dt>网页/API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "证据已过期"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs}ms</span> : null}</dd></div>
                 <div><dt>SSH / Docker</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? friendlyDockerStatus(selectedHost.dockerStatus) : "旧值不作为当前状态"}</span></dd></div>
                 <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>资源</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `内存 ${selectedHost.memoryPercent ?? "—"}% · 磁盘 ${selectedHost.diskPercent ?? "—"}%` : "旧值不作为当前状态"}</span></dd></div>
               </dl>
               <div className="quick-actions">
-                <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>
-                {selectedHost.status === "healthy" ? null : <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>排查原因</button>}
+                {selectedHost.status !== "healthy" && selectedReadiness?.canCollect && !diagnosisError ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "自动排查中" : selectedDiagnosis ? "重新排查" : "自动排查"}</button> : <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>}
+                {selectedHost.status !== "healthy" && selectedReadiness?.canCollect && !selectedDiagnosis && !diagnosisError ? <button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}><RefreshCcw className={checking ? "spin" : undefined} size={16} />{checking ? "检查中" : "只重新检查"}</button> : null}
+                {selectedDiagnosis && selectedDiagnosis.diagnosis.layer !== "none" && selectedDiagnosis.diagnosis.layer !== "unknown" ? <button disabled={operationBusy} onClick={() => runDryAction("inspect-service")}>查看排查步骤</button> : null}
                 <button className="quiet-action" onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
               </div>
               <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
@@ -1646,7 +1706,7 @@ export function App() {
             <details className="agent-api-details">
               <summary><span><strong>本地 API</strong><small>供自有脚本和集成开发使用</small></span><em>开发者</em></summary>
               <div className="api-grid">
-                {["GET /api/status", "POST /api/checks/light", "POST /api/checks/light/:hostId", "GET /api/scheduler", "PUT /api/scheduler", "POST /api/maintenance/retention", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest", "GET /api/agent/status"].map((item) => <code key={item}>{item}</code>)}
+                {["GET /api/status", "POST /api/checks/light", "POST /api/checks/light/:hostId", "POST /api/diagnostics/:hostId", "GET /api/scheduler", "PUT /api/scheduler", "POST /api/maintenance/retention", "POST /api/actions/dry-run", "GET /api/reports/current", "GET /api/agent/manifest", "GET /api/agent/status"].map((item) => <code key={item}>{item}</code>)}
               </div>
             </details>
           </section>

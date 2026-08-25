@@ -129,3 +129,29 @@ export interface DryRunAction {
   verification: string[];
   blockedReason?: string;
 }
+
+export interface DiagnosisSignal {
+  key: "http" | "ssh" | "runtime" | "resource";
+  label: string;
+  status: Status;
+  text: string;
+}
+
+export interface AutomaticDiagnosis {
+  layer: "connectivity" | "entry" | "resources" | "runtime" | "management" | "none" | "unknown";
+  confidence: "high" | "medium" | "limited";
+  headline: string;
+  detail: string;
+  next: string;
+  signals: DiagnosisSignal[];
+}
+
+export interface DiagnosisRun {
+  checkedAt: string;
+  checkId: number;
+  runId: string;
+  status: Status;
+  durationMs: number;
+  diagnosis: AutomaticDiagnosis;
+  safetyBoundary: string;
+}

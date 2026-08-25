@@ -29,6 +29,7 @@ LocalOps Desk provides a local cockpit that makes routine inspection and low-ris
 - Host detail page with resource summaries and recent events.
 - Check history with collection timestamps and duration.
 - Diagnostic report generated from latest checks.
+- One-click host diagnosis that rechecks the selected server and explains the likely failing layer without executing repair commands.
 - Dry-run action panel for safe operational plans.
 - Local Agent API manifest.
 

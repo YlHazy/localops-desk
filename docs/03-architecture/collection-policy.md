@@ -34,6 +34,16 @@ Collect:
 - Database size and connection summary through a safe read-only helper.
 - Dependency probe summary.
 
+### Automatic Diagnosis
+
+Manual and host-scoped. The user must click **自动排查** for one selected server.
+
+- Re-runs the existing bounded light check for that server only.
+- Uses deterministic local rules to locate the first failing layer: entry, connectivity, SSH, runtime, or resources.
+- Returns only categorized signals, percentages, a plain-language finding, and a safe next step; it does not return server identity or raw evidence in the diagnosis object.
+- Records the underlying check with `trigger=manual-diagnosis` so the result remains auditable.
+- Never runs repair commands. Read-only command steps remain a separate preview, and mutating plans remain blocked templates.
+
 ### Manual Refresh
 
 Runs immediately when the user clicks refresh, but still respects timeouts, concurrency, and log limits.

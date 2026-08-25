@@ -90,6 +90,22 @@ test("expired evidence stays out of the current overview and pet glance", () => 
   assert.match(petSource, /snapshotTrust\.state === "stale" \? "证据已过期"/);
 });
 
+test("server detail runs one bounded automatic diagnosis before offering command steps", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  const diagnosisSource = readFileSync(new URL("../shared/host-diagnosis.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /\/api\/diagnostics\/\$\{encodeURIComponent\(hostId\)\}/);
+  assert.match(appSource, /正在重新检查这台服务器/);
+  assert.match(appSource, /不会执行修复命令/);
+  assert.match(appSource, /自动排查完成/);
+  assert.match(appSource, /无法连接本地 LocalOps 服务/);
+  assert.match(appSource, /查看排查步骤/);
+  assert.match(serverSource, /trigger: "manual-diagnosis"/);
+  assert.match(serverSource, /diagnoseHost\(hostResult\)/);
+  assert.match(serverSource, /没有执行重启、清理、部署或配置变更/);
+  assert.doesNotMatch(diagnosisSource, /host\.name|host\.healthUrl|host\.sshAlias|host\.composeProject|host\.evidence/);
+});
+
 test("pet local disconnect routes the main action to local recovery", () => {
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const petStyles = readFileSync(new URL("../src/pet-v2.css", import.meta.url), "utf8");
@@ -238,6 +254,7 @@ test("desk, pet, runtime, and portable build share one resource judgment contrac
   assert.match(petSource, /hostGuidance\(priorityHost, priorityFresh\)/);
   assert.match(runtimeSource, /classifyCollectedStatus\(http\.status, ssh\)/);
   assert.match(portableSource, /shared\/evidence-judgment\.mjs/);
+  assert.match(portableSource, /shared\/host-diagnosis\.mjs/);
 });
 
 test("desk and pet share automatic priority focus instead of trusting API row order", () => {

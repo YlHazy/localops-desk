@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
+import { diagnoseHost } from "../shared/host-diagnosis.mjs";
 import { collectHost, demoHosts, readOnlySshPreview, sanitizeError } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
@@ -680,6 +681,27 @@ async function runLightCheck(options = {}) {
   }
 }
 
+async function runAutomaticDiagnosis(hostId) {
+  const check = await runLightCheck({ hostId, trigger: "manual-diagnosis" });
+  const hostResult = check.hostResults[0];
+  if (!hostResult) {
+    const error = new Error(`Host diagnosis produced no result: ${hostId}`);
+    error.code = "DIAGNOSIS_EMPTY";
+    error.httpStatus = 409;
+    throw error;
+  }
+  const diagnosis = diagnoseHost(hostResult);
+  return {
+    checkedAt: new Date().toISOString(),
+    checkId: check.id,
+    runId: check.runId,
+    status: check.status,
+    durationMs: check.durationMs,
+    diagnosis,
+    safetyBoundary: "本次只重新检查并分析状态；没有执行重启、清理、部署或配置变更。"
+  };
+}
+
 function recentChecks() {
   return db.prepare(`
     SELECT id, kind, trigger, hostScope, startedAt, finishedAt, durationMs, overallStatus, summary
@@ -1077,6 +1099,7 @@ function agentManifest() {
       { method: "DELETE", path: "/api/hosts/:id", description: "Delete a local host configuration." },
       { method: "POST", path: "/api/checks/light", description: "Run a bounded light check." },
       { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
+      { method: "POST", path: "/api/diagnostics/:hostId", description: "Recheck one host and return a deterministic, identity-free diagnosis." },
       { method: "GET", path: "/api/checks/:id", description: "Read one sanitized local check receipt and its host evidence." },
       { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
       { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
@@ -1167,6 +1190,11 @@ const server = createServer(async (req, res) => {
         hostId: decodeURIComponent(lightHostMatch[1]),
         trigger: "manual-host"
       }));
+    }
+    const diagnosisHostMatch = url.pathname.match(/^\/api\/diagnostics\/([^/]+)$/);
+    if (diagnosisHostMatch && req.method === "POST") {
+      await readBody(req);
+      return json(res, await runAutomaticDiagnosis(decodeURIComponent(diagnosisHostMatch[1])));
     }
     if (req.method === "POST" && url.pathname === "/api/checks/deep") {
       return json(res, {

@@ -260,6 +260,36 @@ test("offline practice is explicit, exclusive, network-free, and fully removable
   assert.doesNotMatch(manifest, /practice\/offline/);
 });
 
+test("automatic diagnosis rechecks one offline host and returns an identity-free cause", async (t) => {
+  const api = await startApi(t);
+  await fetch(`${api.base}/api/practice/offline`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+
+  const response = await fetch(`${api.base}/api/diagnostics/localops-sample-warning`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.status, "warning");
+  assert.equal(result.diagnosis.layer, "resources");
+  assert.equal(result.diagnosis.confidence, "high");
+  assert.match(result.diagnosis.headline, /磁盘 76%/);
+  assert.match(result.safetyBoundary, /没有执行重启、清理、部署或配置变更/);
+  assert.ok(result.checkId > 0);
+  assert.ok(result.runId);
+  const resultText = JSON.stringify(result);
+  assert.doesNotMatch(resultText, /hostId|hostName|sshAlias|healthUrl|composeProject|evidence/);
+
+  const checks = await fetch(`${api.base}/api/checks`).then((item) => item.json());
+  assert.equal(checks.checks[0].trigger, "manual-diagnosis");
+  assert.equal(checks.checks[0].hostScope, "localops-sample-warning");
+});
+
 test("batch checks collect only usable hosts and report skipped coverage honestly", async (t) => {
   const api = await startApi(t);
   const create = async (body) => fetch(`${api.base}/api/hosts`, {

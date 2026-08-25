@@ -1,4 +1,4 @@
-const supportedOperations = new Set(["check", "scheduler", "retention", "action", "host-save", "host-delete"]);
+const supportedOperations = new Set(["check", "diagnosis", "scheduler", "retention", "action", "host-save", "host-delete"]);
 
 export function operationUiState(pendingOperation) {
   if (pendingOperation != null && !supportedOperations.has(pendingOperation)) {
@@ -7,6 +7,7 @@ export function operationUiState(pendingOperation) {
   return {
     busy: pendingOperation != null,
     checking: pendingOperation === "check",
+    diagnosing: pendingOperation === "diagnosis",
     savingScheduler: pendingOperation === "scheduler",
     retaining: pendingOperation === "retention",
     preparingAction: pendingOperation === "action",

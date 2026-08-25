@@ -11,6 +11,7 @@ It is intentionally not a SaaS product. The app runs on `127.0.0.1`, stores summ
 - Host configuration with SSH alias, environment, health URL, and Docker Compose project name.
 - Status overview, host detail, check history, dry-run action panel, and diagnostic report.
 - Evidence-first Guardian Brief with HTTP, SSH, runtime, and next-action reasoning stages.
+- One-click automatic diagnosis reruns only the selected host's bounded light check, identifies the likely failure layer from sanitized evidence, and suggests a safe next step without running a repair command.
 - First Watch onboarding makes the zero-target, zero-connection default visible before the first host is saved; connection evidence stays opt-in.
 - After the first host is saved, the desk returns to the overview and shows a four-stage Watch Path: register a server, obtain evidence, enable automatic checks, then optionally add the desktop/login companion.
 - The Watch Settings (`值守设置`) page turns those distributed controls into one three-stage daily-watch relay: evidence source, automatic rhythm, and native desktop attention. The last layer completes only after the user confirms a test reminder was actually visible, and a browser preview never counts as a desktop notification channel.
