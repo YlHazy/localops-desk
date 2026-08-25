@@ -142,6 +142,24 @@ export function PetMode({
   const [topmostPending, setTopmostPending] = useState(false);
   const [topmostNote, setTopmostNote] = useState(topmostSupported ? "正在确认桌面置顶状态。" : "从 Windows 启动器打开后可使用桌面置顶。");
 
+  useEffect(() => {
+    const refreshNotificationState = () => {
+      setNotificationsEnabled(notificationsSupported
+        && (desktopNotifications || Notification.permission === "granted")
+        && readNotificationPreference(window.localStorage));
+      setNotificationCalibrated(readNotificationCalibration(window.localStorage));
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key == null || event.key === "localops.pet.notifications" || event.key === "localops.pet.notifications-calibrated") refreshNotificationState();
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", refreshNotificationState);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", refreshNotificationState);
+    };
+  }, [desktopNotifications, notificationsSupported]);
+
   const applyTopmost = useCallback(async (enabled: boolean, persistPreference = true) => {
     if (!isPetSessionId(petSessionId)) return;
     setTopmostPending(true);

@@ -39,7 +39,7 @@ import type { PendingOperation } from "./operation-state.mjs";
 import { petDeskIntent, petDeskPath } from "./pet-navigation.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petModePath } from "./pet-presence.mjs";
-import { petNotificationCalibrationKey, petNotificationPreferenceKey, readNotificationCalibration, readNotificationPreference } from "./pet-watch.mjs";
+import { petNotificationCalibrationKey, petNotificationPreferenceKey, readNotificationCalibration, readNotificationPreference, writeNotificationCalibration, writeNotificationPreference } from "./pet-watch.mjs";
 import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
@@ -332,6 +332,8 @@ export function App() {
   const [startupLoading, setStartupLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => readNotificationPreference(window.localStorage));
   const [notificationsCalibrated, setNotificationsCalibrated] = useState(() => readNotificationCalibration(window.localStorage));
+  const [notificationTestState, setNotificationTestState] = useState<"idle" | "sending" | "confirm" | "failed">("idle");
+  const [notificationNote, setNotificationNote] = useState("");
   const [schedulerForm, setSchedulerForm] = useState({ enabled: false, lightIntervalMinutes: 15, retentionDays: 7 });
   const [retentionResult, setRetentionResult] = useState<RetentionResult | null>(null);
   const [briefCopied, setBriefCopied] = useState(false);
@@ -549,6 +551,47 @@ export function App() {
     }
     const pet = window.open(petModePath(crypto.randomUUID(), "existing"), "localops-pet", "popup=yes,width=360,height=620,resizable=yes");
     if (!pet) setError("浏览器阻止了桌宠窗口。请允许本地页面弹出窗口，或运行 npm run pet:window。");
+  }
+
+  async function startNotificationCalibration() {
+    if (!window.localOpsDesktop || notificationTestState === "sending") return;
+    setNotificationTestState("sending");
+    setNotificationNote("");
+    writeNotificationPreference(window.localStorage, true);
+    writeNotificationCalibration(window.localStorage, false);
+    setNotificationsEnabled(true);
+    setNotificationsCalibrated(false);
+    try {
+      const delivery = await window.localOpsDesktop.showNotification({ kind: "test" });
+      if (!delivery.accepted) {
+        setNotificationTestState("failed");
+        setNotificationNote(delivery.message);
+        return;
+      }
+      setNotificationTestState("confirm");
+      setNotificationNote("测试提醒已经交给 Windows。请按你实际看到的结果确认。");
+    } catch {
+      setNotificationTestState("failed");
+      setNotificationNote("没有发出测试提醒。请确认桌面程序仍在运行，再重试。");
+    }
+  }
+
+  function finishNotificationCalibration(seen: boolean) {
+    const saved = writeNotificationCalibration(window.localStorage, seen);
+    setNotificationsCalibrated(seen && saved);
+    setNotificationTestState(seen && saved ? "idle" : "failed");
+    setNotificationNote(seen
+      ? saved ? "桌面提醒已开启。以后只在状态变差时提醒。" : "看到了提醒，但设置没有保存。"
+      : "没有看到提醒。请检查 Windows 通知和专注助手设置后再试一次。");
+  }
+
+  function disableNotifications() {
+    writeNotificationPreference(window.localStorage, false);
+    writeNotificationCalibration(window.localStorage, false);
+    setNotificationsEnabled(false);
+    setNotificationsCalibrated(false);
+    setNotificationTestState("idle");
+    setNotificationNote("桌面提醒已关闭；定时检查不会受影响。");
   }
 
   const openDeskFromPet = useCallback(async (hostId?: string, tab: PetDeskTab = "overview", source: "pet" | "pet-alert" = "pet") => {
@@ -1321,43 +1364,34 @@ export function App() {
 
         {selectedTab === "scheduler" && (
           <section className="scheduler-layout">
-            <section className={`watch-readiness-board ${watchSetup.complete ? "complete" : "calibrating"}`} aria-labelledby="watch-readiness-title">
+            <section className={`watch-readiness-summary ${watchSetup.complete ? "complete" : ""}`} aria-labelledby="watch-readiness-title">
               <header>
                 <div>
-                  <span className="topbar-kicker">DAILY WATCH / 值守接力</span>
-                  <h2 id="watch-readiness-title">把一次检查，接成持续有人盯</h2>
+                  <h2 id="watch-readiness-title">提醒与值守</h2>
                   <p>{watchSetup.detail}</p>
                 </div>
-                <output aria-label={`值守链路已完成 ${watchSetup.readyCount} 项，共 ${watchSetup.total} 项`}>
-                  <strong>{watchSetup.readyCount}</strong><span>/ {watchSetup.total}</span><small>{watchSetup.headline}</small>
-                </output>
+                <output>{watchSetup.readyCount} / {watchSetup.total} 已完成</output>
               </header>
-              <div className="watch-relay" aria-label="值守接力步骤">
-                {watchSetup.items.map((item, index) => {
+              <div className="watch-checklist" aria-label="值守设置检查">
+                {watchSetup.items.map((item) => {
                   const Icon = item.key === "evidence" ? ShieldCheck : item.key === "rhythm" ? Clock3 : Bell;
                   return (
-                    <article className={`watch-relay-card ${item.tone}`} key={item.key}>
-                      <span className="watch-relay-index">0{index + 1}</span>
+                    <article className={`watch-check ${item.tone}`} key={item.key}>
                       <Icon size={19} aria-hidden="true" />
                       <div><strong>{item.label}</strong><p>{item.detail}</p></div>
                       {item.ready ? (
-                        <span className="watch-relay-ready"><CheckCircle2 size={14} />已接通</span>
+                        <span className="watch-check-ready"><CheckCircle2 size={14} />已完成</span>
                       ) : (
                         <button onClick={() => {
                           if (item.key === "evidence") setSelectedTab("hosts");
                           else if (item.key === "rhythm") document.getElementById("scheduler-controls")?.focus();
-                          else openPetWindow();
+                          else document.getElementById("notification-controls")?.focus();
                         }}>{item.actionLabel}</button>
                       )}
                     </article>
                   );
                 })}
               </div>
-              <footer>
-                <span><MonitorUp size={14} />{desktopRuntime ? "桌面宿主已连接" : "浏览器仅供预览"}</span>
-                <span><ShieldCheck size={14} />查看设置不会发起服务器连接</span>
-                <span><Clock3 size={14} />{startup?.enabled ? "登录后会自动接力" : startup?.status === "conflict" ? "登录启动存在冲突" : "登录启动为可选项"}</span>
-              </footer>
             </section>
             <div className="detail-panel" id="scheduler-controls" tabIndex={-1}>
               <div className="detail-head">
@@ -1369,7 +1403,7 @@ export function App() {
               </div>
               <section className={`coverage-ledger ${batchCoverage.collectible === 0 ? "blocked" : batchCoverage.blocked ? "partial" : "complete"}`} aria-label="自动巡检证据覆盖">
                 <div className="coverage-ledger-head">
-                  <div><span>EVIDENCE COVERAGE / 证据覆盖</span><strong>{batchCoverage.collectible} / {batchCoverage.total} 台可巡检</strong></div>
+                  <div><span>自动检查范围</span><strong>{batchCoverage.collectible} / {batchCoverage.total} 台可巡检</strong></div>
                   <em>{batchCoverage.blocked === 0 ? "全部覆盖" : `${batchCoverage.blocked} 台将跳过`}</em>
                 </div>
                 <div className="coverage-track" aria-hidden="true"><span style={{ width: `${batchCoverage.total ? Math.round(batchCoverage.collectible / batchCoverage.total * 100) : 0}%` }} /></div>
@@ -1415,10 +1449,30 @@ export function App() {
                 <button disabled={operationBusy} onClick={() => runRetention(false)}>{operationState.retaining ? "清理中" : "执行保留期清理"}</button>
                 <button disabled={operationBusy} onClick={() => runRetention(true)}>{operationState.retaining ? "清理中" : "清理并压缩 SQLite"}</button>
               </div>
+              <section className={`notification-controls ${notificationsCalibrated ? "enabled" : ""}`} id="notification-controls" tabIndex={-1}>
+                <div>
+                  <Bell size={19} aria-hidden="true" />
+                  <span><strong>桌面提醒</strong><small>{!desktopRuntime ? "只在桌面版可用" : notificationsCalibrated ? "已确认可以收到" : notificationsEnabled ? "已开启，等待测试确认" : "状态变差时提醒你"}</small></span>
+                </div>
+                {!desktopRuntime ? (
+                  <button disabled>浏览器预览不可设置</button>
+                ) : notificationTestState === "confirm" ? (
+                  <div className="notification-confirm">
+                    <span>刚才看到测试提醒了吗？</span>
+                    <button className="primary slim" onClick={() => finishNotificationCalibration(true)}>看到了</button>
+                    <button className="secondary slim" onClick={() => finishNotificationCalibration(false)}>没看到</button>
+                  </div>
+                ) : (
+                  <div className="notification-actions">
+                    <button className="primary slim" disabled={notificationTestState === "sending"} onClick={startNotificationCalibration}>{notificationTestState === "sending" ? "正在测试" : notificationsCalibrated ? "重新测试" : "开启并测试"}</button>
+                    {notificationsEnabled ? <button className="secondary slim" onClick={disableNotifications}>关闭提醒</button> : null}
+                  </div>
+                )}
+                {notificationNote ? <p className={notificationTestState === "failed" ? "error" : ""}>{notificationNote}</p> : null}
+              </section>
               <section className={`startup-watch ${startup?.enabled ? "enabled" : startup?.status ?? "unknown"}`}>
                 <div className="startup-watch-head">
                   <div>
-                    <span className="topbar-kicker">LOGIN WATCH / 登录后值守</span>
                     <h3>登录 Windows 后自动打开桌宠</h3>
                   </div>
                   <StatusPill status={startup?.enabled ? "healthy" : startup?.status === "conflict" ? "warning" : "unknown"} />

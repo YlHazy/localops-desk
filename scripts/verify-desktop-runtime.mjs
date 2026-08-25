@@ -18,22 +18,28 @@ const child = spawn(executable, ["--smoke-check"], {
   cwd: root,
   env: { ...process.env, LOCALOPS_SMOKE_REPORT: reportPath, LOCALOPS_SMOKE_PROFILE: profilePath },
   windowsHide: true,
-  stdio: "ignore"
+  stdio: ["ignore", "pipe", "pipe"]
 });
-child.unref();
+let childStdout = "";
+let childStderr = "";
+child.stdout?.on("data", (chunk) => { childStdout += chunk.toString(); });
+child.stderr?.on("data", (chunk) => { childStderr += chunk.toString(); });
+const childExit = new Promise((resolveExit) => child.once("exit", (code, signal) => resolveExit({ code, signal })));
 
 let report = null;
-for (let attempt = 0; attempt < 80; attempt += 1) {
+for (let attempt = 0; attempt < 240; attempt += 1) {
   try {
     report = JSON.parse(await readFile(reportPath, "utf8"));
     break;
   } catch {
+    if (child.exitCode != null) break;
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
 }
 
 if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.apiOwnership !== "owned" || report.runtime !== "desktop" || report.title !== "LocalOps Guardian" || report.hasApp !== true || report.bridgeState?.desktop !== true || report.bridgeState?.closeBehavior !== "tray" || report.bridgeState?.topmost !== true || report.hasNotificationBridge !== true || report.rejectsUnsafeNotification !== true || report.hasTray !== true || report.hiddenToTray !== true || report.closeNoticePersisted !== true) {
-  throw new Error(`Packaged desktop smoke check did not confirm the renderer: ${JSON.stringify(report)}`);
+  const exit = child.exitCode == null ? null : await childExit;
+  throw new Error(`Packaged desktop smoke check did not confirm the renderer: ${JSON.stringify({ report, exit, stdout: childStdout.slice(-2000), stderr: childStderr.slice(-4000) })}`);
 }
 
 let processExited = false;

@@ -122,7 +122,9 @@ test("value watch settings derive a three-layer relay from bounded local state",
   const watchSource = readFileSync(new URL("../src/watch-readiness.mjs", import.meta.url), "utf8");
   const preferenceSource = readFileSync(new URL("../src/pet-watch.mjs", import.meta.url), "utf8");
   assert.match(appSource, /\["scheduler", Settings2, "提醒与值守"\]/);
-  assert.match(appSource, /DAILY WATCH \/ 值守接力/);
+  assert.match(appSource, /watch-readiness-summary/);
+  assert.match(appSource, /开启并测试/);
+  assert.match(appSource, /finishNotificationCalibration/);
   assert.match(appSource, /readNotificationPreference\(window\.localStorage\)/);
   assert.match(appSource, /readNotificationCalibration\(window\.localStorage\)/);
   assert.match(appSource, /event\.key === petNotificationPreferenceKey/);

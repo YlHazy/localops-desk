@@ -1438,54 +1438,20 @@ th {
   align-items: start;
 }
 
-.watch-readiness-board {
-  position: relative;
-  grid-column: 1 / -1;
-  overflow: hidden;
-  padding: 21px 22px 16px;
-  border: 1px solid #cbded9;
-  border-radius: 12px;
-  background: linear-gradient(118deg, #f4faf8 0%, #ffffff 58%, #f3f7f6 100%);
-  box-shadow: 0 16px 38px rgba(38, 72, 68, .06);
-}
-.watch-readiness-board::after {
-  position: absolute;
-  top: -54px;
-  right: -35px;
-  width: 170px;
-  height: 170px;
-  border: 24px solid rgba(36, 121, 111, .045);
-  border-radius: 50%;
-  content: "";
-  pointer-events: none;
-}
-.watch-readiness-board > header { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
-.watch-readiness-board h2 { margin: 7px 0 5px; font: 700 clamp(22px, 2.7vw, 34px)/1.05 Bahnschrift, "Segoe UI Variable Display", sans-serif; letter-spacing: -.035em; }
-.watch-readiness-board header p { max-width: 660px; margin: 0; color: #60717b; font-size: 12px; line-height: 1.55; }
-.watch-readiness-board output { display: grid; grid-template-columns: auto auto; align-items: baseline; min-width: 142px; padding: 11px 13px; border-left: 3px solid #cf8731; background: rgba(255,255,255,.7); color: #53636c; }
-.watch-readiness-board.complete output { border-left-color: #1b7f73; }
-.watch-readiness-board output strong { color: #173c38; font: 750 30px/1 Bahnschrift, "Segoe UI Variable Display", sans-serif; }
-.watch-readiness-board output > span { margin-left: 3px; color: #718089; font: 700 13px/1 Consolas, monospace; }
-.watch-readiness-board output small { grid-column: 1 / -1; margin-top: 5px; font-size: 10px; font-weight: 800; }
-
-.watch-relay { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
-.watch-relay::before { position: absolute; top: 23px; left: 9%; right: 9%; height: 1px; background: #bad2cc; content: ""; }
-.watch-relay-card { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; min-width: 0; min-height: 145px; padding: 14px; border: 1px solid #d8e4e1; border-top: 4px solid #869aa1; background: rgba(255,255,255,.9); }
-.watch-relay-card.ready { border-top-color: #1b7f73; }
-.watch-relay-card.attention, .watch-relay-card.waiting { border-top-color: #cf8731; }
-.watch-relay-card.blocked { border-top-color: #b94b45; }
-.watch-relay-card.preview { border-top-color: #6f8795; }
-.watch-relay-index { position: relative; z-index: 1; grid-column: 1 / -1; justify-self: start; padding: 3px 6px; border: 1px solid #cededb; background: #f7fbfa; color: #51716c; font: 800 9px/1 Consolas, monospace; letter-spacing: .08em; }
-.watch-relay-card > svg { margin-top: 2px; color: #24796f; }
-.watch-relay-card > div { min-width: 0; }
-.watch-relay-card > div strong { display: block; color: #263942; font-size: 13px; }
-.watch-relay-card > div p { margin: 5px 0 0; color: #657680; font-size: 10px; line-height: 1.55; }
-.watch-relay-card > button, .watch-relay-ready { grid-column: 1 / -1; align-self: end; justify-self: start; }
-.watch-relay-card > button { padding: 6px 8px; border: 1px solid #bcd2cd; border-radius: 7px; background: #f5faf9; color: #176c62; font-size: 10px; font-weight: 800; }
-.watch-relay-ready { display: inline-flex; align-items: center; gap: 5px; color: #1b7469; font-size: 10px; font-weight: 850; }
-.watch-readiness-board > footer { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 13px; padding-top: 11px; border-top: 1px solid #d9e6e2; color: #60727b; font-size: 10px; }
-.watch-readiness-board > footer span { display: inline-flex; align-items: center; gap: 5px; }
-.watch-readiness-board > footer svg { color: #24796f; }
+.watch-readiness-summary { grid-column: 1 / -1; padding: 20px; border: 1px solid #d9e2df; border-radius: 16px; background: #fff; }
+.watch-readiness-summary > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.watch-readiness-summary h2 { margin: 0 0 5px; font-size: 22px; letter-spacing: -.02em; }
+.watch-readiness-summary header p { margin: 0; color: #60717b; font-size: 12px; }
+.watch-readiness-summary output { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; background: #fff4df; color: #76511f; font-size: 12px; font-weight: 750; }
+.watch-readiness-summary.complete output { background: #e8f6f2; color: #17695f; }
+.watch-checklist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.watch-check { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: 0; padding: 12px; border: 1px solid #e1e7e5; border-radius: 10px; background: #fafbfb; }
+.watch-check > svg { color: #51716c; }
+.watch-check > div { min-width: 0; }
+.watch-check strong { display: block; color: #263942; font-size: 13px; }
+.watch-check p { margin: 3px 0 0; color: #687981; font-size: 11px; line-height: 1.4; }
+.watch-check > button { padding: 6px 8px; white-space: nowrap; font-size: 11px; }
+.watch-check-ready { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: #1b7469; font-size: 11px; font-weight: 750; }
 
 .scheduler-grid {
   display: grid;
@@ -1524,6 +1490,30 @@ th {
   background: #dff7eb;
   color: #14633f;
 }
+
+.notification-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 18px;
+  align-items: center;
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #d8e1df;
+  border-left: 4px solid #9aa9ad;
+  border-radius: 12px;
+  background: #fbfcfc;
+}
+
+.notification-controls.enabled { border-left-color: #1b7f73; }
+.notification-controls > div:first-child { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.notification-controls > div:first-child > svg { flex: 0 0 auto; color: #42645f; }
+.notification-controls span { display: grid; gap: 3px; }
+.notification-controls strong { font-size: 14px; }
+.notification-controls small { color: #657680; font-size: 12px; font-weight: 500; }
+.notification-actions, .notification-confirm { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.notification-confirm > span { color: #35484d; font-size: 12px; font-weight: 700; }
+.notification-controls > p { grid-column: 1 / -1; margin: 0; color: #53656d; font-size: 12px; }
+.notification-controls > p.error { color: #a33f3a; }
 
 .coverage-ledger {
   display: grid;
@@ -1822,13 +1812,11 @@ code {
   }
   .coverage-ledger-head { flex-direction: column; }
   .coverage-stats { grid-template-columns: 1fr; }
-  .watch-readiness-board { padding: 18px 16px 14px; }
-  .watch-readiness-board > header { flex-direction: column; }
-  .watch-readiness-board output { width: 100%; }
-  .watch-relay { grid-template-columns: 1fr; }
-  .watch-relay::before { top: 8%; bottom: 8%; left: 26px; right: auto; width: 1px; height: auto; }
-  .watch-relay-card { min-height: 126px; }
-  .watch-readiness-board > footer { display: grid; }
+  .watch-readiness-summary { padding: 16px; }
+  .watch-readiness-summary > header { flex-direction: column; }
+  .watch-checklist { grid-template-columns: 1fr; }
+  .notification-controls { grid-template-columns: 1fr; }
+  .notification-actions, .notification-confirm { justify-content: flex-start; flex-wrap: wrap; }
   .scheduler-outcome-head { align-items: flex-start; flex-direction: column; }
   .scheduler-outcome-facts { grid-template-columns: 1fr; }
   .history-workbench { padding: 14px; }
