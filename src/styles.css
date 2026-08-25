@@ -2055,6 +2055,23 @@ code {
 .automatic-diagnosis > div strong { color: #394b44; font-size: 13px; }
 .automatic-diagnosis > div p { margin: 4px 0 0; color: #35463f; font-size: 14px; line-height: 1.5; }
 .automatic-diagnosis > small { display: block; margin-top: 11px; color: #748079; font-size: 12.5px; line-height: 1.45; }
+.diagnostic-proof { margin: -5px 0 18px; padding: 15px 0; border-top: 1px solid #dfe6e2; border-bottom: 1px solid #dfe6e2; }
+.diagnostic-proof header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.diagnostic-proof header strong { color: #2a3732; font-size: 15px; line-height: 1.4; }
+.diagnostic-proof header span { flex: 0 0 auto; color: #77827d; font: 700 11px/1.3 Consolas, monospace; }
+.diagnostic-proof > p { margin: 5px 0 0; color: #65716c; font-size: 13px; line-height: 1.5; }
+.diagnostic-proof-list { margin-top: 12px; }
+.diagnostic-proof-list > div { display: grid; grid-template-columns: 84px minmax(74px, auto) minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 0; border-top: 1px solid #e7ebe9; }
+.diagnostic-proof-list span { color: #66726d; font-size: 14px; }
+.diagnostic-proof-list strong { color: #2d3a35; font-size: 14px; }
+.diagnostic-proof-list .warning strong { color: #986315; }
+.diagnostic-proof-list .critical strong { color: #ad3d37; }
+.diagnostic-proof-list p { margin: 0; color: #6e7974; font-size: 13px; line-height: 1.45; }
+.diagnostic-proof details { margin-top: 10px; }
+.diagnostic-proof summary { color: #52635c; font-size: 13px; cursor: pointer; }
+.diagnostic-proof pre { max-height: 180px; margin: 8px 0 0; padding: 12px; overflow: auto; border-radius: 8px; background: #18211e; color: #d9e5df; font: 12px/1.55 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diagnostic-proof > small { display: block; margin-top: 10px; color: #7b8580; font-size: 12px; line-height: 1.45; }
+.diagnostic-proof.unavailable { padding-bottom: 12px; }
 .diagnosis-error { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; margin: 18px 0; padding: 13px 14px; border: 1px solid #edc9c5; border-radius: 12px; background: #fff7f5; color: #8f403b; }
 .diagnosis-error > svg { margin-top: 2px; }
 .diagnosis-error strong { display: block; font-size: 14px; }
@@ -2085,6 +2102,8 @@ code {
   .host-glance span:first-child { grid-column: 1 / -1; }
   .home-grid .main-detail { inset: 0; width: 100%; padding: 20px 18px; border: 0; border-radius: 0; }
   .automatic-diagnosis header { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .diagnostic-proof-list > div { grid-template-columns: 1fr auto; }
+  .diagnostic-proof-list p { grid-column: 1 / -1; }
   .diagnosis-error { grid-template-columns: auto minmax(0, 1fr); }
   .diagnosis-error button { grid-column: 2; justify-self: start; }
   .server-facts > div { grid-template-columns: 1fr; gap: 4px; padding: 11px 0; }

@@ -60,7 +60,11 @@ Runs the same bounded light check for one configured host and records the run as
 
 `POST /api/checks/deep`
 
-MVP returns a dry-run deep-check plan.
+Compatibility endpoint for a host-scoped automatic diagnosis. Requires `hostId`, reruns the bounded light check, and then reads only the same layer-specific deep evidence as `/api/diagnostics/:hostId`.
+
+`POST /api/diagnostics/:hostId`
+
+Runs one user-triggered host-scoped automatic diagnosis. The categorized diagnosis remains identity-free; the local UI response may additionally contain sanitized, bounded internal evidence. The endpoint is deliberately absent from the Agent manifest.
 
 ## Scheduler
 

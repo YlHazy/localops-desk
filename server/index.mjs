@@ -6,7 +6,8 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
 import { diagnoseHost } from "../shared/host-diagnosis.mjs";
-import { collectHost, demoHosts, readOnlySshPreview, sanitizeError } from "./runtime.mjs";
+import { collectDeepEvidence } from "./deep-diagnostics.mjs";
+import { collectHost, demoHosts, readOnlySshPreview, runDeepSshReadOnly, sanitizeError } from "./runtime.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { petWindowCapability, setPetWindowTopmost } from "./pet-window.mjs";
@@ -604,12 +605,15 @@ function conflictingLightCheck(scope) {
   return activeLightChecks.get("all") || activeLightChecks.get(scope) || null;
 }
 
-async function runLightCheck(options = {}) {
+async function runLightCheck(options = {}, retainedLock = null) {
   const scope = options.hostId || "all";
-  const active = conflictingLightCheck(scope);
-  if (active) throw new CheckAlreadyRunningError(active);
-  const activeRun = { runId: randomUUID(), scope };
-  activeLightChecks.set(scope, activeRun);
+  const ownsLock = retainedLock == null;
+  if (ownsLock) {
+    const active = conflictingLightCheck(scope);
+    if (active) throw new CheckAlreadyRunningError(active);
+  }
+  const activeRun = retainedLock || { runId: randomUUID(), scope };
+  if (ownsLock) activeLightChecks.set(scope, activeRun);
   try {
     const startedAt = new Date();
     const allHosts = getHosts();
@@ -677,29 +681,51 @@ async function runLightCheck(options = {}) {
 
     return { id: Number(run.lastInsertRowid), runId: activeRun.runId, status, summary, durationMs, coverage, hostResults };
   } finally {
-    activeLightChecks.delete(scope);
+    if (ownsLock) activeLightChecks.delete(scope);
   }
 }
 
 async function runAutomaticDiagnosis(hostId) {
-  const check = await runLightCheck({ hostId, trigger: "manual-diagnosis" });
-  const hostResult = check.hostResults[0];
-  if (!hostResult) {
-    const error = new Error(`Host diagnosis produced no result: ${hostId}`);
-    error.code = "DIAGNOSIS_EMPTY";
-    error.httpStatus = 409;
-    throw error;
+  const active = conflictingLightCheck(hostId);
+  if (active) throw new CheckAlreadyRunningError(active);
+  const retainedLock = { runId: randomUUID(), scope: hostId };
+  activeLightChecks.set(hostId, retainedLock);
+  try {
+    const check = await runLightCheck({ hostId, trigger: "manual-diagnosis" }, retainedLock);
+    const hostResult = check.hostResults[0];
+    if (!hostResult) {
+      const error = new Error(`Host diagnosis produced no result: ${hostId}`);
+      error.code = "DIAGNOSIS_EMPTY";
+      error.httpStatus = 409;
+      throw error;
+    }
+    const diagnosis = diagnoseHost(hostResult);
+    const hostItem = getHosts().find((item) => item.id === hostId);
+    if (!hostItem) {
+      const error = new Error(`Host not found: ${hostId}`);
+      error.code = "HOST_NOT_FOUND";
+      error.httpStatus = 404;
+      throw error;
+    }
+    const deepEvidence = await collectDeepEvidence({
+      host: hostItem,
+      layer: diagnosis.layer,
+      mode,
+      execute: ({ key, containerName }) => runDeepSshReadOnly(hostItem, key, containerName)
+    });
+    return {
+      checkedAt: new Date().toISOString(),
+      checkId: check.id,
+      runId: check.runId,
+      status: check.status,
+      durationMs: check.durationMs,
+      diagnosis,
+      deepEvidence,
+      safetyBoundary: "本次只重新检查并读取固定范围的内部证据；没有执行重启、清理、部署或配置变更。"
+    };
+  } finally {
+    activeLightChecks.delete(hostId);
   }
-  const diagnosis = diagnoseHost(hostResult);
-  return {
-    checkedAt: new Date().toISOString(),
-    checkId: check.id,
-    runId: check.runId,
-    status: check.status,
-    durationMs: check.durationMs,
-    diagnosis,
-    safetyBoundary: "本次只重新检查并分析状态；没有执行重启、清理、部署或配置变更。"
-  };
 }
 
 function recentChecks() {
@@ -1099,7 +1125,6 @@ function agentManifest() {
       { method: "DELETE", path: "/api/hosts/:id", description: "Delete a local host configuration." },
       { method: "POST", path: "/api/checks/light", description: "Run a bounded light check." },
       { method: "POST", path: "/api/checks/light/:hostId", description: "Run a bounded light check for one host." },
-      { method: "POST", path: "/api/diagnostics/:hostId", description: "Recheck one host and return a deterministic, identity-free diagnosis." },
       { method: "GET", path: "/api/checks/:id", description: "Read one sanitized local check receipt and its host evidence." },
       { method: "GET", path: "/api/scheduler", description: "Read local scheduler state." },
       { method: "PUT", path: "/api/scheduler", description: "Configure local scheduler interval and retention." },
@@ -1197,10 +1222,9 @@ const server = createServer(async (req, res) => {
       return json(res, await runAutomaticDiagnosis(decodeURIComponent(diagnosisHostMatch[1])));
     }
     if (req.method === "POST" && url.pathname === "/api/checks/deep") {
-      return json(res, {
-        mode: "dry-run",
-        summary: "Deep checks are deferred in MVP. Planned checks: DB size summary, Docker resource summary, recent error digest, retention audit."
-      });
+      const input = await readBody(req);
+      if (!input.hostId || typeof input.hostId !== "string") throw new InputValidationError("hostId is required for a bounded deep check.");
+      return json(res, { ...(await runAutomaticDiagnosis(input.hostId)), compatibilityEndpoint: true });
     }
     if (req.method === "GET" && url.pathname === "/api/scheduler") {
       return json(res, { scheduler: schedulerSnapshot() });

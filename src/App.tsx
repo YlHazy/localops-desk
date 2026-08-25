@@ -76,6 +76,12 @@ const diagnosisLayerLabels: Record<DiagnosisRun["diagnosis"]["layer"], string> =
   unknown: "暂未定位"
 };
 
+const deepEvidenceSourceLabels: Record<DiagnosisRun["deepEvidence"]["source"], string> = {
+  "offline-practice": "离线样例",
+  "ssh-read-only": "只读 SSH",
+  none: "未读取"
+};
+
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
 const onboardingPetUrl = new URL("./assets/localops-sentry-otter.png", import.meta.url).href;
 
@@ -723,6 +729,12 @@ export function App() {
   const checking = operationState.checking;
   const diagnosing = operationState.diagnosing;
   const selectedDiagnosis = diagnosisResult && diagnosisResult.hostId === selectedHost?.id ? diagnosisResult.run : null;
+  const selectedDeepFindings = selectedDiagnosis
+    ? selectedDiagnosis.deepEvidence.findings.filter((finding) => finding.status === "warning" || finding.status === "critical")
+    : [];
+  if (selectedDiagnosis && selectedDeepFindings.length === 0 && selectedDiagnosis.deepEvidence.findings[0]) {
+    selectedDeepFindings.push(selectedDiagnosis.deepEvidence.findings[0]);
+  }
 
   function chooseFocusHost(hostId: string) {
     if (hostId !== selectedHostId) {
@@ -1246,13 +1258,32 @@ export function App() {
                   <div><strong>正在重新检查这台服务器</strong><p>检查网页、SSH、服务和资源；不会执行修复命令。</p></div>
                 </section>
               ) : selectedDiagnosis ? (
-                <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
-                  <header><span><CheckCircle2 size={17} />自动排查完成</span><em>定位：{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
-                  <h3>{selectedDiagnosis.diagnosis.headline}</h3>
-                  <p>{selectedDiagnosis.diagnosis.detail}</p>
-                  <div><strong>建议</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
-                  <small>{selectedDiagnosis.safetyBoundary}</small>
-                </section>
+                <>
+                  <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
+                    <header><span><CheckCircle2 size={17} />自动排查完成</span><em>定位：{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
+                    <h3>{selectedDiagnosis.diagnosis.headline}</h3>
+                    <p>{selectedDiagnosis.diagnosis.detail}</p>
+                    <div><strong>建议</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
+                    <small>只读排查 · 未执行任何变更</small>
+                  </section>
+                  <section className={`diagnostic-proof ${selectedDiagnosis.deepEvidence.state}`} aria-label="进一步诊断证据">
+                    <header><strong>{selectedDiagnosis.deepEvidence.title}</strong><span>{deepEvidenceSourceLabels[selectedDiagnosis.deepEvidence.source]}</span></header>
+                    {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
+                    {selectedDeepFindings.length ? (
+                      <div className="diagnostic-proof-list">
+                        {selectedDeepFindings.map((finding) => (
+                          <div className={finding.status} key={finding.key}>
+                            <span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {selectedDiagnosis.deepEvidence.excerpt.length ? (
+                      <details><summary>查看脱敏片段</summary><pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre></details>
+                    ) : null}
+                    <small>{selectedDiagnosis.deepEvidence.source === "offline-practice" ? "离线生成 · 未联网" : selectedDiagnosis.deepEvidence.source === "ssh-read-only" ? "只读命令 · 日志未保存" : "未读取服务器内部信息"}</small>
+                  </section>
+                </>
               ) : selectedHost.status === "healthy" || !selectedGuidance ? null : (
                 <section className={`server-diagnosis ${selectedHost.status}`} aria-label="状态说明">
                   <strong>{selectedGuidance.reason}</strong>
@@ -1263,7 +1294,7 @@ export function App() {
               <dl className="server-facts">
                 <div><dt>网页/API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "证据已过期"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs}ms</span> : null}</dd></div>
                 <div><dt>SSH / Docker</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? friendlyDockerStatus(selectedHost.dockerStatus) : "旧值不作为当前状态"}</span></dd></div>
-                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>资源</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `内存 ${selectedHost.memoryPercent ?? "—"}% · 磁盘 ${selectedHost.diskPercent ?? "—"}%` : "旧值不作为当前状态"}</span></dd></div>
+                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>资源</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `内存 ${selectedHost.memoryPercent == null ? "—" : `${selectedHost.memoryPercent}%`} · 磁盘 ${selectedHost.diskPercent == null ? "—" : `${selectedHost.diskPercent}%`}` : "旧值不作为当前状态"}</span></dd></div>
               </dl>
               <div className="quick-actions">
                 {selectedHost.status !== "healthy" && selectedReadiness?.canCollect && !diagnosisError ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "自动排查中" : selectedDiagnosis ? "重新排查" : "自动排查"}</button> : <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>}

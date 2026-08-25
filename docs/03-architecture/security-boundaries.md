@@ -41,6 +41,8 @@ Current implemented SSH allowlist:
 - `free -m`
 - `df -P /`
 - `docker ps --format '{{.Names}} {{.Status}}'`
+- Manual automatic diagnosis only: `df -Pi /`, `docker system df`, bounded `docker ps -a`, `systemctl --failed`, and `ss -lnt`.
+- Manual automatic diagnosis may read `docker logs --since 15m --tail 80 <validated-container>` for one container whose returned state is unhealthy, restarting, exited, or dead.
 
 These run only when `LOCALOPS_ENABLE_SSH=1` is set. The default mode does not execute SSH.
 
@@ -64,6 +66,7 @@ Before any output is shown, stored, exported, or sent to an agent:
 - Never collect `.env` file contents.
 - Do not persist Docker `Env` values.
 - Run sanitization again before report export.
+- Deep log excerpts are redacted and truncated before they reach the UI, are never written to SQLite, and are excluded from the Agent manifest and minimal-disclosure discussion flow.
 
 ## Action Tiers
 

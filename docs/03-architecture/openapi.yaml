@@ -114,10 +114,22 @@ paths:
           description: Host-scoped light check result
   /api/checks/deep:
     post:
-      summary: Preview or run deep checks
+      summary: Compatibility path for one bounded host diagnosis
       responses:
         "200":
-          description: Deep check result or dry-run plan
+          description: Host diagnosis with bounded local-only internal evidence
+  /api/diagnostics/{hostId}:
+    post:
+      summary: Recheck and diagnose one host with bounded internal evidence
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Categorized diagnosis plus sanitized bounded evidence for the local detail UI
   /api/scheduler:
     get:
       summary: Get local scheduler state

@@ -279,6 +279,10 @@ test("automatic diagnosis rechecks one offline host and returns an identity-free
   assert.equal(result.diagnosis.layer, "resources");
   assert.equal(result.diagnosis.confidence, "high");
   assert.match(result.diagnosis.headline, /磁盘 76%/);
+  assert.equal(result.deepEvidence.state, "complete");
+  assert.equal(result.deepEvidence.source, "offline-practice");
+  assert.equal(result.deepEvidence.findings[0].value, "76%");
+  assert.match(result.deepEvidence.safetyBoundary, /没有联网/);
   assert.match(result.safetyBoundary, /没有执行重启、清理、部署或配置变更/);
   assert.ok(result.checkId > 0);
   assert.ok(result.runId);
@@ -288,6 +292,17 @@ test("automatic diagnosis rechecks one offline host and returns an identity-free
   const checks = await fetch(`${api.base}/api/checks`).then((item) => item.json());
   assert.equal(checks.checks[0].trigger, "manual-diagnosis");
   assert.equal(checks.checks[0].hostScope, "localops-sample-warning");
+
+  const compatibility = await fetch(`${api.base}/api/checks/deep`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ hostId: "localops-sample-warning" })
+  }).then((item) => item.json());
+  assert.equal(compatibility.compatibilityEndpoint, true);
+  assert.equal(compatibility.deepEvidence.source, "offline-practice");
+
+  const manifest = await fetch(`${api.base}/api/agent/manifest`).then((item) => item.text());
+  assert.doesNotMatch(manifest, /\/api\/diagnostics/);
 });
 
 test("batch checks collect only usable hosts and report skipped coverage honestly", async (t) => {
@@ -804,7 +819,7 @@ test("dry-run plans enforce read-only copying and placeholder-only mutations", a
   assert.equal((await unknown.json()).error, "INVALID_INPUT");
 });
 
-test("overlapping checks share the same in-memory run identity and do not duplicate collection", async (t) => {
+test("automatic diagnosis keeps one host lock and run identity while its check is active", async (t) => {
   let releaseProbe;
   let markProbeStarted;
   const probeStarted = new Promise((resolve) => { markProbeStarted = resolve; });
@@ -836,7 +851,8 @@ test("overlapping checks share the same in-memory run identity and do not duplic
   });
   const created = await createdResponse.json();
   const path = `${api.base}/api/checks/light/${encodeURIComponent(created.host.id)}`;
-  const firstRequest = fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const diagnosisPath = `${api.base}/api/diagnostics/${encodeURIComponent(created.host.id)}`;
+  const firstRequest = fetch(diagnosisPath, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   await probeStarted;
   const overlapping = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   assert.equal(overlapping.status, 409);
@@ -865,6 +881,7 @@ test("overlapping checks share the same in-memory run identity and do not duplic
   assert.equal(completed.status, 200);
   const result = await completed.json();
   assert.equal(result.runId, conflict.runId);
+  assert.equal(result.deepEvidence.state, "unavailable");
 });
 
 test("API refuses non-loopback binding", async () => {

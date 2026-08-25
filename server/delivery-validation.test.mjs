@@ -98,10 +98,15 @@ test("server detail runs one bounded automatic diagnosis before offering command
   assert.match(appSource, /正在重新检查这台服务器/);
   assert.match(appSource, /不会执行修复命令/);
   assert.match(appSource, /自动排查完成/);
+  assert.match(appSource, /进一步诊断证据/);
+  assert.match(appSource, /查看脱敏片段/);
   assert.match(appSource, /无法连接本地 LocalOps 服务/);
   assert.match(appSource, /查看排查步骤/);
+  assert.doesNotMatch(appSource, /memoryPercent \?\? "—"\}%/);
+  assert.doesNotMatch(appSource, /diskPercent \?\? "—"\}%/);
   assert.match(serverSource, /trigger: "manual-diagnosis"/);
   assert.match(serverSource, /diagnoseHost\(hostResult\)/);
+  assert.match(serverSource, /collectDeepEvidence/);
   assert.match(serverSource, /没有执行重启、清理、部署或配置变更/);
   assert.doesNotMatch(diagnosisSource, /host\.name|host\.healthUrl|host\.sshAlias|host\.composeProject|host\.evidence/);
 });

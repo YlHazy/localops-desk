@@ -146,6 +146,25 @@ export interface AutomaticDiagnosis {
   signals: DiagnosisSignal[];
 }
 
+export interface DeepDiagnosticFinding {
+  key: string;
+  label: string;
+  status: Status;
+  value: string;
+  detail: string;
+}
+
+export interface DeepDiagnosticEvidence {
+  state: "complete" | "partial" | "unavailable";
+  source: "offline-practice" | "ssh-read-only" | "none";
+  title: string;
+  summary: string;
+  findings: DeepDiagnosticFinding[];
+  excerpt: string[];
+  coverage: { attempted: number; completed: number; failed: number };
+  safetyBoundary: string;
+}
+
 export interface DiagnosisRun {
   checkedAt: string;
   checkId: number;
@@ -153,5 +172,6 @@ export interface DiagnosisRun {
   status: Status;
   durationMs: number;
   diagnosis: AutomaticDiagnosis;
+  deepEvidence: DeepDiagnosticEvidence;
   safetyBoundary: string;
 }

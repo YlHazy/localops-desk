@@ -22,17 +22,16 @@ Avoid:
 
 Current implementation note: HTTP collection is real. SSH/resource collection remains simulated unless `LOCALOPS_ENABLE_SSH=1` is set, and then only allowlisted read-only commands may run.
 
-### Deep Check (planned, not implemented)
+### Bounded Deep Evidence
 
-Default cadence: daily, or manual.
+Manual only. It runs inside a user-triggered automatic diagnosis and is never added to the scheduler.
 
-Collect:
-
-- Recent 30-minute error summary.
-- Docker container CPU/memory snapshot.
-- Disk top-N for approved directories only.
-- Database size and connection summary through a safe read-only helper.
-- Dependency probe summary.
+- Resource findings read the root filesystem percentage, root inode percentage, and `docker system df` summary.
+- Entry/runtime findings read the Docker container state list, failed systemd units, and TCP listener summary.
+- Recent container logs are read only when a container is explicitly reported as unhealthy, restarting, exited, or dead. The container name must pass a strict identifier validator before it can enter the fixed command.
+- Logs are limited to the latest 15 minutes and 80 lines, then redacted, truncated, returned to the local detail UI, and not persisted.
+- When SSH is disabled, missing, or itself the failed layer, the result says that internal evidence was unavailable and does not infer it.
+- No database inspection, directory top-N traversal, arbitrary command, restart, cleanup, or mutation is included.
 
 ### Automatic Diagnosis
 
@@ -41,6 +40,7 @@ Manual and host-scoped. The user must click **自动排查** for one selected se
 - Re-runs the existing bounded light check for that server only.
 - Uses deterministic local rules to locate the first failing layer: entry, connectivity, SSH, runtime, or resources.
 - Returns only categorized signals, percentages, a plain-language finding, and a safe next step; it does not return server identity or raw evidence in the diagnosis object.
+- For an actionable resource/entry/runtime layer, immediately adds the bounded deep evidence above. This internal evidence is local-only and deliberately excluded from the Agent manifest and discussion summary.
 - Records the underlying check with `trigger=manual-diagnosis` so the result remains auditable.
 - Never runs repair commands. Read-only command steps remain a separate preview, and mutating plans remain blocked templates.
 
@@ -70,11 +70,11 @@ The open full desk performs the same 30-second observation cadence across `GET /
 
 ## Log Policy
 
-- Max 300 lines per log pull.
-- Max 256KB per service per collection.
-- Default window: `--since 30m`.
-- UI shows a capped digest, not an infinite log wall.
-- Similar errors are grouped by hash with first/last seen timestamps.
+- Max 80 lines for one suspect container per manual diagnosis.
+- Max 4,000 characters after collection and 1,800 characters after final redaction.
+- Fixed window: `--since 15m`.
+- UI keeps the redacted excerpt collapsed until requested.
+- Log excerpts are response-only and are not written to SQLite.
 
 ## Storage Retention
 
@@ -83,7 +83,7 @@ The open full desk performs the same 30-second observation cadence across `GET /
 - Optional SQLite `VACUUM` is available through the maintenance endpoint.
 - Hourly aggregates: 30 days.
 - Daily aggregates: 180 days.
-- Log snippets: 7 days.
+- Log snippets: not persisted.
 - Diagnostic reports: 30 days unless pinned.
 - If local DB exceeds a configured ceiling, pause deep log collection and keep status summaries only.
 

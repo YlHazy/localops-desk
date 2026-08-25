@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { classifyCollectedStatus, resourceSignalStatus } from "../shared/evidence-judgment.mjs";
 import { validateSshAlias } from "./input-validation.mjs";
+import { deepSshCommand } from "./deep-diagnostics.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -332,4 +333,21 @@ export async function collectHost(host, options) {
         : profile.evidence)
     ]
   };
+}
+
+export async function runDeepSshReadOnly(host, commandKey, containerName = "", timeoutMs = 20000) {
+  if (!host.sshAlias) throw new Error("SSH alias is not configured.");
+  const sshAlias = validateSshAlias(host.sshAlias, { allowEmpty: false });
+  const command = deepSshCommand(commandKey, containerName);
+  const result = await execFileAsync("ssh", [
+    "-o", "BatchMode=yes",
+    "-o", "ConnectTimeout=5",
+    sshAlias,
+    command
+  ], {
+    timeout: timeoutMs,
+    maxBuffer: 1024 * 128,
+    windowsHide: true
+  });
+  return trimOutput(`${result.stdout || ""}${result.stderr ? `\n${result.stderr}` : ""}`, 4000);
 }
