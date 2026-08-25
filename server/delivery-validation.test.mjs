@@ -86,8 +86,8 @@ test("expired evidence stays out of the current overview and pet glance", () => 
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   assert.match(appSource, /fresh \? resourceSignalSummary\(host\) : "待更新"/);
-  assert.match(appSource, /selectedEvidenceCurrent \? selectedInternalSignal\.status : "待重新检查"/);
-  assert.match(appSource, /上次检查记录（已过期）/);
+  assert.match(appSource, /selectedEvidenceCurrent \? selectedInternalSignal\.detail : "待重新检查"/);
+  assert.match(appSource, /上次检查详情（已过期）/);
   assert.match(petSource, /if \(!host \|\| !fresh\) return/);
   assert.match(petSource, /petIssueLine\(priorityHost, priorityFresh/);
   assert.match(petSource, /snapshotTrust\.state === "stale" \? "证据已过期"/);
@@ -101,8 +101,9 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.match(appSource, /自动查原因/);
   assert.match(appSource, /className="detail-primary-actions"/);
   assert.match(appSource, /<dl className="server-facts">/);
-  assert.match(appSource, /<details className={`diagnostic-proof/);
-  assert.match(appSource, /<summary><strong>技术详情<\/strong>/);
+  assert.match(appSource, /<details className={`technical-details/);
+  assert.match(appSource, /selectedEvidenceCurrent \? "检查详情"/);
+  assert.doesNotMatch(appSource, /<details className={`diagnostic-proof/);
   assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "entry"/);
   assert.match(appSource, /审阅 Nginx 重载/);
   assert.match(appSource, /查看只读检查/);
@@ -292,7 +293,7 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.match(appSource, /selectedReadiness\.canCollect/);
   assert.match(appSource, /资源状态尚未检查/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
-  assert.match(petSource, /入口正常，资源还没检查/);
+  assert.match(petSource, /入口正常，资源未检查/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
   assert.match(readinessSource, /state: "ssh-disabled"/);
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);

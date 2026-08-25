@@ -25,13 +25,12 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectionModeCopy, deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
+import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, friendlyCheckSummary, retainCheckSelection } from "./check-history.mjs";
 import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
-import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
@@ -64,22 +63,6 @@ const emptyHostForm: HostConfigInput = {
   healthUrl: "",
   composeProject: "",
   tags: []
-};
-
-const diagnosisLayerLabels: Record<DiagnosisRun["diagnosis"]["layer"], string> = {
-  connectivity: "连接链路",
-  entry: "网页/API",
-  resources: "资源",
-  runtime: "服务",
-  management: "SSH",
-  none: "未发现异常",
-  unknown: "暂未定位"
-};
-
-const deepEvidenceSourceLabels: Record<DiagnosisRun["deepEvidence"]["source"], string> = {
-  "offline-practice": "离线样例",
-  "ssh-read-only": "只读 SSH",
-  none: "未读取"
 };
 
 const actionReceiptLabels: Record<ActionReceipt["status"], string> = {
@@ -376,7 +359,8 @@ export function App() {
   const [checkDetailState, setCheckDetailState] = useState<"idle" | "loading" | "current" | "error">("idle");
   const [checkDetailError, setCheckDetailError] = useState("");
   const [selectedHostId, setSelectedHostId] = useState<string | null>(deskIntentAtLoad.hostId);
-  const [detailsOpen, setDetailsOpen] = useState(Boolean(deskIntentAtLoad.hostId));
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(deskIntentAtLoad.hostId && (deskIntentAtLoad.tab ?? "overview") === "overview"));
+  const [wideDetail, setWideDetail] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
   const detailPanelRef = useRef<HTMLElement>(null);
   const detailCloseRef = useRef<HTMLButtonElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -592,6 +576,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const query = window.matchMedia("(min-width: 1200px)");
+    const update = () => setWideDetail(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
     const navigation = navigationRef.current;
     const active = navigation?.querySelector<HTMLElement>("button.active");
     if (!navigation || !active || navigation.scrollWidth <= navigation.clientWidth) return;
@@ -602,7 +594,7 @@ export function App() {
   useEffect(() => {
     if (petMode || !detailsOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
-    detailCloseRef.current?.focus();
+    if (!wideDetail) detailCloseRef.current?.focus();
     const closeDetail = () => {
       setDetailsOpen(false);
       window.setTimeout(() => detailTriggerRef.current?.focus(), 0);
@@ -613,8 +605,8 @@ export function App() {
         closeDetail();
         return;
       }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(detailPanelRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), summary, a[href], input:not(:disabled)") ?? []);
+      if (wideDetail || event.key !== "Tab") return;
+      const focusable = Array.from(detailPanelRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), summary, a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])") ?? []);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -626,24 +618,47 @@ export function App() {
         first.focus();
       }
     };
-    document.body.style.overflow = "hidden";
+    if (!wideDetail) document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleDetailKeys);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleDetailKeys);
     };
-  }, [petMode, detailsOpen]);
+  }, [petMode, detailsOpen, wideDetail]);
 
   useEffect(() => {
     if (petMode) return;
     const applyPetDeskIntent = () => {
       const intent = petDeskIntent(window.location.hash);
-      if (intent.hostId) setSelectedHostId(intent.hostId);
+      const nextTab = intent.tab ?? "overview";
       if (intent.tab) setSelectedTab(intent.tab);
+      if (intent.hostId && nextTab === "overview" && dashboard?.hosts.some((host) => host.id === intent.hostId)) {
+        detailTriggerRef.current = null;
+        setSelectedHostId(intent.hostId);
+        setDetailsOpen(true);
+      } else {
+        setDetailsOpen(false);
+        if (intent.hostId && nextTab === "overview" && dashboard) setError("这台服务器已不在当前列表中。");
+      }
     };
     window.addEventListener("hashchange", applyPetDeskIntent);
     return () => window.removeEventListener("hashchange", applyPetDeskIntent);
-  }, [petMode]);
+  }, [petMode, dashboard]);
+
+  useEffect(() => {
+    if (petMode || !dashboard || !detailsOpen || !selectedHostId) return;
+    if (dashboard.hosts.some((host) => host.id === selectedHostId)) return;
+    setDetailsOpen(false);
+    setSelectedHostId(null);
+    setError("这台服务器已不在当前列表中。");
+  }, [petMode, dashboard, detailsOpen, selectedHostId]);
+
+  useEffect(() => {
+    if (!diagnosisResult || !dashboard) return;
+    const host = dashboard.hosts.find((item) => item.id === diagnosisResult.hostId);
+    if (!host?.lastCheckedAt) return;
+    if (new Date(host.lastCheckedAt).getTime() > new Date(diagnosisResult.run.checkedAt).getTime()) setDiagnosisResult(null);
+  }, [dashboard, diagnosisResult]);
 
   function retryLoad() {
     setError("");
@@ -779,14 +794,9 @@ export function App() {
   const selectedBrief = useMemo(() => displayDashboard && selectedHost ? discussionBrief(displayDashboard, selectedHost, now) : "", [displayDashboard, selectedHost, now]);
   const discussLink = useMemo(() => codexDiscussionLink(selectedBrief), [selectedBrief]);
   const deskSync = useMemo(() => deskSyncCopy(deskSyncState, lastDeskSyncAt, now), [deskSyncState, lastDeskSyncAt, now]);
-  const collectionMode = useMemo(() => dashboard ? collectionModeCopy(dashboard) : null, [dashboard]);
   const selectedReadiness = useMemo(
     () => dashboard ? evidenceReadiness(dashboard, selectedHost) : null,
     [dashboard, selectedHost]
-  );
-  const selectedGuidance = useMemo(
-    () => selectedHost ? hostGuidance(selectedHost, selectedFreshness.state === "fresh") : null,
-    [selectedHost, selectedFreshness.state]
   );
   const selectedInternalSignal = useMemo(
     () => selectedHost ? internalSignalSummary(selectedHost) : { status: "待重新检查", detail: "—" },
@@ -877,6 +887,7 @@ export function App() {
 
   async function runLightCheck(hostId?: string) {
     if (pendingOperation) return;
+    if (!hostId || diagnosisResult?.hostId === hostId) setDiagnosisResult(null);
     setPendingOperation("check");
     setError("");
     setLastCheckOutcome(null);
@@ -1119,8 +1130,6 @@ export function App() {
       } catch (refreshError) {
         setError(`排查完成，但读取新状态失败：${refreshError instanceof Error ? refreshError.message : "本地监控没有响应"}`);
       }
-      setSelectedHostId(hostId);
-      setDetailsOpen(true);
     } catch (err) {
       setDiagnosisError(err instanceof Error ? err.message : "自动排查失败");
     } finally {
@@ -1280,8 +1289,7 @@ export function App() {
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={21} /></div>
           <div>
-            <strong>LocalOps Guardian</strong>
-            <span>服务器状态助手</span>
+            <strong>LocalOps</strong>
           </div>
         </div>
         <nav ref={navigationRef}>
@@ -1300,11 +1308,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="mode-box">
-          <span>当前采集方式</span>
-          <strong>{collectionMode?.label}</strong>
-          <small>{collectionMode?.detail}</small>
-        </div>
       </aside>
 
       <main className={`main ${selectedTab === "overview" ? "overview-tab" : "work-tab"}`} id="localops-main" tabIndex={-1}>
@@ -1386,19 +1389,21 @@ export function App() {
               </div>
             </div>
 
-            {detailsOpen ? <><button className="detail-backdrop" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭服务器详情" /><aside ref={detailPanelRef} className="detail-panel main-detail server-detail-drawer" id="server-detail" role="dialog" aria-modal="true" aria-label={`${selectedHost.name} 详情`}>
+            {detailsOpen ? <>{!wideDetail ? <button className="detail-backdrop" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭服务器详情" /> : null}<aside ref={detailPanelRef} className={`detail-panel main-detail server-detail-drawer ${wideDetail ? "inline" : "modal"}`} id="server-detail" role={wideDetail ? "region" : "dialog"} aria-modal={wideDetail ? undefined : true} aria-label={`${selectedHost.name} 详情`}>
               <div className="detail-head">
                 <div className="detail-title"><i className={`host-dot ${selectedHost.status}`} aria-hidden="true" /><div><h2>{selectedHost.name}</h2><p>{statusLabels[selectedHost.status]} · {selectedFreshness.label}</p></div></div>
-                <button ref={detailCloseRef} className="detail-close" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭详情"><X size={18} /></button>
+                <div className="detail-head-tools">
+                  <button className="detail-config" onClick={() => startEditHost(selectedHost)} aria-label="配置服务器" title="配置服务器"><Pencil size={17} /></button>
+                  <button ref={detailCloseRef} className="detail-close" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭详情"><X size={18} /></button>
+                </div>
               </div>
               <div className="detail-primary-actions">
                 {selectedHost.status !== "healthy" && selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "正在查原因" : diagnosisError ? "重试查原因" : selectedDiagnosis ? "重新查原因" : "自动查原因"}</button> : null}
-                <button className={selectedHost.status === "healthy" || !selectedReadiness?.canCollect ? "primary slim" : "secondary slim"} disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>
-                <button className="quiet-action" onClick={() => startEditHost(selectedHost)}><Pencil size={16} />配置</button>
+                {selectedHost.status === "healthy" || !selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button> : null}
               </div>
               <dl className="server-facts">
                 <div><dt>网页 / API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待重新检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
-                <div><dt>服务器内部</dt><dd><strong>{selectedEvidenceCurrent ? selectedInternalSignal.status : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? selectedInternalSignal.detail : "—"}</span></dd></div>
+                <div><dt>SSH / 服务</dt><dd><strong>{selectedEvidenceCurrent ? selectedInternalSignal.detail : "待重新检查"}</strong></dd></div>
                 <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>CPU / 内存 / 磁盘</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `${selectedHost.cpuPercent == null ? "—" : `${selectedHost.cpuPercent}%`} / ${selectedHost.memoryPercent == null ? "—" : `${selectedHost.memoryPercent}%`} / ${selectedHost.diskPercent == null ? "—" : `${selectedHost.diskPercent}%`}` : "—"}</span></dd></div>
               </dl>
               {diagnosing ? (
@@ -1409,43 +1414,27 @@ export function App() {
               ) : selectedDiagnosis ? (
                 <>
                   <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
-                    <header><span><CheckCircle2 size={17} />排查结果</span><em>{diagnosisLayerLabels[selectedDiagnosis.diagnosis.layer]}</em></header>
                     <h3>{selectedDiagnosis.diagnosis.headline}</h3>
-                    <p>{selectedDiagnosis.diagnosis.detail}</p>
-                    <div><strong>下一步</strong><p>{selectedDiagnosis.diagnosis.next}</p></div>
+                    <dl><div><dt>发现</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>下一步</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
                     {selectedDiagnosis.diagnosis.layer === "entry" ? (
                       <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><ShieldCheck size={16} />审阅 Nginx 重载</button>
                     ) : selectedDiagnosis.diagnosis.layer === "none" ? null : (
                       <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><TerminalSquare size={16} />查看只读检查</button>
                     )}
                   </section>
-                  <details className={`diagnostic-proof ${selectedDiagnosis.deepEvidence.state}`}>
-                    <summary><strong>技术详情</strong><span>{deepEvidenceSourceLabels[selectedDiagnosis.deepEvidence.source]}</span></summary>
-                    <div className="diagnostic-proof-body">
-                      {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
-                      {selectedDeepFindings.length ? (
-                        <div className="diagnostic-proof-list">
-                          {selectedDeepFindings.map((finding) => (
-                            <div className={finding.status} key={finding.key}>
-                              <span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {selectedDiagnosis.deepEvidence.excerpt.length ? <pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre> : null}
-                    </div>
-                  </details>
                 </>
-              ) : selectedHost.status === "healthy" || !selectedGuidance ? null : (
-                <section className={`server-diagnosis ${selectedHost.status}`} aria-label="状态说明">
-                  <strong>{selectedGuidance.reason}</strong>
-                  <p>{selectedGuidance.detail}</p>
-                </section>
-              )}
+              ) : null}
               {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>没有查完</strong><p>{diagnosisError}</p></span></div> : null}
               <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
-                <summary>{selectedEvidenceCurrent ? "检查记录" : "上次检查记录（已过期）"}</summary>
-                <div>{selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}</div>
+                <summary>{selectedEvidenceCurrent ? "检查详情" : "上次检查详情（已过期）"}</summary>
+                <div>
+                  {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
+                  {selectedDiagnosis ? <div className={`diagnostic-proof-body ${selectedDiagnosis.deepEvidence.state}`}>
+                    {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
+                    {selectedDeepFindings.length ? <div className="diagnostic-proof-list">{selectedDeepFindings.map((finding) => <div className={finding.status} key={finding.key}><span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p></div>)}</div> : null}
+                    {selectedDiagnosis.deepEvidence.excerpt.length ? <pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre> : null}
+                  </div> : null}
+                </div>
               </details>
             </aside></> : null}
           </section>

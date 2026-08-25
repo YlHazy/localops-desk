@@ -95,13 +95,13 @@ function latestTime(value: string | null) {
 }
 
 function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "") {
-  if (!host || !fresh) return "数据有点旧，重新检查后再判断。";
+  if (!host || !fresh) return "结果过期，请重新检查。";
   const http = host.httpStatus.toLowerCase();
   const ssh = host.sshStatus.toLowerCase();
   const docker = host.dockerStatus.toLowerCase();
-  if (/down|fail|timeout|refused|unreachable|error/.test(http)) return "网页或 API 现在无法正常访问。";
-  if (/fail|timeout|refused|unreachable|error/.test(ssh)) return "管理通道现在无法连接。";
-  if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有正常运行。";
+  if (/down|fail|timeout|refused|unreachable|error/.test(http)) return "网页或 API 无法访问。";
+  if (/fail|timeout|refused|unreachable|error/.test(ssh)) return "SSH 现在无法连接。";
+  if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有运行。";
   if (/资源(?:占用|使用)|磁盘|内存/.test(guidanceReason)) {
     return (host.diskPercent ?? 0) >= (host.memoryPercent ?? 0)
       ? `磁盘 ${host.diskPercent ?? "—"}%，需要留意。`
@@ -134,6 +134,7 @@ export function PetMode({
   onOpenDesk: (hostId?: string, tab?: PetDeskTab, source?: "pet" | "pet-alert") => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const lifecycle = petLifecycleCopy(petRuntimeMode(window.location.search));
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const desktopNotifications = Boolean(window.localOpsDesktop);
   const notificationsSupported = desktopNotifications || "Notification" in window;
@@ -150,7 +151,6 @@ export function PetMode({
   const previousSignal = useRef<MonitorSignal | null>(null);
   const recovery = localRecoveryCopy(lastSyncedAt, now);
   const petSessionId = new URLSearchParams(window.location.search).get("session");
-  const lifecycle = petLifecycleCopy(petRuntimeMode(window.location.search));
   const topmostSupported = isPetSessionId(petSessionId);
   const [topmostActive, setTopmostActive] = useState(false);
   const [topmostPending, setTopmostPending] = useState(false);
@@ -438,10 +438,8 @@ export function PetMode({
   }
 
   return (
-    <main className={`pet-window ${overallStatus}`}>
+    <main className={`pet-window ${overallStatus}`} data-runtime={lifecycle.tone}>
       <div className="pet-window-bar">
-        <span className={`pet-runtime ${lifecycle.tone}`} title={lifecycle.detail} aria-label={lifecycle.label}><i aria-hidden="true" /></span>
-        <div className="pet-grab" aria-hidden="true" />
         <div className="pet-window-tools">
           <button className={`pet-pin ${topmostActive ? "active" : ""}`} onClick={() => void applyTopmost(!topmostActive)} disabled={!topmostSupported || topmostPending} aria-pressed={topmostActive} title={topmostNote}>
             {topmostActive ? <PinOff size={15} /> : <Pin size={15} />}<span className="sr-only">{topmostActive ? "取消置顶" : "桌面置顶"}</span>
@@ -454,15 +452,15 @@ export function PetMode({
         <div className="pet-speech" aria-live="polite">
           <strong>{headline}</strong>
           <p>{syncError
-            ? "服务器没有因此被检查或改动。"
+            ? "服务器没有被改动。"
             : actionError
-              ? "上次结果没变，稍后再试。"
+              ? "结果没变，稍后再试。"
             : dashboard.hosts.length === 0
-              ? "添加后，我会定时替你看。"
+              ? "添加后会自动检查。"
               : priorityHost && !priorityFresh
-                ? "证据过期了，重新看一次才算数。"
+                ? "结果过期，请重新检查。"
                 : overallStatus === "healthy"
-                  ? focusReadiness.state === "http" ? "入口正常，资源还没检查。" : "刚刚检查，我继续盯着。"
+                  ? focusReadiness.state === "http" ? "入口正常，资源未检查。" : "刚检查完，我继续盯着。"
                   : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason)}</p>
         </div>
         <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
@@ -483,12 +481,12 @@ export function PetMode({
         </button>
       </footer>
 
-      <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
+      {dashboard.hosts.length > 0 ? <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>{syncError ? "本地状态断开" : visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${batchCoverage.partial} 台仅看入口` : `${visibleCounts.healthy ?? 0} 台正常`}</strong>
+        <strong>{syncError ? "本地状态断开" : visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${dashboard.hosts.length} 台 · 仅看入口` : `${dashboard.hosts.length} 台服务器`}</strong>
         <span>{snapshotTrust.state === "offline" ? "仅保留旧结果" : snapshotTrust.state === "stale" ? "证据已过期" : snapshotTrust.state === "unknown" ? "尚未检查" : `${latestTime(dashboard.observedAt)} 检查`}</span>
         <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
-      </button>
+      </button> : <span aria-hidden="true" />}
 
       <div className={`pet-sheet-layer ${expanded ? "open" : ""}`} aria-hidden={!expanded}>
         <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={() => setExpanded(false)} aria-label="关闭快速查看" />
