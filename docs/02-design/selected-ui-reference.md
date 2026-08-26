@@ -11,4 +11,4 @@ The working implementation is defined in:
 - `src/App.tsx`
 - `src/styles.css`
 
-This MVP intentionally prioritizes working local API/data flow and safe operations boundaries. A later UI pass should align the implementation more closely with the selected concept.
+The current UI applies the concept through restrained hierarchy rather than decorative dashboard cards: current status first, actions second, technical evidence on demand. Future refinements must not reintroduce repeated status labels or explanatory filler.

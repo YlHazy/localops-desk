@@ -19,7 +19,7 @@ const created = await call("/api/hosts", {
     name: hostName,
     environment: "smoke",
     role: "local api",
-    sshAlias: "",
+    sshAlias: "smoke-local",
     healthUrl: `${base}/api/agent/manifest`,
     composeProject: "",
     tags: ["smoke"]

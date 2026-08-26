@@ -1,0 +1,13 @@
+import type { MonitorNotice, MonitorSignal } from "./pet-monitor.mjs";
+export const petQuietDurationMs: number;
+export const petNotificationPreferenceKey: "localops.pet.notifications";
+export const petNotificationCalibrationKey: "localops.pet.notifications-calibrated";
+export type NotificationDecision = { outcome: "none" | "sent" | "suppressed"; notice: MonitorNotice | null };
+export function notificationDecision(previous: MonitorSignal | null, current: MonitorSignal, options: { enabled: boolean; permission: NotificationPermission; quietUntil?: number; now?: number }): NotificationDecision;
+export function readNotificationPreference(storage: Pick<Storage, "getItem">): boolean;
+export function writeNotificationPreference(storage: Pick<Storage, "setItem">, enabled: boolean): boolean;
+export function readNotificationCalibration(storage: Pick<Storage, "getItem">): boolean;
+export function writeNotificationCalibration(storage: Pick<Storage, "setItem" | "removeItem">, calibrated: boolean): boolean;
+export function watchModeCopy(options: { supported: boolean; blocked: boolean; enabled: boolean; calibrated?: boolean; permissionSurface?: "browser" | "windows"; quietUntil?: number; now?: number }): { label: string; detail: string; state: "unsupported" | "blocked" | "off" | "calibrating" | "quiet" | "active" };
+export function readQuietUntil(storage: Pick<Storage, "getItem">, now?: number): number;
+export function writeQuietUntil(storage: Pick<Storage, "setItem" | "removeItem">, value: number): boolean;

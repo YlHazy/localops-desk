@@ -7,5 +7,9 @@ dist/
 data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
+data/pet-browser-profile/
 *.log
 *.tsbuildinfo
+work/
+artifacts/
+release/

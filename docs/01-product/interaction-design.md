@@ -8,14 +8,15 @@
 
 ## Host Detail
 
-- Refresh host: calls light check for the selected host in a later milestone; MVP refreshes all hosts.
+- Refresh host: runs a bounded light check for the selected host. The overview action checks all configured hosts.
 - View evidence: expands latest SSH, HTTP, resource, and Docker evidence.
 
 ## Actions
 
 - Select action: displays command plan, risk tier, and expected verification.
 - Dry-run: calls `POST /api/actions/dry-run`; never mutates servers.
-- Execute: disabled in MVP with clear boundary copy.
+- Execute Nginx reload: available only when the backend capability is explicitly enabled and a fresh abnormal manual diagnosis locates the issue at the Web/API entry layer. Other layers route to read-only inspection and fail closed if the preparation API is called directly. Preparation shows the exact target, evidence basis, and commands; execution requires consent plus `确认重载 Nginx`, runs preflight first, and ends with a durable receipt and verification state.
+- Compose restart and every free-form command remain disabled.
 
 ## Reports
 

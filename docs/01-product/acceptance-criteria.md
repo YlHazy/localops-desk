@@ -1,11 +1,89 @@
 # Acceptance Criteria
 
 - The app starts locally with a Web UI and local API.
-- Dashboard displays at least three seed hosts: `lexhub-prod-01`, `lexhub-prod-02`, and `lexhub-demo-01`.
+- A new data directory starts with zero hosts and never probes a network target without user configuration.
+- `LOCALOPS_SEED_DEMO=1` adds three generic offline-only examples with no Health URL, SSH alias, or Compose project.
+- The empty first-run screen can explicitly install those three fictional examples without an environment variable; a second confirmation explains that the operation writes local practice rows but performs zero network requests.
+- Offline practice is exclusive and visibly labeled across the desk and pet. It cannot overwrite, edit, or individually delete colliding/user-owned rows, and normal host creation is unavailable until practice is exited.
+- Exiting practice removes only exact current or legacy managed examples and their orphaned check runs; when no targets remain it also stops local scheduling.
+- Collection-mode copy distinguishes zero-network practice, configured HTTP checks, and explicitly enabled read-only SSH; ordinary HTTP mode never claims that no real target can be contacted.
 - Manual light check updates last-run timestamps and history.
 - At least one host can show green, one yellow, and one gray/unknown state in safe simulation.
-- The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, and unknown collector state.
-- Dry-run action output is visible and does not execute a real command.
+- The diagnostic report distinguishes HTTP failure, SSH failure, dependency warning, resource pressure, and unknown collector state.
+- From an abnormal host detail, **自动排查** runs one new host-scoped bounded check, records it as `manual-diagnosis`, and returns a deterministic entry/connectivity/SSH/runtime/resource finding in the same detail surface. Its diagnosis object excludes host identity, connection configuration, commands, and raw evidence; the UI states that no repair command was executed and exposes a recoverable retry on failure.
+- The same click adds layer-specific internal evidence only when it can do so honestly: resource checks are limited to root disk/inodes and Docker usage; entry/runtime checks are limited to container states, failed units, listeners, and at most one suspect container's latest 15 minutes/80 log lines. Container names are validated, all output is redacted and capped, excerpts stay collapsed, nothing is persisted, and missing SSH produces an explicit unavailable state instead of a guessed cause.
+- Backend collection, the full desk, pet copy, and minimal-disclosure Codex summary use one shared resource judgment: disk enters warning/critical at 75%/90%, while CPU and memory enter warning/critical at 85%/95%; absent values remain unknown rather than becoming a false healthy zero.
+- A reachable service cannot retain a green overall judgment when current runtime or resource evidence is warning/critical. The fixed guardian advice explains why, proposes a read-only next step, and states what not to mutate.
+- Dry-run action output is visible and never executes a command; unknown action keys fail closed.
+- Only allow-listed read-only plans with a configured SSH alias are copyable. Practice plans and all mutating plans use explicit placeholders, never include the configured alias, and are not directly copyable.
+- Copyable read-only previews are generated from the executor's exact command allowlist, so UI instructions cannot silently drift from collected evidence.
+- Remote action capability is off unless both `LOCALOPS_ENABLE_ACTIONS=1` and `LOCALOPS_ENABLE_SSH=1` are enabled; Compose restart remains blocked.
+- The only executable action uses the exact fixed commands `sudo -n nginx -t` and `sudo -n systemctl reload nginx`; no user command or service argument reaches the executor.
+- Nginx reload requires an abnormal `manual-diagnosis` no older than ten minutes that deterministically locates the problem at the Web/API entry layer. Resource, runtime, management-channel, connectivity, and unknown layers return `ACTION_NOT_RECOMMENDED` before approval. An eligible request issues a two-minute single-use approval bound to the host id, SSH alias, host configuration update time, target label, diagnosis layer, evidence, and command digest.
+- Execution requires an explicit consent checkbox and the exact phrase `确认重载 Nginx`. A changed host configuration, expired/reused approval, failed preflight, or mismatched digest fails closed before reload.
+- Every attempted run has a durable local receipt. A successful reload always enters bounded host verification; an uncertain verification result is reported without automatic retry, and startup marks abandoned `running` receipts as interrupted.
+- Retention removes expired finished action receipts but never removes a receipt still marked `running`. High-risk action endpoints are excluded from the Agent manifest.
 - The Agent API manifest lists supported local endpoints.
-- No sensitive values are present in seed data or output.
+- No user, machine, repository, customer, production host, domain, IP, or SSH identifier is present in demo data or output.
+- Editing an existing host round-trips its tags instead of silently clearing them; Agent status excludes tags alongside connection configuration and raw evidence.
+- Empty server names fail as a typed 400 input error, and the form prevents submission while explaining which optional fields cause HTTP access, gate SSH, or remain metadata-only.
+- `?mode=pet` presents a compact 320–380 px guardian view instead of the full dashboard.
+- The compact window uses four stable rows—top controls, character/status stage, one primary check button, and freshness line—with no settings or discussion controls in its host drawer. At 320 × 400 the main action and status remain visible without horizontal overflow.
+- The overview leads with one current judgment, one check action, and one dense host list. Host detail presents recovery actions and three fact rows before abnormal explanation; raw technical evidence and check history remain collapsed until requested.
+- After automatic diagnosis, the detail offers only a cause-matched next action: an entry-layer finding may open the Nginx review, while other abnormal layers open a read-only inspection plan. Diagnosis, plan switching, approval, execution, verification, and return stay pinned to one host id even if a refresh changes priority; a missing target stops the flow instead of falling back to another server. The safety page provides a direct return to that same host detail.
+- Secondary work pages do not repeat the overview's global check/pet actions or completed-check receipt. At narrow widths the active navigation item scrolls into view and the page has no horizontal overflow.
+- Adding, editing, deleting, installing, or removing the configured host set clears the previous completed-check receipt so it cannot describe a stale set of servers.
+- The compact companion uses the transparent Sentry Otter cutout as a stable product identity while live health remains encoded by explicit evidence copy and the separate status signal; the UI asset is never presented as an installable Codex sprite.
+- The pet's evidence signal, copy, and accent reflect the worst current host state while the character identity remains visually stable.
+- The full desk and pet derive their automatic focus from one shared severity order—critical, warning, unknown, healthy—rather than API row order. With no deliberate selection, a newly worse host becomes the focus after the next read.
+- The pet can run a light check, disclose local API errors, list host states, and open the full desk.
+- Selecting a non-priority host changes only the target for refresh and discussion; the pet's mood and headline continue to represent the worst current global state.
+- A manual host selection is labeled, can be returned to the highest-priority host in one action, and does not hide the sorted priority list.
+- The full desk uses the same explicit manual-focus contract: deliberate non-priority selection is labeled without changing the global headline, and one action restores automatic highest-priority focus. A removed selection falls back safely after refresh.
+- While open, the pet reads current local status every 30 seconds without starting a check or adding history rows.
+- System anomaly notifications require an explicit user gesture, establish the first observation as a quiet baseline, and notify only on later deterioration or a larger affected count. Browser preview additionally requires browser permission; the packaged desktop app uses its bounded native tray bridge.
+- A single evidence clock drives pet rendering, deterioration notifications, and Codex discussion output; crossing the freshness boundary in a long-lived pet window produces one aggregate-only unknown-state notification and atomically downgrades the discussion's overall, HTTP, SSH, runtime, and resource conclusions instead of retaining any healthy/failed category from expired evidence.
+- Notification text contains aggregate counts only and excludes host names, addresses, commands, connection configuration, and raw evidence.
+- In the packaged desktop app, an explicit opt-in uses the existing Windows tray rather than browser site permissions. Renderer IPC can request only fixed ready/test copy or bounded aggregate critical/warning/unknown counts; the main process owns all displayed text, respects Windows quiet time, and clicking the balloon opens the full desk. Browser preview keeps the Web Notification fallback.
+- The full desk labels automatic checks as Watch Settings (`值守设置`) and presents one ordered daily-watch relay—evidence source, automatic rhythm, desktop attention—with a truthful completed count and next missing layer. Desktop attention completes only after an opted-in user sends a test and explicitly confirms it was visible; system acceptance alone is insufficient. A browser preview never completes the native layer, viewing the relay adds no check or mutation request, and the shared state stores only an enabled boolean plus a removable confirmation boolean in the local profile.
+- Stable degraded state, recovery, and repeated local API loss do not generate repeated notifications.
+- The full desk refreshes status, recent checks, the current report, scheduler runtime state, and LocalOps-owned login-start state every 30 seconds through GET-only requests.
+- Full-desk sync exposes syncing, current, and recovering states; failure preserves and timestamps the last trustworthy result, truthfully states that automatic retry continues after 30 seconds, and offers immediate local-status retry rather than replacing the desk with a spinner.
+- Background sync does not overwrite unsaved scheduler form values and does not call a check, mutation, retention, or action endpoint.
+- Overlapping desktop or pet status reads apply only the newest requested snapshot; a slower earlier response and an unmounted view cannot overwrite current evidence.
+- After pet sync failure, retained evidence is labeled as non-current, the last successful local read and 30-second automatic retry are explained, and a dedicated local-status retry is available; that retry performs no server check and creates no check-history row.
+- Pet sync failures and light-check failures are distinct: a sync failure can retry the bounded status read, while an uncertain check failure preserves prior evidence and discourages duplicate submission.
+- Host configuration cannot be edited, deleted, or batch-cleared while an overlapping light check is active; the typed conflict identifies the in-memory run rather than creating orphan evidence.
+- A non-responsive local API leaves read-only sync within 8 seconds and user-triggered operations within 60 seconds, showing a recoverable message instead of an infinite spinner.
+- Check, host save/delete, scheduler save, retention cleanup, and action-plan generation expose distinct pending states; non-check work never changes refresh copy to “检查中”, and duplicate mutating controls remain disabled until completion.
+- The packaged Windows desktop app includes its own runtime, requires neither a separate Node executable nor Microsoft Edge, and gates native current-user login-start behind an explicit two-step UI confirmation; it never requires administrator rights or installs a service.
+- Source preview cannot enable desktop login-start. The legacy Edge/VBS startup entry remains a compatibility path only and continues to refuse overwriting or removing unknown same-name entries.
+- Public startup API responses and Agent status expose no Startup directory, repository path, Node/Edge path, generated script, or other local filesystem identity.
+- The pet loads from `/api/status` independently of report, history, and scheduler endpoints.
+- Empty configuration shows an explicit empty state; an API failure shows a retry action instead of a permanent spinner.
+- Opening the full desk from an empty pet state provides an in-product “添加服务器” flow; no API-only dead end remains.
+- Saving the first host returns the user to the overview and presents the next safe steps in order: choose evidence, obtain a first observation, enable local scheduling, and optionally enable the desktop/login companion.
+- The first-run path explains LocalOps' product difference in plain language: unknown is not healthy, evidence has freshness, risky actions remain dry-run, and Codex discussion receives a minimal-disclosure summary only.
+- Codex discussion text structurally excludes server name, environment, role, URL, SSH alias, Compose project, commands, summaries, and raw evidence; only status, freshness, categorized signals, and a fixed safe next step may cross the app boundary.
+- The report page labels the full identity-bearing report as internal, never recommends it as a fallback for failed safe-copy, and requires a second confirmation before copying; the adjacent safe-share path reuses the tested minimal-disclosure summary.
+- Deleting a host requires an inline second confirmation that states its local configuration and check records will be removed; cancellation leaves both untouched.
+- The full desk can open pet mode in a separate compact window, and opening the desk from pet mode does not replace the pet when popups are available.
+- The packaged desktop host is single-instance, keeps native capabilities behind an exact loopback renderer check, and uses a native tray and always-on-top control instead of Edge title matching or a PowerShell helper.
+- The sandboxed renderer loads a CommonJS preload compatible with Electron's sandbox; desktop smoke must observe the exact bridge methods, read the native tray/topmost state, and prove an unallow-listed notification request is rejected before claiming native behavior works.
+- Packaged desktop verification reserves an isolated loopback port only under `--smoke-check`, proves the package owns that API, and confirms the port is closed after exit without disturbing a normal instance on `4317`. Normal desktop launches cannot select another port.
+- Closing the packaged pet hides it to the tray without stopping its owned API, explains that behavior once, and requires the explicit tray action “退出 LocalOps（停止本次值守）” to end the desktop-owned watch.
+- A pet opened from the full desk uses a random validated memory-only session, sends the same bounded presence heartbeat as a launcher-opened pet, and is therefore visible to aggregate ordinary duplicate-window refusal without exposing a server or user identity.
+- The Windows pet launcher accepts only a loopback URL and reuses a running API only when both its manifest and bounded status response identify LocalOps.
+- Launcher check mode opens no window or process; live mode reports owned process IDs and stops only the API it started when its pet window exits.
+- Launcher-owned API lifetime follows a random, memory-only pet presence session rather than the short-lived Edge bootstrap PID; missing initial presence fails within 10 seconds and stale presence expires automatically.
+- A normal repeated Windows launch detects aggregate unexpired pet presence before spawning Edge, opens no duplicate window, and exposes no session ID; an unavailable or malformed aggregate response fails closed.
+- The legacy checked-in Edge launcher remains available for compatibility and performs no install, elevation, service, or login-start mutation.
+- The Windows Node 24 CI job publishes both the legacy folder and a 14-day single-file Electron desktop artifact; the latter must pass icon generation, isolated-profile renderer, tray-close, process-exit, and owned-API cleanup verification.
+- Portable verification starts the API from the packaged directory with a fresh temporary data directory and proves the built home page, empty default state, and recognizable fail-closed Agent manifest.
+- Evidence older than the configured freshness window is shown as unknown across the full desk and pet: headline, aggregate counts, host pills, setup progress, and Codex discussion cannot retain a healthy claim. Prior readings remain visibly labeled as expired reference only, with an explicit action to obtain new evidence. The footer uses observation time rather than response generation time.
+- Freshness is evaluated per host from that host's own last-check timestamp. Refreshing one server never revives another server's expired HTTP, SSH, runtime, resource, guidance, pet, notification, or minimal-disclosure categories; mixed-age dashboards retain fresh hosts while downgrading only non-current hosts and recomputing counts.
+- A pet or Codex-triggered light check refreshes exactly one host.
+- Motion respects `prefers-reduced-motion`; keyboard focus remains visible.
+- Full-desk keyboard users can skip the sidebar, interactive focus has an explicit high-contrast ring, and asynchronous errors are announced as alerts.
+- Wide server and history tables remain keyboard-focusable and horizontally scrollable at compact widths instead of forcing the whole page wider.
 
