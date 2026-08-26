@@ -67,8 +67,9 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 .pet-host-row:hover { background: rgba(255, 255, 255, .76); }
 .pet-host-row:active, .pet-open-console:active { transform: translateY(1px); }
 .pet-host-row[aria-current="true"] { background: white; }
+.pet-host-row > span:last-child { min-width: 0; }
 .pet-host-row strong, .pet-host-row small { display: block; }
-.pet-host-row strong { font-size: 14px; }
+.pet-host-row strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .pet-host-row small, .pet-host-row em { margin-top: 2px; color: #687671; font-size: 12.5px; font-style: normal; }
 .pet-sheet-actions { display: grid; margin-top: 6px; }
 .pet-open-console, .pet-open-settings, .pet-discuss { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border-radius: 12px; font-size: 13px; font-weight: 700; }
@@ -90,6 +91,7 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 @media (min-width: 390px) {
   .pet-character { height: 242px; }
   .pet-speech { right: 18px; width: 214px; }
+  .pet-speech::after { left: 3px; }
 }
 
 @media (max-height: 400px) {

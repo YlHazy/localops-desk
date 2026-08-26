@@ -231,7 +231,7 @@ function StatusPill({ status }: { status: Status }) {
 
 function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh: boolean; selected: boolean; onSelect: (trigger: HTMLButtonElement) => void }) {
   return (
-    <button className={`host-panel ${selected ? "selected" : ""}`} onClick={(event) => onSelect(event.currentTarget)}>
+    <button className={`host-panel ${selected ? "selected" : ""}`} aria-expanded={selected} aria-controls={selected ? "server-detail" : undefined} onClick={(event) => onSelect(event.currentTarget)}>
       <div className="host-panel-top">
         <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
         <span className={`host-status-text ${host.status}`}>{statusLabels[host.status]}</span>
@@ -370,6 +370,7 @@ export function App() {
   const [petSyncing, setPetSyncing] = useState(false);
   const [lastCheckOutcome, setLastCheckOutcome] = useState<{ status: Status; summary: string; coverage: CollectionCoverage } | null>(null);
   const [dryRun, setDryRun] = useState<DryRunAction | null>(null);
+  const [actionHostId, setActionHostId] = useState<string | null>(null);
   const [dryRunCopied, setDryRunCopied] = useState(false);
   const [actionCapability, setActionCapability] = useState<ActionCapability | null>(null);
   const [actionReceipts, setActionReceipts] = useState<ActionReceipt[]>([]);
@@ -769,6 +770,10 @@ export function App() {
   const selectedCheck = useMemo(() => checks.find((check) => check.id === selectedCheckId) ?? null, [checks, selectedCheckId]);
   const priorityHosts = useMemo(() => prioritizeHosts(displayDashboard?.hosts ?? []), [displayDashboard]);
   const selectedHost = useMemo(() => selectFocusHost(priorityHosts, selectedHostId), [priorityHosts, selectedHostId]);
+  const actionHost = useMemo(
+    () => actionHostId ? priorityHosts.find((host) => host.id === actionHostId) ?? null : selectedHost,
+    [priorityHosts, actionHostId, selectedHost]
+  );
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
   const selectedFreshness = useMemo(
     () => dashboard && selectedHost
@@ -950,8 +955,13 @@ export function App() {
     }
   }
 
-  async function runDryAction(actionKey: string) {
+  async function runDryAction(actionKey: string, requestedHostId?: string) {
     if (pendingOperation) return;
+    const hostId = requestedHostId ?? actionHost?.id;
+    if (!hostId) {
+      setActionFlowError("原服务器已不在当前列表中；操作流程已经停止，不会改用其他服务器。");
+      return;
+    }
     setPendingOperation("action");
     setError("");
     setDryRunCopied(false);
@@ -963,8 +973,11 @@ export function App() {
     try {
       const result = await api<DryRunAction>("/api/actions/dry-run", {
         method: "POST",
-        body: JSON.stringify({ hostId: selectedHost?.id, actionKey })
+        body: JSON.stringify({ hostId, actionKey })
       });
+      if (result.target.id !== hostId) throw new Error("操作预案返回了不同的服务器，流程已停止。");
+      setActionHostId(result.target.id);
+      setSelectedHostId(result.target.id);
       setDryRun(result);
       setSelectedTab("actions");
     } catch (err) {
@@ -1009,6 +1022,7 @@ export function App() {
       });
       setShowHostForm(false);
       setEditingHostId(null);
+      setLastCheckOutcome(null);
       await load();
       if (creatingFirstHost) setSelectedTab("overview");
     } catch (err) {
@@ -1026,6 +1040,7 @@ export function App() {
       await api(`/api/hosts/${encodeURIComponent(hostId)}`, { method: "DELETE" });
       setSelectedHostId(null);
       setPendingHostDeleteId(null);
+      setLastCheckOutcome(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除主机失败");
@@ -1057,14 +1072,14 @@ export function App() {
   }
 
   async function prepareNginxAction() {
-    if (pendingOperation || !selectedHost || dryRun?.actionKey !== "reload-nginx") return;
+    if (pendingOperation || !actionHost || dryRun?.actionKey !== "reload-nginx") return;
     setPendingOperation("action-prepare");
     setActionFlowError("");
     setActionExecution(null);
     try {
       const result = await api<{ capability: ActionCapability; approval: ActionApproval }>("/api/actions/prepare", {
         method: "POST",
-        body: JSON.stringify({ hostId: selectedHost.id, actionKey: "reload-nginx" })
+        body: JSON.stringify({ hostId: actionHost.id, actionKey: "reload-nginx" })
       });
       setActionCapability(result.capability);
       setActionApproval(result.approval);
@@ -1110,7 +1125,14 @@ export function App() {
     setActionFlowError("");
   }
 
-  function returnToSelectedHost() {
+  function returnToActionHost() {
+    if (!actionHostId || !priorityHosts.some((host) => host.id === actionHostId)) {
+      setError("原服务器已不在当前列表中；没有切换到其他服务器。");
+      setSelectedTab("overview");
+      setDetailsOpen(false);
+      return;
+    }
+    setSelectedHostId(actionHostId);
     setSelectedTab("overview");
     setDetailsOpen(true);
   }
@@ -1118,6 +1140,12 @@ export function App() {
   async function runAutomaticDiagnosis() {
     if (pendingOperation || !selectedHost || !selectedReadiness?.canCollect) return;
     const hostId = selectedHost.id;
+    setSelectedHostId(hostId);
+    setActionHostId(hostId);
+    setDryRun(null);
+    setActionApproval(null);
+    setActionExecution(null);
+    setActionFlowError("");
     setPendingOperation("diagnosis");
     setDiagnosisResult(null);
     setDiagnosisError("");
@@ -1171,6 +1199,7 @@ export function App() {
       await api("/api/practice/offline", { method: "POST", body: "{}" });
       setPracticePending(null);
       setSelectedHostId(null);
+      setLastCheckOutcome(null);
       await load();
       setSelectedTab("overview");
     } catch (err) {
@@ -1187,6 +1216,7 @@ export function App() {
       await api("/api/practice/offline", { method: "DELETE", body: "{}" });
       setPracticePending(null);
       setSelectedHostId(null);
+      setLastCheckOutcome(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "退出离线练习失败");
@@ -1417,9 +1447,9 @@ export function App() {
                     <h3>{selectedDiagnosis.diagnosis.headline}</h3>
                     <dl><div><dt>发现</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>下一步</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
                     {selectedDiagnosis.diagnosis.layer === "entry" ? (
-                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><ShieldCheck size={16} />审阅 Nginx 重载</button>
+                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("reload-nginx", selectedHost.id)}><ShieldCheck size={16} />审阅 Nginx 重载</button>
                     ) : selectedDiagnosis.diagnosis.layer === "none" ? null : (
-                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><TerminalSquare size={16} />查看只读检查</button>
+                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service", selectedHost.id)}><TerminalSquare size={16} />查看只读检查</button>
                     )}
                   </section>
                 </>
@@ -1741,17 +1771,17 @@ export function App() {
         {selectedTab === "actions" && (
           <section className="action-layout">
             <header className="action-intro">
-              <div><button className="action-back" onClick={returnToSelectedHost}>← 返回 {selectedHost.name}</button><h2>安全操作</h2></div>
+              <div><button className="action-back" onClick={returnToActionHost}>← 返回 {actionHost?.name ?? "原服务器"}</button><h2>安全操作</h2></div>
               <p>先核对排查结论，再决定是否执行。没有对应证据的变更会被拒绝。</p>
             </header>
             <div className="action-menu">
-              <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("inspect-service")}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
-              <button className={dryRun?.actionKey === "reload-nginx" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("reload-nginx")}><RefreshCcw size={17} />Nginx 重载</button>
-              <button className={dryRun?.actionKey === "restart-compose-service" ? "selected" : ""} disabled={operationBusy} onClick={() => runDryAction("restart-compose-service")}><AlertTriangle size={17} />重启服务</button>
+              <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("inspect-service", actionHost?.id)}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
+              <button className={dryRun?.actionKey === "reload-nginx" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("reload-nginx", actionHost?.id)}><RefreshCcw size={17} />Nginx 重载</button>
+              <button className={dryRun?.actionKey === "restart-compose-service" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("restart-compose-service", actionHost?.id)}><AlertTriangle size={17} />重启服务</button>
             </div>
             <div className="detail-panel">
-              <h2>{dryRun ? dryRun.actionKey === "inspect-service" ? `只读检查：${selectedHost.name}` : dryRun.actionKey === "reload-nginx" ? `Nginx 重载预案：${selectedHost.name}` : `服务重启预案：${selectedHost.name}` : "选择一种操作"}</h2>
-              {dryRun ? (
+              <h2>{dryRun && actionHost ? dryRun.actionKey === "inspect-service" ? `只读检查：${actionHost.name}` : dryRun.actionKey === "reload-nginx" ? `Nginx 重载预案：${actionHost.name}` : `服务重启预案：${actionHost.name}` : actionHost ? "选择一种操作" : "原服务器已不可用"}</h2>
+              {dryRun && actionHost ? (
                 <>
                   <div className={`action-contract ${dryRun.executionState}`}>
                     <div><span>风险等级</span><strong>{({ "read-only": "只读", low: "低风险", medium: "中风险", high: "高风险" } as const)[dryRun.riskTier]}</strong></div>
@@ -1780,7 +1810,7 @@ export function App() {
                           <p>{actionExecution.receipt.summary}</p>
                           {actionExecution.steps.length ? <ol>{actionExecution.steps.map((step) => <li className={step.status} key={step.key}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol> : null}
                           {actionExecution.receipt.status === "succeeded" ? null : <small>不要直接重复执行；先返回服务器详情查看最新证据。</small>}
-                          <button className="secondary slim receipt-return" onClick={returnToSelectedHost}>查看最新状态</button>
+                          <button className="secondary slim receipt-return" onClick={returnToActionHost}>查看最新状态</button>
                         </div>
                       ) : actionApproval ? (
                         <div className="action-approval" role="group" aria-label="最后确认 Nginx 重载">
@@ -1821,8 +1851,10 @@ export function App() {
                     </div>
                   ) : null}
                 </>
-              ) : (
+              ) : actionHost ? (
                 <p className="action-empty">先从服务器详情运行“自动查原因”，或者在左侧选择只读检查。变更操作不会在没有对应证据时开放。</p>
+              ) : (
+                <p className="action-empty" role="alert">原服务器已不在当前列表中；这条操作流程已停止，不会自动切换到其他服务器。</p>
               )}
             </div>
             {actionReceipts.length ? (

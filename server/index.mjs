@@ -1097,6 +1097,7 @@ function dryRunAction(input) {
   const plans = {
     "inspect-service": {
       actionKey,
+      target: { id: hostItem.id, name: hostItem.name },
       riskTier: "read-only",
       title: `只读诊断：${hostItem.name}`,
       executionState: practice ? "blocked-template" : "read-only-ready",
@@ -1110,6 +1111,7 @@ function dryRunAction(input) {
     },
     "reload-nginx": {
       actionKey,
+      target: { id: hostItem.id, name: hostItem.name },
       riskTier: "medium",
       title: `Reload Nginx：${hostItem.name}`,
       executionState: "blocked-template",
@@ -1125,6 +1127,7 @@ function dryRunAction(input) {
     },
     "restart-compose-service": {
       actionKey,
+      target: { id: hostItem.id, name: hostItem.name },
       riskTier: "high",
       title: `重启 Compose 服务：${hostItem.name}`,
       executionState: "blocked-template",

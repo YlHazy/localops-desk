@@ -96,7 +96,7 @@ Deletes expired local check history, orphan check rows, and finished action rece
 
 `POST /api/actions/dry-run`
 
-Returns an allow-listed action plan and verification steps. It does not mutate remote state. Read-only plans may return a copyable configured target; practice and mutating plans return non-copyable placeholders and never disclose the configured SSH alias. Unknown action keys are rejected.
+Returns an allow-listed action plan, its explicit local target `{id, name}`, and verification steps. It does not mutate remote state. The UI pins the remaining review flow to that id and rejects a mismatched response. Read-only plans may return a copyable configured target; practice and mutating plans return non-copyable placeholders and never disclose the configured SSH alias. Unknown action keys are rejected.
 
 `GET /api/actions/capability`
 

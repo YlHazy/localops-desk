@@ -95,6 +95,7 @@ test("expired evidence stays out of the current overview and pet glance", () => 
 
 test("server detail keeps actions and facts primary while folding bounded diagnosis evidence", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
   const diagnosisSource = readFileSync(new URL("../shared/host-diagnosis.mjs", import.meta.url), "utf8");
   assert.match(appSource, /\/api\/diagnostics\/\$\{encodeURIComponent\(hostId\)\}/);
@@ -107,6 +108,10 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "entry"/);
   assert.match(appSource, /审阅 Nginx 重载/);
   assert.match(appSource, /查看只读检查/);
+  assert.match(appSource, /runDryAction\("reload-nginx", selectedHost\.id\)/);
+  assert.match(appSource, /setSelectedHostId\(hostId\)/);
+  assert.doesNotMatch(styles, /\.automatic-diagnosis h3[^\n]*line-clamp/);
+  assert.doesNotMatch(styles, /\.automatic-diagnosis dd[^\n]*line-clamp/);
   assert.match(appSource, /无法连接本地 LocalOps 服务/);
   assert.doesNotMatch(appSource, /查看排查步骤/);
   assert.doesNotMatch(appSource, /memoryPercent \?\? "—"\}%/);
@@ -118,6 +123,26 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.doesNotMatch(diagnosisSource, /host\.name|host\.healthUrl|host\.sshAlias|host\.composeProject|host\.evidence/);
 });
 
+test("safety operations stay pinned to one host across status refreshes", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+  assert.match(appSource, /const \[actionHostId, setActionHostId\]/);
+  assert.match(appSource, /actionHostId \? priorityHosts\.find\(\(host\) => host\.id === actionHostId\) \?\? null : selectedHost/);
+  assert.match(appSource, /body: JSON\.stringify\(\{ hostId: actionHost\.id, actionKey: "reload-nginx" \}\)/);
+  assert.match(appSource, /setSelectedHostId\(actionHostId\)/);
+  assert.match(appSource, /不会自动切换到其他服务器/);
+  assert.doesNotMatch(appSource, /body: JSON\.stringify\(\{ hostId: selectedHost\.id, actionKey: "reload-nginx" \}\)/);
+  assert.match(serverSource, /target: \{ id: hostItem\.id, name: hostItem\.name \}/);
+});
+
+test("configuration changes clear check receipts for the previous host set", () => {
+  const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const clears = appSource.match(/setLastCheckOutcome\(null\)/g) ?? [];
+  assert.ok(clears.length >= 5);
+  assert.match(appSource, /removeOfflinePractice\(\)[\s\S]*setLastCheckOutcome\(null\)[\s\S]*await load\(\)/);
+  assert.match(appSource, /removeHost\(hostId: string\)[\s\S]*setLastCheckOutcome\(null\)[\s\S]*await load\(\)/);
+});
+
 test("pet local disconnect routes the main action to local recovery", () => {
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const petStyles = readFileSync(new URL("../src/pet-v2.css", import.meta.url), "utf8");
@@ -126,6 +151,9 @@ test("pet local disconnect routes the main action to local recovery", () => {
   assert.match(petSource, /title=\{syncError \? `\$\{recovery\.detail\} \$\{recovery\.boundary\}`/);
   assert.match(petStyles, /grid-template-rows: 36px minmax\(0, 1fr\) 44px 38px/);
   assert.match(petStyles, /max-height: 236px/);
+  assert.match(petSource, /const closeQuickView = useCallback/);
+  assert.match(petSource, /onClick=\{closeQuickView\}/);
+  assert.match(petStyles, /\.pet-host-row > span:last-child \{ min-width: 0; \}/);
 });
 
 test("the desk cannot keep a healthy headline after evidence expires", () => {

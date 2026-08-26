@@ -2071,7 +2071,7 @@ code {
 .host-panel:hover { background: #f6f8f6; }
 .host-panel.selected { border-color: #e4e9e6; background: #edf4ef; box-shadow: inset 3px 0 #2f7757; }
 .host-panel-top { align-items: center; }
-.host-name { display: inline-flex; align-items: center; gap: 10px; font-size: 16px; }
+.host-name { display: inline-flex; min-width: 0; align-items: center; gap: 10px; overflow: hidden; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .host-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #8b9691; }
 .host-dot.healthy { background: #2e956c; }
 .host-dot.warning { background: #d18b1e; }
@@ -2105,7 +2105,7 @@ code {
 .detail-backdrop { position: fixed; z-index: 40; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: rgba(25, 33, 29, .18); cursor: default; animation: detail-fade 160ms ease-out; }
 .server-detail-drawer .detail-head { position: sticky; z-index: 2; top: 0; margin: 0 -26px; padding: 20px 26px 16px; border-bottom: 1px solid #e1e7e3; background: rgba(255, 255, 255, .97); backdrop-filter: blur(10px); }
 .detail-title { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 11px; align-items: center; min-width: 0; }
-.detail-head h2 { margin: 0; font-size: 22px; }
+.detail-head h2 { display: -webkit-box; margin: 0; overflow: hidden; font-size: 22px; line-height: 1.3; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .detail-head p { margin: 5px 0 0; color: #71807a; font-size: 13px; }
 .detail-head-tools { display: flex; gap: 4px; align-items: center; }
 .detail-close, .detail-config { display: grid; width: 40px; height: 40px; place-items: center; padding: 0; color: #52615b; border: 0; border-radius: 12px; background: transparent; }
@@ -2126,14 +2126,11 @@ code {
 .automatic-diagnosis.warning { border-left-color: #d18b1e; background: #fffaf0; }
 .automatic-diagnosis.critical { border-left-color: #c94d47; background: #fff6f4; }
 .automatic-diagnosis.unknown { border-left-color: #82908a; }
-.automatic-diagnosis h3 { margin: 0 0 10px; color: #25342e; font-size: 17px; line-height: 1.4; }
-.automatic-diagnosis h3, .automatic-diagnosis dd { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; }
-.automatic-diagnosis h3 { -webkit-line-clamp: 1; }
-.automatic-diagnosis dd { -webkit-line-clamp: 2; }
+.automatic-diagnosis h3 { margin: 0 0 10px; color: #25342e; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
 .automatic-diagnosis dl { display: grid; gap: 8px; margin: 0; }
 .automatic-diagnosis dl > div { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 10px; }
 .automatic-diagnosis dt { color: #6b7772; font-size: 13px; font-weight: 700; }
-.automatic-diagnosis dd { margin: 0; color: #35463f; font-size: 14px; line-height: 1.5; }
+.automatic-diagnosis dd { margin: 0; color: #35463f; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .automatic-diagnosis > small { display: block; margin-top: 11px; color: #748079; font-size: 12.5px; line-height: 1.45; }
 .diagnostic-proof { margin: 0 0 18px; border-block: 1px solid #dfe6e2; }
 .diagnostic-proof > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; cursor: pointer; list-style: none; }

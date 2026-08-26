@@ -227,6 +227,11 @@ export function PetMode({
     };
   }, [petSessionId, applyTopmost]);
 
+  const closeQuickView = useCallback(() => {
+    setExpanded(false);
+    window.setTimeout(() => glanceButtonRef.current?.focus(), 0);
+  }, []);
+
   useEffect(() => {
     if (!expanded) return;
     const drawer = drawerRef.current;
@@ -235,8 +240,7 @@ export function PetMode({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setExpanded(false);
-        window.setTimeout(() => glanceButtonRef.current?.focus(), 0);
+        closeQuickView();
         return;
       }
       if (event.key !== "Tab") return;
@@ -254,7 +258,7 @@ export function PetMode({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [expanded]);
+  }, [expanded, closeQuickView]);
 
   const trustedDashboard = useMemo(() => trustworthyDashboard(dashboard, now), [dashboard, now]);
   const hosts = useMemo(() => prioritizeHosts(trustedDashboard.hosts), [trustedDashboard]);
@@ -489,9 +493,9 @@ export function PetMode({
       </button> : <span aria-hidden="true" />}
 
       <div className={`pet-sheet-layer ${expanded ? "open" : ""}`} aria-hidden={!expanded}>
-        <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={() => setExpanded(false)} aria-label="关闭快速查看" />
+        <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={closeQuickView} aria-label="关闭快速查看" />
         <section ref={drawerRef} className="pet-drawer" id="pet-quick-view" role="dialog" aria-modal="true" aria-label="服务器快速查看">
-          <header><strong>服务器</strong><button onClick={() => setExpanded(false)} tabIndex={expanded ? 0 : -1} aria-label="关闭"><X size={17} /></button></header>
+          <header><strong>服务器</strong><button onClick={closeQuickView} tabIndex={expanded ? 0 : -1} aria-label="关闭"><X size={17} /></button></header>
           <div className="pet-hosts">
             {hosts.map((host) => {
               const current = hostEvidenceIsFresh(dashboard, host, now);

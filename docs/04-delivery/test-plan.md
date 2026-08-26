@@ -18,6 +18,8 @@
   - Exiting an empty-target practice stops local scheduling and removes orphaned practice runs.
   - Manual light check updates UI.
   - Dry-run actions reject unknown keys, allow copying only configured read-only commands, and keep practice/mutating plans placeholder-only and non-copyable.
+  - Safety-flow checks pin diagnosis, dry-run switching, approval, execution, verification, and return to one host id; priority changes never retarget the flow, and a missing host fails closed.
+  - Host-set mutations clear the previous completed-check receipt instead of showing counts for removed or newly added servers.
   - Copyable SSH commands exactly match the runtime allowlist and contain no Compose, sudo, restart, or systemctl mutation path.
   - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
   - Evidence-judgment tests keep HTTP, SSH, runtime, and resource classifications shared across backend and UI; null resource fields remain unknown, and disk 75%/90% plus CPU/memory 85%/95% boundaries cannot drift silently.

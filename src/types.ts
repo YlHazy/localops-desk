@@ -121,6 +121,7 @@ export interface RetentionResult {
 
 export interface DryRunAction {
   actionKey: string;
+  target: { id: string; name: string };
   riskTier: "read-only" | "low" | "medium" | "high";
   title: string;
   executionState: "read-only-ready" | "blocked-template";
