@@ -142,8 +142,8 @@ function overallMessage(counts: Record<Status, number>, evidenceExpired = false,
   }
   if (partialEvidenceCount > 0) {
     return {
-      title: `${partialEvidenceCount} 台仅确认入口可用`,
-      description: "资源状态尚未检查"
+      title: `${partialEvidenceCount} 台入口正常`,
+      description: "CPU、内存、磁盘和负载尚未采集"
     };
   }
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -241,15 +241,14 @@ function StatusPill({ status }: { status: Status }) {
 function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh: boolean; selected: boolean; onSelect: (trigger: HTMLButtonElement) => void }) {
   return (
     <button className={`host-panel ${selected ? "selected" : ""}`} aria-expanded={selected} aria-controls={selected ? "server-detail" : undefined} onClick={(event) => onSelect(event.currentTarget)}>
-      <div className="host-panel-top">
-        <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
-        <span className={`host-status-text ${host.status}`}>{statusLabels[host.status]}</span>
-      </div>
-      <div className="host-row-meta">
-        <span>{fresh && host.status !== "healthy" ? host.summary : fresh ? [host.environment, host.role].filter(Boolean).join(" · ") : "状态待更新"}</span>
-        <time>{fresh ? formatTime(host.lastCheckedAt) : "尚未检查"}</time>
-        <span aria-hidden="true">›</span>
-      </div>
+      <span className="host-monitor-name"><span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span><small>{host.environment || "未分类"}</small></span>
+      <span className="host-monitor-cell" data-label="HTTP"><strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待检查"}</strong>{fresh && host.httpLatencyMs != null ? <small>{host.httpLatencyMs} ms</small> : null}</span>
+      <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ cpuPercent: host.cpuPercent }) : "unknown"}`} data-label="CPU"><strong>{fresh ? percentValue(host.cpuPercent) : "—"}</strong></span>
+      <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ memoryPercent: host.memoryPercent }) : "unknown"}`} data-label="内存"><strong>{fresh ? percentValue(host.memoryPercent) : "—"}</strong></span>
+      <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ diskPercent: host.diskPercent }) : "unknown"}`} data-label="磁盘"><strong>{fresh ? percentValue(host.diskPercent) : "—"}</strong></span>
+      <span className="host-monitor-cell" data-label="负载 1m"><strong>{fresh && host.load1 != null ? host.load1.toFixed(2) : "—"}</strong></span>
+      <span className={`host-monitor-cell ${fresh ? runtimeSignalStatus(host) : "unknown"}`} data-label="Docker"><strong>{fresh ? containerValue(host) : "—"}</strong></span>
+      <span className="host-monitor-time"><span className={`host-status-text ${host.status}`}>{fresh ? statusLabels[host.status] : "待更新"}</span><time>{fresh ? formatTime(host.lastCheckedAt) : "—"}</time><i aria-hidden="true">›</i></span>
     </button>
   );
 }
@@ -316,8 +315,6 @@ function HostForm({
   const nameRef = useRef<HTMLInputElement>(null);
   const healthUrlRef = useRef<HTMLInputElement>(null);
   const sshAliasRef = useRef<HTMLInputElement>(null);
-  const hasHealthUrl = form.healthUrl.trim().length > 0;
-  const hasSshAlias = form.sshAlias.trim().length > 0;
   const validation = validateHostForm(form, { sshCollectionEnabled });
   const update = (key: keyof HostConfigInput, value: string) => {
     setForm({ ...form, [key]: key === "tags" ? value.split(",").map((item) => item.trim()).filter(Boolean) : value });
@@ -340,30 +337,27 @@ function HostForm({
     <form className="host-form" onSubmit={submit} noValidate>
       <div className="host-form-intro">
         <div>
-          <strong>{editing ? "修改本机保存的服务器配置" : "填写监控来源"}</strong>
-          <small>只要求名称；连接信息可稍后补充，不要填写密码、Token 或私钥。</small>
+          <strong>{editing ? "编辑服务器" : "添加服务器"}</strong>
+          <small>配置保存在本机。不要填写密码、Token 或私钥。</small>
         </div>
-        <span className={hasHealthUrl || (hasSshAlias && sshCollectionEnabled) ? "ready" : "waiting"}>
-          {hasHealthUrl && validation.errors.healthUrl
-            ? "检查地址待修正"
-            : hasHealthUrl
-            ? "HTTP 可检查"
-            : hasSshAlias && sshCollectionEnabled
-              ? "只读 SSH 可用"
-              : hasSshAlias
-                ? "SSH 已登记 · 当前未启用"
-                : "保存后保持未检查"}
-        </span>
       </div>
-      <div className="form-grid host-form-essential">
-        <label>服务器名称 *<input ref={nameRef} required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? "host-name-error" : undefined} />{fieldErrors.name ? <small className="field-error" id="host-name-error">{fieldErrors.name}</small> : <small>只用于本机显示。</small>}</label>
-        <label className="wide">健康检查地址 · 推荐<input ref={healthUrlRef} value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" aria-invalid={Boolean(fieldErrors.healthUrl)} aria-describedby={fieldErrors.healthUrl ? "host-health-error" : undefined} />{fieldErrors.healthUrl ? <small className="field-error" id="host-health-error">{fieldErrors.healthUrl}</small> : <small>只向这个地址发送 HTTP GET；不要填写账号、Token 或查询参数。</small>}</label>
-        <label>SSH 别名 · 可选<input ref={sshAliasRef} value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" aria-invalid={Boolean(fieldErrors.sshAlias)} aria-describedby={fieldErrors.sshAlias ? "host-ssh-error" : undefined} />{fieldErrors.sshAlias ? <small className="field-error" id="host-ssh-error">{fieldErrors.sshAlias}</small> : <small>{sshCollectionEnabled ? "读取 CPU、内存、磁盘和 Docker。" : "已登记也不会在当前模式连接。"}</small>}</label>
-      </div>
-      <details className="host-form-advanced" open={editing || undefined}>
-        <summary>更多信息</summary>
+      <fieldset className="host-form-section">
+        <legend>基本信息</legend>
+        <div className="form-grid host-form-basic">
+          <label>服务器名称 *<input ref={nameRef} required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? "host-name-error" : undefined} />{fieldErrors.name ? <small className="field-error" id="host-name-error">{fieldErrors.name}</small> : <small>只用于本机显示。</small>}</label>
+          <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="例如：生产" /></label>
+        </div>
+      </fieldset>
+      <fieldset className="host-form-section">
+        <legend>监控方式</legend>
+        <div className="form-grid host-form-sources">
+          <label>HTTP 健康检查<input ref={healthUrlRef} value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" aria-invalid={Boolean(fieldErrors.healthUrl)} aria-describedby={fieldErrors.healthUrl ? "host-health-error" : undefined} />{fieldErrors.healthUrl ? <small className="field-error" id="host-health-error">{fieldErrors.healthUrl}</small> : <small>定时读取入口状态；不要带账号、Token 或查询参数。</small>}</label>
+          <label>SSH 别名<input ref={sshAliasRef} value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" aria-invalid={Boolean(fieldErrors.sshAlias)} aria-describedby={fieldErrors.sshAlias ? "host-ssh-error" : undefined} />{fieldErrors.sshAlias ? <small className="field-error" id="host-ssh-error">{fieldErrors.sshAlias}</small> : <small>{sshCollectionEnabled ? "只读采集 CPU、内存、磁盘、负载和 Docker。" : "已保存的别名当前不会连接。"}</small>}</label>
+        </div>
+      </fieldset>
+      <details className="host-form-advanced">
+        <summary>分类与备注</summary>
         <div className="form-grid">
-          <label>环境<input value={form.environment} onChange={(event) => update("environment", event.target.value)} placeholder="production" /></label>
           <label>角色<input value={form.role} onChange={(event) => update("role", event.target.value)} placeholder="web/api/db" /></label>
           <label>Compose 项目 · 备注<input value={form.composeProject} onChange={(event) => update("composeProject", event.target.value)} placeholder="例如：blog-stack" /><small>仅作本机标记，不会拼入命令。</small></label>
           <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
@@ -1465,6 +1459,7 @@ export function App() {
                 <div><h2>服务器</h2><span>{priorityHosts.length} 台</span></div>
                 {!dashboard.practiceMode ? <button className="quiet-action" onClick={startCreateHost} disabled={operationBusy}><Plus size={16} />添加</button> : null}
               </div>
+              <div className="host-monitor-head" aria-hidden="true"><span>服务器</span><span>HTTP</span><span>CPU</span><span>内存</span><span>磁盘</span><span>负载 1m</span><span>Docker</span><span>状态 / 时间</span></div>
               <div className="host-list simple">
                 {priorityHosts.map((host) => (
                   <HostPanel
@@ -1541,11 +1536,11 @@ export function App() {
         )}
 
         {selectedTab === "hosts" && (
-          <section className="table-panel">
+          <section className="connection-panel">
             <div className="section-head">
               <div>
-                <h2>服务器配置</h2>
-                <p>只保存 SSH alias、健康检查 URL 和标签，不保存密钥。</p>
+                <h2>服务器连接</h2>
+                <p>选择监控谁、从哪里读取状态。连接信息只保存在本机。</p>
               </div>
               <button className="secondary" onClick={startCreateHost}><Plus size={16} />新增</button>
             </div>
@@ -1562,38 +1557,36 @@ export function App() {
                 sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
               />
             ) : null}
-            <div className="table-scroll" tabIndex={0} role="region" aria-label="服务器配置表，可横向滚动">
-              <table>
-                <thead><tr><th>名称</th><th>环境</th><th>SSH</th><th>健康检查</th><th>Compose</th><th>状态</th><th>操作</th></tr></thead>
-                <tbody>
-                  {currentDashboard.hosts.map((host) => (
-                    <tr key={host.id} className={pendingHostDeleteId === host.id ? "pending-delete" : ""}>
-                      <td>{host.name}</td>
-                      <td>{host.environment}</td>
-                      <td>{host.sshAlias}</td>
-                      <td>{host.healthUrl}</td>
-                      <td>{host.composeProject}</td>
-                      <td><StatusPill status={host.status} /></td>
-                      <td className="row-actions">
-                        {host.isOfflineDemo ? (
-                          <span className="practice-managed-row">练习对象 · 统一退出</span>
-                        ) : pendingHostDeleteId === host.id ? (
-                          <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
-                            <span>本地配置和检查记录都会删除</span>
-                            <button className="danger" disabled={operationBusy} onClick={() => removeHost(host.id)}><Trash2 size={15} />{operationState.deletingHost ? "删除中" : "确认删除"}</button>
-                            <button disabled={operationState.deletingHost} onClick={() => setPendingHostDeleteId(null)}>取消</button>
-                          </div>
-                        ) : (
-                          <>
-                            <button onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
-                            <button onClick={() => setPendingHostDeleteId(host.id)}><Trash2 size={15} />删除</button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="connection-list" role="list" aria-label="服务器连接配置">
+              {currentDashboard.hosts.map((host) => (
+                <article className={`connection-row ${pendingHostDeleteId === host.id ? "pending-delete" : ""}`} role="listitem" key={host.id}>
+                  <div className="connection-identity">
+                    <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
+                    <small>{host.environment || "未分类"}</small>
+                  </div>
+                  <dl className="connection-sources">
+                    <div><dt>HTTP</dt><dd>{host.healthUrl ? "已配置" : "未配置"}</dd></div>
+                    <div><dt>SSH</dt><dd>{host.sshAlias ? (dashboard.mode === "ssh-enabled" ? "只读采集" : "已保存 · 未启用") : "未配置"}</dd></div>
+                    <div><dt>分类</dt><dd>{[host.role, host.composeProject].filter(Boolean).join(" · ") || "无"}</dd></div>
+                  </dl>
+                  <div className="connection-actions">
+                    {host.isOfflineDemo ? (
+                      <span className="practice-managed-row">练习对象 · 统一退出</span>
+                    ) : pendingHostDeleteId === host.id ? (
+                      <div className="delete-confirm" role="group" aria-label={`确认删除 ${host.name}`}>
+                        <span>将删除本地配置和检查记录</span>
+                        <button className="danger" disabled={operationBusy} onClick={() => removeHost(host.id)}><Trash2 size={15} />{operationState.deletingHost ? "删除中" : "确认删除"}</button>
+                        <button disabled={operationState.deletingHost} onClick={() => setPendingHostDeleteId(null)}>取消</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button className="secondary slim" onClick={() => startEditHost(host)}><Pencil size={15} />编辑</button>
+                        <button className="connection-delete" onClick={() => setPendingHostDeleteId(host.id)} aria-label={`删除 ${host.name}`} title="删除"><Trash2 size={15} /></button>
+                      </>
+                    )}
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
         )}
