@@ -1,17 +1,18 @@
-import { ArrowUpRight, Check, ChevronDown, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
+import { ArrowUpRight, Check, Pin, PinOff, RefreshCcw, Server, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hostEvidenceIsFresh, localRecoveryCopy, trustworthyDashboard } from "./desk-sync.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { hostGuidance } from "./guardian-guidance.mjs";
 import { manualFocusSelection, prioritizeHosts, selectFocusHost } from "./host-priority.mjs";
 import { petLifecycleCopy, petRuntimeMode } from "./pet-lifecycle.mjs";
-import { monitorSignal, petSnapshotTrust } from "./pet-monitor.mjs";
+import { monitorSignal } from "./pet-monitor.mjs";
 import type { MonitorSignal } from "./pet-monitor.mjs";
 import type { PetDeskTab } from "./pet-navigation.mjs";
 import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import { notificationDecision, petQuietDurationMs, readNotificationCalibration, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationCalibration, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
+import { resourceSignalStatus, runtimeSignalStatus } from "../shared/evidence-judgment.mjs";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
@@ -107,6 +108,27 @@ function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "
       : `内存 ${host.memoryPercent ?? "—"}%，需要留意。`;
   }
   return "有一项状态需要确认。";
+}
+
+function compactPercent(value: number | null, current: boolean) {
+  return current && value != null ? `${value}%` : "—";
+}
+
+function compactLoad(value: number | null, current: boolean) {
+  return current && value != null ? value.toFixed(2) : "—";
+}
+
+function compactDocker(host: HostState, current: boolean) {
+  if (!current || host.containerCount == null) return "—";
+  const unhealthy = host.unhealthyContainerCount ?? 0;
+  return unhealthy > 0 ? `异常 ${unhealthy}` : `${host.containerCount}/${host.containerCount}`;
+}
+
+function compactHostState(host: HostState, current: boolean) {
+  if (!current) return host.lastCheckedAt ? "过期" : "待查";
+  const hasResources = host.cpuPercent != null || host.memoryPercent != null || host.diskPercent != null || host.load1 != null || host.containerCount != null;
+  if (!hasResources && /^2\d\d/.test(host.httpStatus)) return "仅入口";
+  return { healthy: "正常", warning: "关注", critical: "故障", unknown: "待查" }[host.status];
 }
 
 export function PetMode({
@@ -228,7 +250,9 @@ export function PetMode({
 
   const closeQuickView = useCallback(() => {
     setExpanded(false);
-    window.setTimeout(() => glanceButtonRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      (glanceButtonRef.current ?? document.querySelector<HTMLButtonElement>(".pet-host-mini"))?.focus();
+    }, 0);
   }, []);
 
   useEffect(() => {
@@ -266,10 +290,8 @@ export function PetMode({
   const priorityFresh = priorityHost ? hostEvidenceIsFresh(dashboard, priorityHost, now) : false;
   const focusFresh = focusHost ? hostEvidenceIsFresh(dashboard, focusHost, now) : false;
   const priorityGuidance = priorityHost ? hostGuidance(priorityHost, priorityFresh) : null;
-  const hasNonCurrentHost = dashboard.hosts.some((host) => !hostEvidenceIsFresh(dashboard, host, now));
   const manuallyFocused = Boolean(selectedHostId && focusHost?.id === selectedHostId && priorityHost?.id !== selectedHostId);
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
-  const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
   const focusReadiness = evidenceReadiness(dashboard, focusHost);
   const visibleCounts = trustedDashboard.counts;
   const watchMode = watchModeCopy({
@@ -452,15 +474,6 @@ export function PetMode({
           : overallStatus === "healthy"
             ? focusReadiness.state === "http" ? `仅检查 HTTP · ${latestTime(dashboard.observedAt)}` : `检查于 ${latestTime(dashboard.observedAt)}`
             : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason).replace(/[。.]$/, "");
-  const attentionCount = (visibleCounts.warning ?? 0) + (visibleCounts.critical ?? 0) + (visibleCounts.unknown ?? 0);
-  const glanceLabel = snapshotTrust.state === "stale"
-    ? `${dashboard.hosts.length} 台 · 状态过期`
-    : snapshotTrust.state === "unknown"
-      ? `${dashboard.hosts.length} 台 · 未检查`
-      : attentionCount > 0
-        ? `${attentionCount} 台需关注`
-        : `${dashboard.hosts.length} 台正常`;
-
   function hidePet() {
     if (window.localOpsDesktop?.hidePet) {
       void window.localOpsDesktop.hidePet();
@@ -505,12 +518,22 @@ export function PetMode({
         </button>
       </footer>
 
-      {dashboard.hosts.length > 0 ? <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
-        <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>{snapshotTrust.state === "offline" ? `${dashboard.hosts.length} 台 · 旧结果` : glanceLabel}</strong>
-        <time>{latestTime(dashboard.observedAt)}</time>
-        <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
-      </button> : <span aria-hidden="true" />}
+      {dashboard.hosts.length > 0 ? <section className="pet-host-deck" aria-label="服务器核心指标">
+        {hosts.slice(0, 2).map((host) => {
+          const current = hostEvidenceIsFresh(dashboard, host, now) && !syncError;
+          const selected = host.id === focusHost?.id;
+          return <button ref={selected ? glanceButtonRef : undefined} className={`pet-host-mini ${host.status} ${selected ? "selected" : ""}`} key={host.id} aria-expanded={expanded && selected} aria-controls="pet-quick-view" onClick={() => { setSelectedHostId(manualFocusSelection(hosts, host.id)); setExpanded(true); }} title={host.name}>
+            <header><span className={`pet-status-dot ${host.status}`} aria-hidden="true" /><strong>{host.name}</strong><span>{compactHostState(host, current)} · <time>{latestTime(host.lastCheckedAt)}</time></span></header>
+            <div className="pet-mini-metrics">
+              <span className={current ? resourceSignalStatus({ cpuPercent: host.cpuPercent }) : "unknown"}><small>CPU</small><b>{compactPercent(host.cpuPercent, current)}</b></span>
+              <span className={current ? resourceSignalStatus({ memoryPercent: host.memoryPercent }) : "unknown"}><small>内存</small><b>{compactPercent(host.memoryPercent, current)}</b></span>
+              <span className={current ? resourceSignalStatus({ diskPercent: host.diskPercent }) : "unknown"}><small>磁盘</small><b>{compactPercent(host.diskPercent, current)}</b></span>
+              <span className={current && host.load1 != null ? "observed" : "unknown"}><small>负载</small><b>{compactLoad(host.load1, current)}</b></span>
+              <span className={current ? runtimeSignalStatus(host) : "unknown"}><small>Docker</small><b>{compactDocker(host, current)}</b></span>
+            </div>
+          </button>;
+        })}
+      </section> : <span aria-hidden="true" />}
 
       <div className={`pet-sheet-layer ${expanded ? "open" : ""}`} aria-hidden={!expanded}>
         <button className="pet-sheet-scrim" tabIndex={expanded ? 0 : -1} onClick={closeQuickView} aria-label="关闭快速查看" />
