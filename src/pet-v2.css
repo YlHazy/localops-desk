@@ -10,6 +10,7 @@ html:has(.pet-window), body:has(.pet-window), #root:has(.pet-window) { backgroun
 body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .pet-window { --pet-mood: var(--pet-slate); position: relative; display: grid; grid-template-rows: 36px minmax(0, 1fr) 44px 38px; row-gap: 4px; box-sizing: border-box; width: min(100%, 420px); height: 100vh; min-height: 400px; margin: 0 auto; padding: 6px 12px 8px; overflow: hidden; color: var(--pet-ink); background: transparent; font-family: "Segoe UI Variable Text", "Microsoft YaHei UI", sans-serif; }
+.pet-window[data-has-hosts="false"] { grid-template-rows: 36px minmax(0, 1fr) 44px 0; }
 .pet-window.healthy { --pet-mood: var(--pet-green); }
 .pet-window.warning { --pet-mood: var(--pet-amber); }
 .pet-window.critical { --pet-mood: var(--pet-red); }
@@ -22,10 +23,9 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 .pet-pin:disabled { opacity: .45; cursor: not-allowed; }
 
 .pet-stage { position: relative; min-height: 0; isolation: isolate; }
-.pet-character { position: absolute; z-index: 1; top: 50%; left: -8px; width: auto; height: clamp(214px, 55vh, 248px); transform: translate3d(0, -50%, 0); transform-origin: 50% 90%; animation: pet-breathe 4.8s ease-in-out infinite; will-change: transform; }
+.pet-character { position: absolute; z-index: 1; top: 50%; left: -8px; width: auto; height: clamp(214px, 55vh, 260px); transform: translate3d(0, -50%, 0); transform-origin: 50% 90%; animation: pet-breathe 14s ease-in-out infinite; }
 .pet-character img { width: auto; height: 100%; object-fit: contain; object-position: center bottom; filter: saturate(.9) drop-shadow(0 10px 10px rgba(20, 37, 40, .14)); }
-.pet-character.is-listening { animation-duration: 3.6s; }
-.pet-speech { position: absolute; z-index: 2; top: 50%; right: 0; width: min(62%, 212px); box-sizing: border-box; padding: 14px 15px; border: 1px solid rgba(23, 35, 33, .09); border-radius: 18px 18px 18px 6px; background: rgba(255, 255, 255, .96); box-shadow: 0 7px 18px rgba(23, 35, 33, .09); transform: translateY(-100%); }
+.pet-speech { position: absolute; z-index: 2; top: 50%; right: 0; width: min(62%, 212px); box-sizing: border-box; padding: 14px 15px; border: 1px solid rgba(23, 35, 33, .09); border-radius: 18px 18px 18px 6px; background: rgba(255, 255,255, .96); box-shadow: 0 7px 18px rgba(23, 35, 33, .09); transform: translateY(calc(-100% - clamp(36px, 8vh, 44px))); }
 .pet-speech::after { position: absolute; bottom: -8px; left: 21px; width: 14px; height: 14px; content: ""; background: inherit; border-right: 1px solid rgba(23, 35, 33, .08); border-bottom: 1px solid rgba(23, 35, 33, .08); transform: rotate(45deg); }
 .pet-speech strong { display: block; overflow: hidden; font: 700 clamp(22px, 6.4vw, 24px)/1.08 "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
 .pet-speech p { margin: 8px 0 0; overflow: hidden; color: #4f5d59; font-size: 13.5px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
@@ -44,7 +44,7 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 .pet-actions button:active { transform: translateY(1px); }
 .pet-actions button:disabled { opacity: .65; cursor: wait; }
 
-.pet-status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--pet-slate); }
+.pet-status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--pet-slate); transition: background-color 160ms ease; }
 .pet-status-dot.healthy { background: var(--pet-green); }
 .pet-status-dot.warning { background: var(--pet-amber); }
 .pet-status-dot.critical { background: var(--pet-red); }
@@ -78,12 +78,12 @@ body:has(.pet-window) { min-width: 320px; min-height: 400px; overflow: hidden; }
 .pet-discuss { width: 100%; color: white; border: 0; background: #263c49; }
 .pet-window button:focus-visible { outline: 3px solid color-mix(in srgb, var(--pet-mood) 35%, transparent); outline-offset: 2px; }
 
-@keyframes pet-breathe { 0%, 100% { transform: translate3d(0, -50%, 0); } 50% { transform: translate3d(0, calc(-50% - 1px), 0); } }
-@media (prefers-reduced-motion: reduce) { .pet-character { animation: none; } .pet-sheet-layer, .pet-drawer, .pet-glance svg { transition: none; } }
+@keyframes pet-breathe { 0%, 74%, 100% { transform: translate3d(0, -50%, 0); } 84% { transform: translate3d(0, calc(-50% - 1px), 0); } }
+@media (prefers-reduced-motion: reduce) { .pet-character { animation: none; } .pet-sheet-layer, .pet-drawer, .pet-glance svg, .pet-status-dot { transition: none; } }
 
 @media (max-width: 339px) {
   .pet-window { padding-inline: 9px; }
-  .pet-character { left: -12px; height: 214px; }
+  .pet-character { left: -12px; }
   .pet-speech { width: 60%; padding: 14px; }
   .pet-speech strong { font-size: 21px; }
 }

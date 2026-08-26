@@ -24,12 +24,16 @@ test("compact companion uses a bounded transparent Sentry Otter cutout", () => {
   const asset = new URL("../src/assets/localops-sentry-otter-2d.png", import.meta.url);
   const metadata = inspectPetPng(readFileSync(asset), statSync(asset).size);
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
+  const petStyles = readFileSync(new URL("../src/pet-v2.css", import.meta.url), "utf8");
   assert.equal(metadata.hasTransparency, true);
   assert.equal(metadata.width, 852);
   assert.equal(metadata.height, 1154);
   assert.ok(metadata.fileSize < 2 * 1024 * 1024);
   assert.match(petSource, /localops-sentry-otter-2d\.png/);
   assert.match(petSource, /<img src=\{sentryOtterUrl\} alt=""/);
+  assert.match(petSource, /data-has-hosts=\{dashboard\.hosts\.length > 0/);
+  assert.match(petStyles, /translateY\(calc\(-100% - clamp\(36px, 8vh, 44px\)\)\)/);
+  assert.doesNotMatch(petStyles, /\.pet-character\.is-listening/);
   assert.doesNotMatch(petSource, /pet-ear|pet-eye|pet-mouth/);
 });
 
@@ -85,12 +89,12 @@ test("first watch uses beginner language for the recommended evidence source", (
 test("expired evidence stays out of the current overview and pet glance", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
-  assert.match(appSource, /fresh \? resourceSignalSummary\(host\) : "待更新"/);
+  assert.match(appSource, /fresh \? "没有需要处理的问题" : "状态待更新"/);
   assert.match(appSource, /selectedEvidenceCurrent \? selectedInternalSignal\.detail : "待重新检查"/);
-  assert.match(appSource, /上次检查详情（已过期）/);
+  assert.match(appSource, /上次技术证据（已过期）/);
   assert.match(petSource, /if \(!host \|\| !fresh\) return/);
   assert.match(petSource, /petIssueLine\(priorityHost, priorityFresh/);
-  assert.match(petSource, /snapshotTrust\.state === "stale" \? "证据已过期"/);
+  assert.match(petSource, /snapshotTrust\.state === "stale" \? "已过期"/);
 });
 
 test("server detail keeps actions and facts primary while folding bounded diagnosis evidence", () => {
@@ -103,12 +107,13 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.match(appSource, /className="detail-primary-actions"/);
   assert.match(appSource, /<dl className="server-facts">/);
   assert.match(appSource, /<details className={`technical-details/);
-  assert.match(appSource, /selectedEvidenceCurrent \? "检查详情"/);
+  assert.match(appSource, /selectedEvidenceCurrent \? "技术证据"/);
+  assert.match(appSource, /className="technical-facts"/);
   assert.doesNotMatch(appSource, /<details className={`diagnostic-proof/);
-  assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "entry"/);
-  assert.match(appSource, /审阅 Nginx 重载/);
-  assert.match(appSource, /查看只读检查/);
-  assert.match(appSource, /runDryAction\("reload-nginx", selectedHost\.id\)/);
+  assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "none" \? null/);
+  assert.match(appSource, /继续只读排查/);
+  assert.match(appSource, /runDryAction\("inspect-service", selectedHost\.id\)/);
+  assert.doesNotMatch(appSource, /runDryAction\("reload-nginx", selectedHost\.id\)/);
   assert.match(appSource, /setSelectedHostId\(hostId\)/);
   assert.doesNotMatch(styles, /\.automatic-diagnosis h3[^\n]*line-clamp/);
   assert.doesNotMatch(styles, /\.automatic-diagnosis dd[^\n]*line-clamp/);
@@ -201,7 +206,7 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   assert.match(petSource, /setAlertReceipt\(\{ outcome: "suppressed"/);
   assert.match(petSource, /className={`pet-sheet-layer \$\{expanded \? "open" : ""\}`}/);
   assert.match(petSource, /打开控制台/);
-  assert.match(petSource, /visibleCounts\.unknown/);
+  assert.match(petSource, /snapshotTrust\.state === "unknown"/);
   assert.match(petSource, /permissionSurface: window\.localOpsDesktop \? "windows" : "browser"/);
   assert.match(petSource, /kind: "status"[\s\S]*critical: current\.critical[\s\S]*warning: current\.warning[\s\S]*unknown: current\.unknown/);
   assert.match(desktopSource, /preload: appPath\("desktop", "preload\.cjs"\)/);
@@ -327,15 +332,13 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);
 });
 
-test("batch checks, scheduler, desk, pet, and portable build share collection coverage", () => {
+test("batch checks, scheduler, desk, and portable build share collection coverage", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-  const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const serverSource = readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
   const coverageSource = readFileSync(new URL("../shared/collection-coverage.mjs", import.meta.url), "utf8");
   const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
   assert.match(appSource, /batchCoverage\.collectible/);
   assert.match(appSource, /自动检查会跳过/);
-  assert.match(petSource, /collectionCoverage\(dashboard\.mode, dashboard\.hosts/);
   assert.match(serverSource, /hostCollectionPlan\(mode, hostItem\)\.canCollect/);
   assert.match(serverSource, /NO_COLLECTIBLE_EVIDENCE/);
   assert.doesNotMatch(coverageSource, /tags\.includes/);

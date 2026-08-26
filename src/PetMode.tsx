@@ -12,7 +12,6 @@ import { isPetSessionId, petPresencePath } from "./pet-presence.mjs";
 import { notificationDecision, petQuietDurationMs, readNotificationCalibration, readNotificationPreference, readQuietUntil, watchModeCopy, writeNotificationCalibration, writeNotificationPreference, writeQuietUntil } from "./pet-watch.mjs";
 import { readTopmostPreference, requestPetWindowTopmost, writeTopmostPreference } from "./pet-window.mjs";
 import type { DashboardStatus, HostState, Status } from "./types";
-import { collectionCoverage } from "../shared/collection-coverage.mjs";
 
 const statusCopy: Record<Status, { label: string; line: string }> = {
   healthy: { label: "值守正常", line: "服务器都很安静，我继续替你盯着。" },
@@ -272,7 +271,6 @@ export function PetMode({
   const overallStatus: Status = syncError ? "unknown" : priorityHost?.status ?? "unknown";
   const snapshotTrust = petSnapshotTrust(Boolean(syncError), hasNonCurrentHost, Boolean(dashboard.observedAt));
   const focusReadiness = evidenceReadiness(dashboard, focusHost);
-  const batchCoverage = collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode });
   const visibleCounts = trustedDashboard.counts;
   const watchMode = watchModeCopy({
     supported: notificationsSupported,
@@ -442,7 +440,7 @@ export function PetMode({
   }
 
   return (
-    <main className={`pet-window ${overallStatus}`} data-runtime={lifecycle.tone}>
+    <main className={`pet-window ${overallStatus}`} data-runtime={lifecycle.tone} data-has-hosts={dashboard.hosts.length > 0 ? "true" : "false"}>
       <div className="pet-window-bar">
         <div className="pet-window-tools">
           <button className={`pet-pin ${topmostActive ? "active" : ""}`} onClick={() => void applyTopmost(!topmostActive)} disabled={!topmostSupported || topmostPending} aria-pressed={topmostActive} title={topmostNote}>
@@ -460,7 +458,7 @@ export function PetMode({
             : actionError
               ? "结果没变，稍后再试。"
             : dashboard.hosts.length === 0
-              ? "添加后会自动检查。"
+              ? "添加后即可一键检查。"
               : priorityHost && !priorityFresh
                 ? "结果过期，请重新检查。"
                 : overallStatus === "healthy"
@@ -487,8 +485,8 @@ export function PetMode({
 
       {dashboard.hosts.length > 0 ? <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>{syncError ? "本地状态断开" : visibleCounts.critical ? `${visibleCounts.critical} 台故障` : visibleCounts.warning ? `${visibleCounts.warning} 台需关注` : visibleCounts.unknown ? `${visibleCounts.unknown} 台待确认` : batchCoverage.partial ? `${dashboard.hosts.length} 台 · 仅看入口` : `${dashboard.hosts.length} 台服务器`}</strong>
-        <span>{snapshotTrust.state === "offline" ? "仅保留旧结果" : snapshotTrust.state === "stale" ? "证据已过期" : snapshotTrust.state === "unknown" ? "尚未检查" : `${latestTime(dashboard.observedAt)} 检查`}</span>
+        <strong>服务器列表</strong>
+        <span>{snapshotTrust.state === "offline" ? "旧结果" : snapshotTrust.state === "stale" ? "已过期" : snapshotTrust.state === "unknown" ? `${dashboard.hosts.length} 台 · 未检查` : `${dashboard.hosts.length} 台 · ${latestTime(dashboard.observedAt)}`}</span>
         <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
       </button> : <span aria-hidden="true" />}
 

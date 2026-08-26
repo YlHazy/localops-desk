@@ -236,14 +236,11 @@ function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh
         <span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span>
         <span className={`host-status-text ${host.status}`}>{statusLabels[host.status]}</span>
       </div>
-      <div className="host-glance">
-        <span>HTTP <strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待更新"}</strong></span>
-        <span>SSH <strong>{fresh ? friendlySshStatus(host.sshStatus) : "待更新"}</strong></span>
-        <span>资源 <strong>{fresh ? resourceSignalSummary(host) : "待更新"}</strong></span>
-        <time>{fresh ? formatTime(host.lastCheckedAt) : "—"}</time>
+      <div className="host-row-meta">
+        <span>{fresh && host.status !== "healthy" ? host.summary : fresh ? "没有需要处理的问题" : "状态待更新"}</span>
+        <time>{fresh ? formatTime(host.lastCheckedAt) : "尚未检查"}</time>
         <span aria-hidden="true">›</span>
       </div>
-      {host.status === "healthy" || !fresh ? null : <p>{host.summary}</p>}
     </button>
   );
 }
@@ -1374,9 +1371,9 @@ export function App() {
 
         {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
         {lastCheckOutcome && selectedTab === "overview" ? (
-          <div className={`check-outcome ${lastCheckOutcome.coverage.blocked ? "partial" : "complete"}`} role="status">
+          <div className={`check-outcome compact ${lastCheckOutcome.coverage.blocked ? "partial" : "complete"}`} role="status">
             <CheckCircle2 size={17} />
-            <div><strong>{lastCheckOutcome.coverage.collectible} 台已取得证据</strong><small>{lastCheckOutcome.summary}</small></div>
+            <div><strong>检查完成</strong><small>{lastCheckOutcome.summary}</small></div>
             <button onClick={() => setSelectedTab("checks")}>查看记录</button>
           </div>
         ) : null}
@@ -1442,23 +1439,28 @@ export function App() {
                   <div><strong>正在查原因</strong><p>读取网页、SSH、服务和资源状态。</p></div>
                 </section>
               ) : selectedDiagnosis ? (
-                <>
-                  <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
-                    <h3>{selectedDiagnosis.diagnosis.headline}</h3>
-                    <dl><div><dt>发现</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>下一步</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
-                    {selectedDiagnosis.diagnosis.layer === "entry" ? (
-                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("reload-nginx", selectedHost.id)}><ShieldCheck size={16} />审阅 Nginx 重载</button>
-                    ) : selectedDiagnosis.diagnosis.layer === "none" ? null : (
-                      <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service", selectedHost.id)}><TerminalSquare size={16} />查看只读检查</button>
-                    )}
-                  </section>
-                </>
+                <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
+                  <span className="diagnosis-label">排查结果</span>
+                  <h3>{selectedDiagnosis.diagnosis.headline}</h3>
+                  <dl><div><dt>依据</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>处理</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
+                  {selectedDiagnosis.diagnosis.layer === "none" ? null : (
+                    <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service", selectedHost.id)}><TerminalSquare size={16} />继续只读排查</button>
+                  )}
+                </section>
               ) : null}
               {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>没有查完</strong><p>{diagnosisError}</p></span></div> : null}
               <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
-                <summary>{selectedEvidenceCurrent ? "检查详情" : "上次检查详情（已过期）"}</summary>
+                <summary>{selectedEvidenceCurrent ? "技术证据" : "上次技术证据（已过期）"}</summary>
                 <div>
-                  {selectedHost.evidence.slice(0, 3).map((item) => <p key={item}>{friendlyEvidence(item)}</p>)}
+                  <dl className="technical-facts">
+                    <div><dt>检查时间</dt><dd>{formatTime(selectedHost.lastCheckedAt)}</dd></div>
+                    <div><dt>耗时</dt><dd>{selectedHost.durationMs == null ? "—" : `${selectedHost.durationMs} ms`}</dd></div>
+                    <div><dt>HTTP</dt><dd>{friendlyHttpStatus(selectedHost.httpStatus)}{selectedHost.httpLatencyMs == null ? "" : ` · ${selectedHost.httpLatencyMs} ms`}</dd></div>
+                    <div><dt>SSH</dt><dd>{friendlySshStatus(selectedHost.sshStatus)}</dd></div>
+                    <div><dt>服务</dt><dd>{friendlyDockerStatus(selectedHost.dockerStatus)}</dd></div>
+                    <div><dt>来源</dt><dd>{selectedHost.isOfflineDemo ? "离线演示" : [selectedHost.healthUrl ? "HTTP" : "", selectedHost.sshAlias ? "SSH" : ""].filter(Boolean).join(" + ") || "未配置"}</dd></div>
+                  </dl>
+                  {selectedHost.evidence.length ? <><h4>原始记录</h4><ul className="technical-evidence-list">{selectedHost.evidence.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></> : null}
                   {selectedDiagnosis ? <div className={`diagnostic-proof-body ${selectedDiagnosis.deepEvidence.state}`}>
                     {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
                     {selectedDeepFindings.length ? <div className="diagnostic-proof-list">{selectedDeepFindings.map((finding) => <div className={finding.status} key={finding.key}><span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p></div>)}</div> : null}
