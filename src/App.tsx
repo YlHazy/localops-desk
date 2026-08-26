@@ -25,12 +25,15 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh, hostEvidenceTimestamp, localRecoveryCopy, schedulerDraftAfterSync, trustworthyDashboard } from "./desk-sync.mjs";
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, friendlyCheckSummary, retainCheckSelection } from "./check-history.mjs";
 import type { CheckHistoryFilter } from "./check-history.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
+import { validateHostForm } from "./host-form-validation.mjs";
+import type { HostFormErrors, HostFormField } from "./host-form-validation.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
@@ -74,7 +77,6 @@ const actionReceiptLabels: Record<ActionReceipt["status"], string> = {
 };
 
 const deskIntentAtLoad = petDeskIntent(window.location.hash);
-const onboardingPetUrl = new URL("./assets/localops-sentry-otter-2d.png", import.meta.url).href;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -287,6 +289,7 @@ function HostForm({
   setForm,
   onSubmit,
   onCancel,
+  formError,
   editing,
   saving,
   disabled,
@@ -294,28 +297,50 @@ function HostForm({
 }: {
   form: HostConfigInput;
   setForm: (form: HostConfigInput) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
+  onSubmit: (checkAfterCreate: boolean) => void | Promise<void>;
+  onCancel?: () => void;
+  formError: string;
   editing: boolean;
   saving: boolean;
   disabled: boolean;
   sshCollectionEnabled: boolean;
 }) {
+  const [fieldErrors, setFieldErrors] = useState<HostFormErrors>({});
+  const nameRef = useRef<HTMLInputElement>(null);
+  const healthUrlRef = useRef<HTMLInputElement>(null);
+  const sshAliasRef = useRef<HTMLInputElement>(null);
   const hasHealthUrl = form.healthUrl.trim().length > 0;
   const hasSshAlias = form.sshAlias.trim().length > 0;
+  const validation = validateHostForm(form, { sshCollectionEnabled });
   const update = (key: keyof HostConfigInput, value: string) => {
     setForm({ ...form, [key]: key === "tags" ? value.split(",").map((item) => item.trim()).filter(Boolean) : value });
+    if (key === "name" || key === "healthUrl" || key === "sshAlias") {
+      setFieldErrors((current) => ({ ...current, [key]: undefined }));
+    }
+  };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const result = validateHostForm(form, { sshCollectionEnabled });
+    setFieldErrors(result.errors);
+    if (!result.valid) {
+      const firstField = (["name", "healthUrl", "sshAlias"] as HostFormField[]).find((field) => result.errors[field]);
+      ({ name: nameRef, healthUrl: healthUrlRef, sshAlias: sshAliasRef })[firstField ?? "name"].current?.focus();
+      return;
+    }
+    void onSubmit(!editing && result.canCheckAfterCreate);
   };
   return (
-    <div className="host-form">
+    <form className="host-form" onSubmit={submit} noValidate>
       <div className="host-form-intro">
         <div>
           <strong>{editing ? "修改本机保存的服务器配置" : "填写监控来源"}</strong>
           <small>只要求名称；连接信息可稍后补充，不要填写密码、Token 或私钥。</small>
         </div>
         <span className={hasHealthUrl || (hasSshAlias && sshCollectionEnabled) ? "ready" : "waiting"}>
-          {hasHealthUrl
-            ? "Health URL 可用"
+          {hasHealthUrl && validation.errors.healthUrl
+            ? "检查地址待修正"
+            : hasHealthUrl
+            ? "HTTP 可检查"
             : hasSshAlias && sshCollectionEnabled
               ? "只读 SSH 可用"
               : hasSshAlias
@@ -324,9 +349,9 @@ function HostForm({
         </span>
       </div>
       <div className="form-grid host-form-essential">
-        <label>服务器名称 *<input required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" /><small>只用于本机显示。</small></label>
-        <label className="wide">健康检查地址 · 推荐<input value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" /><small>只向这个地址发送 HTTP GET；不要填写账号、Token 或查询参数。</small></label>
-        <label>SSH 别名 · 可选<input value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" /><small>{sshCollectionEnabled ? "读取 CPU、内存、磁盘和 Docker。" : "已登记也不会在当前模式连接。"}</small></label>
+        <label>服务器名称 *<input ref={nameRef} required value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="例如：生产 API" aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? "host-name-error" : undefined} />{fieldErrors.name ? <small className="field-error" id="host-name-error">{fieldErrors.name}</small> : <small>只用于本机显示。</small>}</label>
+        <label className="wide">健康检查地址 · 推荐<input ref={healthUrlRef} value={form.healthUrl} onChange={(event) => update("healthUrl", event.target.value)} placeholder="https://example.com/health" aria-invalid={Boolean(fieldErrors.healthUrl)} aria-describedby={fieldErrors.healthUrl ? "host-health-error" : undefined} />{fieldErrors.healthUrl ? <small className="field-error" id="host-health-error">{fieldErrors.healthUrl}</small> : <small>只向这个地址发送 HTTP GET；不要填写账号、Token 或查询参数。</small>}</label>
+        <label>SSH 别名 · 可选<input ref={sshAliasRef} value={form.sshAlias} onChange={(event) => update("sshAlias", event.target.value)} placeholder="例如：my-server" aria-invalid={Boolean(fieldErrors.sshAlias)} aria-describedby={fieldErrors.sshAlias ? "host-ssh-error" : undefined} />{fieldErrors.sshAlias ? <small className="field-error" id="host-ssh-error">{fieldErrors.sshAlias}</small> : <small>{sshCollectionEnabled ? "读取 CPU、内存、磁盘和 Docker。" : "已登记也不会在当前模式连接。"}</small>}</label>
       </div>
       <details className="host-form-advanced" open={editing || undefined}>
         <summary>更多信息</summary>
@@ -337,11 +362,12 @@ function HostForm({
           <label>标签<input value={form.tags.join(", ")} onChange={(event) => update("tags", event.target.value)} placeholder="main, docker" /></label>
         </div>
       </details>
+      {formError ? <p className="host-form-error" role="alert">{formError}</p> : null}
       <div className="form-actions">
-        <button className="primary slim" disabled={!form.name.trim() || disabled} onClick={onSubmit}><Save size={16} />{saving ? "保存中" : editing ? "保存配置" : "添加服务器"}</button>
-        <button disabled={saving} onClick={onCancel}><X size={16} />取消</button>
+        <button className="primary slim" type="submit" disabled={disabled}><Save size={16} />{saving ? (editing ? "保存中" : validation.canCheckAfterCreate ? "正在添加并检查" : "正在添加") : editing ? "保存配置" : validation.canCheckAfterCreate ? "添加并检查" : "仅添加"}</button>
+        {onCancel ? <button type="button" disabled={saving} onClick={onCancel}><X size={16} />取消</button> : null}
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -378,9 +404,11 @@ export function App() {
   const [actionFlowError, setActionFlowError] = useState("");
   const [diagnosisResult, setDiagnosisResult] = useState<{ hostId: string; run: DiagnosisRun } | null>(null);
   const [diagnosisError, setDiagnosisError] = useState("");
+  const [hostCheckError, setHostCheckError] = useState<{ hostId: string; message: string } | null>(null);
   const [report, setReport] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [hostForm, setHostForm] = useState<HostConfigInput>(emptyHostForm);
+  const [hostFormError, setHostFormError] = useState("");
   const [editingHostId, setEditingHostId] = useState<string | null>(null);
   const [pendingHostDeleteId, setPendingHostDeleteId] = useState<string | null>(null);
   const [showHostForm, setShowHostForm] = useState(false);
@@ -890,23 +918,28 @@ export function App() {
   async function runLightCheck(hostId?: string) {
     if (pendingOperation) return;
     if (!hostId || diagnosisResult?.hostId === hostId) setDiagnosisResult(null);
+    if (hostId) setHostCheckError((current) => current?.hostId === hostId ? null : current);
     setPendingOperation("check");
     setError("");
     setLastCheckOutcome(null);
     try {
       const result = await api<{ status: Status; summary: string; coverage: CollectionCoverage }>(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
       setLastCheckOutcome(result);
+      if (hostId) setHostCheckError((current) => current?.hostId === hostId ? null : current);
       try {
         await load();
         if (petMode) setPetSyncError("");
       } catch (refreshError) {
         const message = refreshError instanceof Error ? refreshError.message : "本地监控没有响应";
         if (petMode) setPetSyncError(message);
+        else if (hostId) setHostCheckError({ hostId, message: `检查已完成，但读取新结果失败：${message}` });
         else setError(`巡检已完成，但读取新结果失败：${message}`);
       }
       setSelectedTab("overview");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "检查失败");
+      const message = err instanceof Error ? err.message : "检查失败";
+      if (hostId && !petMode) setHostCheckError({ hostId, message });
+      else setError(message);
     } finally {
       setPendingOperation(null);
     }
@@ -988,6 +1021,7 @@ export function App() {
     setPracticePending(null);
     setEditingHostId(null);
     setHostForm(emptyHostForm);
+    setHostFormError("");
     setShowHostForm(true);
     setSelectedTab("hosts");
   }
@@ -1003,27 +1037,49 @@ export function App() {
       composeProject: host.composeProject,
       tags: host.tags
     });
+    setHostFormError("");
     setShowHostForm(true);
     setSelectedTab("hosts");
   }
 
-  async function saveHost() {
+  async function saveHost(checkAfterCreate = false) {
     if (pendingOperation) return;
     const creatingFirstHost = dashboard?.hosts.length === 0;
+    const editing = Boolean(editingHostId);
+    let savedHostId: string | null = editingHostId;
+    let configurationSaved = false;
     setPendingOperation("host-save");
     setError("");
+    setHostFormError("");
     try {
-      await api(editingHostId ? `/api/hosts/${encodeURIComponent(editingHostId)}` : "/api/hosts", {
+      const result = await api<{ host: { id: string } }>(editingHostId ? `/api/hosts/${encodeURIComponent(editingHostId)}` : "/api/hosts", {
         method: editingHostId ? "PUT" : "POST",
         body: JSON.stringify(hostForm)
       });
+      savedHostId = result.host.id;
+      configurationSaved = true;
       setShowHostForm(false);
       setEditingHostId(null);
       setLastCheckOutcome(null);
+      setHostCheckError(null);
+      if (!editing && checkAfterCreate && savedHostId) {
+        try {
+          const checkResult = await api<{ status: Status; summary: string; coverage: CollectionCoverage }>(`/api/checks/light/${encodeURIComponent(savedHostId)}`, { method: "POST", body: "{}" });
+          setLastCheckOutcome(checkResult);
+        } catch (checkError) {
+          setHostCheckError({ hostId: savedHostId, message: checkError instanceof Error ? checkError.message : "服务器已添加，但第一次检查没有完成。" });
+        }
+      }
       await load();
-      if (creatingFirstHost) setSelectedTab("overview");
+      if (creatingFirstHost && savedHostId) {
+        setSelectedHostId(savedHostId);
+        setSelectedTab("overview");
+        setDetailsOpen(true);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存主机失败");
+      const message = err instanceof Error ? err.message : "保存主机失败";
+      if (configurationSaved) setError(`服务器配置已保存，但刷新页面状态失败：${message}`);
+      else setHostFormError(message);
     } finally {
       setPendingOperation(null);
     }
@@ -1037,7 +1093,10 @@ export function App() {
       await api(`/api/hosts/${encodeURIComponent(hostId)}`, { method: "DELETE" });
       setSelectedHostId(null);
       setPendingHostDeleteId(null);
+      setHostForm(emptyHostForm);
+      setHostFormError("");
       setLastCheckOutcome(null);
+      setHostCheckError(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除主机失败");
@@ -1197,6 +1256,7 @@ export function App() {
       setPracticePending(null);
       setSelectedHostId(null);
       setLastCheckOutcome(null);
+      setHostCheckError(null);
       await load();
       setSelectedTab("overview");
     } catch (err) {
@@ -1214,6 +1274,7 @@ export function App() {
       setPracticePending(null);
       setSelectedHostId(null);
       setLastCheckOutcome(null);
+      setHostCheckError(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "退出离线练习失败");
@@ -1261,48 +1322,33 @@ export function App() {
   if (!selectedHost) {
     return (
       <main className="empty-host-setup">
-        <section className={`empty-host-card ${showHostForm ? "configuring" : ""}`}>
-          {!showHostForm ? <div className="empty-host-intro">
+        <section className="empty-host-card configuring">
+          <header className="first-host-head">
             <div>
-              <h1>先添加你要看的服务器</h1>
-              <p>推荐填写一个健康检查地址，LocalOps 就能判断服务是否可用。也可以先只填名称，不会自动扫描或连接任何设备。</p>
-              <div className="onboarding-cta">
-                <button className="primary" onClick={startCreateHost}><Plus size={16} />添加服务器</button>
-                <button className="practice-entry" onClick={() => setPracticePending("install")}><ShieldCheck size={16} />看看离线示例</button>
-              </div>
-              <p className="onboarding-boundary"><ShieldCheck size={15} />只连接你明确填写的地址；不保存密码、Token 或私钥。</p>
+              <h1>添加第一台服务器</h1>
+              <p>填一个健康检查地址，就能添加后立即看到结果；也可以只保存名称，稍后再配置。</p>
             </div>
-            <div className="onboarding-pet" aria-hidden="true">
-              <img src={onboardingPetUrl} alt="" />
+            <button className="practice-entry" disabled={practiceLoading} onClick={() => setPracticePending("install")}><ShieldCheck size={16} />试用离线示例</button>
+          </header>
+          <HostForm
+            form={hostForm}
+            setForm={setHostForm}
+            onSubmit={saveHost}
+            formError={hostFormError}
+            editing={false}
+            saving={operationState.savingHost}
+            disabled={operationBusy || practiceLoading || practicePending === "install"}
+            sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
+          />
+          <p className="onboarding-boundary"><ShieldCheck size={15} />只连接你明确填写的地址；不保存密码、Token 或私钥。</p>
+          {practicePending === "install" ? <div className="practice-confirm" role="group" aria-label="确认启用离线练习">
+            <div>
+              <strong>载入 3 台纯虚构服务器？</strong>
+              <small>只写入本地示例；地址、SSH 与 Compose 均为空。退出练习会删除这些示例和对应检查记录。</small>
             </div>
+            <button className="primary slim" disabled={practiceLoading} onClick={installOfflinePractice}>{practiceLoading ? "载入中" : "确认载入"}</button>
+            <button className="secondary slim" disabled={practiceLoading} onClick={() => setPracticePending(null)}>取消</button>
           </div> : null}
-          {showHostForm ? (
-            <div className="onboarding-form-stage">
-              <div>
-                <h2>添加第一台服务器</h2>
-                <p>不确定怎么填时，只写名称和健康检查地址；其他信息以后再补。</p>
-              </div>
-              <HostForm
-                form={hostForm}
-                setForm={setHostForm}
-                onSubmit={saveHost}
-                onCancel={() => setShowHostForm(false)}
-                editing={false}
-                saving={operationState.savingHost}
-                disabled={operationBusy}
-                sshCollectionEnabled={dashboard.mode === "ssh-enabled"}
-              />
-            </div>
-          ) : practicePending === "install" ? (
-                <div className="practice-confirm" role="group" aria-label="确认启用离线练习">
-                  <div>
-                    <strong>载入 3 台纯虚构服务器？</strong>
-                    <small>只写入本地示例；地址、SSH 与 Compose 均为空。退出练习会删除这些示例和对应检查记录。</small>
-                  </div>
-                  <button className="primary slim" disabled={practiceLoading} onClick={installOfflinePractice}>{practiceLoading ? "载入中" : "确认载入"}</button>
-                  <button className="secondary slim" disabled={practiceLoading} onClick={() => setPracticePending(null)}>取消</button>
-                </div>
-              ) : null}
           {error ? <p className="error-banner" role="alert">{error}</p> : null}
         </section>
       </main>
@@ -1428,6 +1474,7 @@ export function App() {
                 {selectedHost.status !== "healthy" && selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "正在查原因" : diagnosisError ? "重试查原因" : selectedDiagnosis ? "重新查原因" : "自动查原因"}</button> : null}
                 {selectedHost.status === "healthy" || !selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button> : null}
               </div>
+              {hostCheckError?.hostId === selectedHost.id ? <div className="detail-check-error" role="alert"><AlertTriangle size={17} /><div><strong>这台服务器没有检查完</strong><p>{hostCheckError.message}</p></div><button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}>重试这台</button></div> : null}
               <dl className="server-facts">
                 <div><dt>网页 / API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待重新检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
                 <div><dt>SSH / 服务</dt><dd><strong>{selectedEvidenceCurrent ? selectedInternalSignal.detail : "待重新检查"}</strong></dd></div>
@@ -1487,6 +1534,7 @@ export function App() {
                 setForm={setHostForm}
                 onSubmit={saveHost}
                 onCancel={() => setShowHostForm(false)}
+                formError={hostFormError}
                 editing={Boolean(editingHostId)}
                 saving={operationState.savingHost}
                 disabled={operationBusy}

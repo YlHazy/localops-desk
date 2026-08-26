@@ -83,6 +83,10 @@ test("first watch uses beginner language for the recommended evidence source", (
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.match(appSource, /健康检查地址 · 推荐/);
   assert.match(appSource, /只向这个地址发送 HTTP GET/);
+  assert.match(appSource, /<form className="host-form" onSubmit=\{submit\} noValidate>/);
+  assert.match(appSource, /validation\.canCheckAfterCreate \? "添加并检查" : "仅添加"/);
+  assert.match(appSource, /aria-invalid=\{Boolean\(fieldErrors\.healthUrl\)\}/);
+  assert.match(appSource, /setHostCheckError\(\{ hostId, message \}\)/);
   assert.doesNotMatch(appSource, /只写名称和 Health URL/);
 });
 

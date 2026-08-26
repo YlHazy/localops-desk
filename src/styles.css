@@ -95,8 +95,18 @@ button:disabled {
 }
 
 .empty-host-card.configuring {
-  width: min(1040px, 100%);
+  width: min(960px, 100%);
+  padding: 28px;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(36, 53, 68, 0.06);
 }
+
+.first-host-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.first-host-head > div { min-width: 0; }
+.first-host-head h1 { margin: 0 0 6px; color: var(--watch-ink); font: 750 25px/1.25 "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif; letter-spacing: -.025em; }
+.first-host-head p { max-width: 650px; margin: 0; color: #647383; font-size: 14px; line-height: 1.55; }
+.first-host-head .practice-entry { flex: 0 0 auto; padding: 9px 11px; background: #fff; }
+.empty-host-card.configuring > .host-form { margin: 22px 0 0; padding: 20px 0 0; border: 0; border-top: 1px solid #dfe6e2; border-radius: 0; background: transparent; }
 
 .empty-host-intro {
   display: grid;
@@ -1279,6 +1289,9 @@ th {
 .host-form-intro > span { flex: 0 0 auto; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; }
 .host-form-intro > span.ready { color: #14633f; background: #dff7eb; }
 .host-form-intro > span.waiting { color: #725118; background: #fff0c7; }
+.form-grid input[aria-invalid="true"] { border-color: #c75a50; box-shadow: 0 0 0 3px rgba(199, 90, 80, .1); }
+.host-form-intro small.field-error, .form-grid label small.field-error { color: #a33f37; font-weight: 650; }
+.host-form-error { margin: 14px 0 0; padding: 10px 12px; color: #873c37; border-left: 3px solid #c75a50; background: #fff7f5; font-size: 13px; line-height: 1.45; }
 
 .host-form-advanced { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e1e8ef; }
 .host-form-advanced summary { width: max-content; color: #47645e; font-size: 12px; font-weight: 750; cursor: pointer; }
@@ -1339,6 +1352,7 @@ th {
   grid-template-columns: 260px 1fr;
   gap: 18px;
 }
+.host-form .form-actions { margin-top: 16px; }
 
 .action-contract {
   display: grid;
@@ -1810,6 +1824,9 @@ code {
   .check-outcome button { grid-column: 1 / -1; justify-self: stretch; padding-top: 7px; border-top: 1px solid rgba(73, 95, 105, 0.14); }
   .empty-host-setup { align-items: start; padding: 12px; }
   .empty-host-card { padding: 24px 20px; }
+  .first-host-head { align-items: stretch; flex-direction: column; gap: 14px; }
+  .first-host-head h1 { font-size: 23px; }
+  .first-host-head .practice-entry { justify-content: center; width: 100%; }
   .empty-host-intro h1 { font-size: 30px; line-height: 1.08; }
   .empty-host-card.configuring .form-grid { grid-template-columns: 1fr; }
   .onboarding-cta { align-items: stretch; flex-direction: column; }
@@ -2165,6 +2182,11 @@ code {
 .diagnosis-error strong { display: block; font-size: 14px; }
 .diagnosis-error p { margin: 3px 0 0; color: #745753; font-size: 13px; line-height: 1.45; }
 .diagnosis-error button { min-height: 38px; padding: 0 11px; }
+.detail-check-error { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; margin: 0 0 16px; padding: 12px 13px; color: #873c37; border-left: 3px solid #c75a50; background: #fff7f5; }
+.detail-check-error > svg { margin-top: 2px; }
+.detail-check-error strong { display: block; font-size: 14px; }
+.detail-check-error p { margin: 3px 0 0; color: #715450; font-size: 13px; line-height: 1.45; }
+.detail-check-error button { min-height: 36px; padding: 0 10px; color: #873c37; border: 1px solid #dfb3ae; border-radius: 8px; background: #fff; font-weight: 750; }
 .server-facts { margin: 0; border-block: 1px solid #e4e9e6; }
 .server-facts > div { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 18px; align-items: center; min-height: 60px; border-bottom: 1px solid #e4e9e6; }
 .server-facts > div:last-child { border-bottom: 0; }
@@ -2220,6 +2242,8 @@ code {
   .host-glance time { display: none; }
   .host-row-meta { grid-template-columns: minmax(0, 1fr) auto; margin-left: 19px; }
   .host-row-meta time { display: none; }
+  .detail-check-error { grid-template-columns: auto minmax(0, 1fr); }
+  .detail-check-error button { grid-column: 2; justify-self: start; }
   .home-grid .server-detail-drawer { inset: 0; width: 100%; padding: 0 18px 20px; border: 0; border-radius: 0; }
   .server-detail-drawer .detail-head { margin-inline: -18px; padding-inline: 18px; }
   .detail-primary-actions { display: grid; grid-template-columns: 1fr; }
