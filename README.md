@@ -4,6 +4,10 @@ LocalOps Desk is a local-first operations cockpit for personal server monitoring
 
 It is intentionally not a SaaS product. The app runs on `127.0.0.1`, stores summaries locally, and uses configured SSH/HTTP checks to help an operator understand server health without opening a large cloud console for every incident.
 
+## Download
+
+Download the latest Windows x64 portable build from [GitHub Releases](https://github.com/YlHazy/localops-desk/releases/latest). The application is currently unsigned, so Windows may show an unknown-publisher warning. Verify the SHA-256 value published with the release before running it.
+
 ## MVP Scope
 
 - Local dashboard for production, demo, and personal infrastructure.
@@ -55,7 +59,7 @@ For source development, run `npm run desktop`. For a distributable Windows build
 
 The Watch Settings page uses Electron's native current-user login setting in the packaged desktop app. The setting requires explicit in-product confirmation, never requests administrator rights, and starts the same packaged executable into its tray-backed lifecycle. Source previews refuse to write a login item. The former `npm run pet:window` Edge launcher and VBS portable folder remain temporarily available as a compatibility path while migration tests settle; they are no longer the primary desktop product.
 
-Windows Node 24 CI publishes both the legacy dependency-light folder and `localops-guardian-windows-desktop` for 14 days. The desktop artifact is a single-file development executable. CI builds it and runs a packaged renderer/API lifecycle smoke check on a dynamically reserved loopback port, so the test must prove that the package starts and stops only its own API even if a daily LocalOps instance already owns `4317`. This port override exists only under `--smoke-check`; normal desktop use remains fixed to `127.0.0.1:4317`. The executable is currently unsigned, so Windows may identify the publisher as unknown; it is not yet a signed public release.
+Windows Node 24 CI publishes both the legacy dependency-light folder and `localops-guardian-windows-desktop` for 14 days. Tagged GitHub Releases publish the single-file portable executable for longer-lived downloads. CI builds the desktop artifact and runs a packaged renderer/API lifecycle smoke check on a dynamically reserved loopback port, so the test must prove that the package starts and stops only its own API even if a daily LocalOps instance already owns `4317`. This port override exists only under `--smoke-check`; normal desktop use remains fixed to `127.0.0.1:4317`. Release executables are currently unsigned, so Windows may identify the publisher as unknown.
 
 The full desk and pet can prepare a Codex discussion task from categorized status only. Server names, environments, roles, raw evidence, connection URLs, SSH aliases, Compose projects, and commands are structurally excluded from that cross-app summary; detailed and identifying context stays in the local desk. The deep link only prefills reviewable text and never sends or executes it automatically.
 
