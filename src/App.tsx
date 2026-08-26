@@ -47,7 +47,7 @@ import { requestPetWindowTopmost } from "./pet-window.mjs";
 import { schedulerOutcomeCopy } from "./scheduler-outcome.mjs";
 import { watchReadiness } from "./watch-readiness.mjs";
 import type { ActionApproval, ActionCapability, ActionExecutionStep, ActionReceipt, CheckDetail, CheckRun, DashboardStatus, DiagnosisRun, DryRunAction, HostConfigInput, HostState, RetentionResult, SchedulerState, StartupState, Status } from "./types";
-import { resourceSignalStatus, resourceSignalSummary } from "../shared/evidence-judgment.mjs";
+import { httpSignalStatus, resourceSignalStatus, runtimeSignalStatus, sshSignalStatus } from "../shared/evidence-judgment.mjs";
 import { collectionCoverage } from "../shared/collection-coverage.mjs";
 import type { CollectionCoverage } from "../shared/collection-coverage.mjs";
 
@@ -149,7 +149,7 @@ function overallMessage(counts: Record<Status, number>, evidenceExpired = false,
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   return {
     title: `${total} 台服务器正常`,
-    description: "没有需要处理的问题"
+    description: "无需处理"
   };
 }
 
@@ -184,8 +184,26 @@ function friendlyDockerStatus(value: string) {
   if (!value || value === "not checked") return "未检查";
   if (value === "docker checked") return "已检查";
   if (value === "compose healthy") return "模拟正常";
+  if (value === "docker unhealthy containers") return "有容器异常";
   if (/unavailable/i.test(value)) return "Docker 不可用";
   return shortSignal(value);
+}
+
+function percentValue(value: number | null) {
+  return value == null ? "未采集" : `${value}%`;
+}
+
+function loadValue(host: HostState) {
+  return host.load1 == null || host.load5 == null || host.load15 == null
+    ? "未采集"
+    : `${host.load1.toFixed(2)} / ${host.load5.toFixed(2)} / ${host.load15.toFixed(2)}`;
+}
+
+function containerValue(host: HostState) {
+  if (host.containerCount == null) return friendlyDockerStatus(host.dockerStatus);
+  return host.unhealthyContainerCount
+    ? `${host.containerCount} 个 · ${host.unhealthyContainerCount} 个异常`
+    : `${host.containerCount} 个 · 无异常`;
 }
 
 function friendlyEvidence(value: string) {
@@ -194,17 +212,6 @@ function friendlyEvidence(value: string) {
   if (/SSH read-only collector failed/i.test(value)) return "SSH 只读检查失败：请先确认本机 SSH 配置。";
   if (/allowlist/i.test(value)) return "安全边界：只执行固定只读命令，输出会脱敏。";
   return shortSignal(value);
-}
-
-function internalSignalSummary(host: HostState) {
-  const ssh = friendlySshStatus(host.sshStatus);
-  const runtime = friendlyDockerStatus(host.dockerStatus);
-  const sshFailed = !["正常", "模拟正常", "未检查", "未配置", "当前未启用"].includes(ssh);
-  const runtimeFailed = !["已检查", "模拟正常", "未检查"].includes(runtime);
-  if (sshFailed) return { status: ssh, detail: `SSH ${ssh} · 服务 ${runtime}` };
-  if (runtimeFailed) return { status: runtime, detail: `SSH ${ssh} · 服务 ${runtime}` };
-  if (["正常", "模拟正常"].includes(ssh) && (runtime === "已检查" || runtime === "模拟正常")) return { status: "正常", detail: `SSH ${ssh} · 服务 ${runtime}` };
-  return { status: "检查不完整", detail: `SSH ${ssh} · 服务 ${runtime}` };
 }
 
 function discussionBriefField(value: string, label: string) {
@@ -239,7 +246,7 @@ function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh
         <span className={`host-status-text ${host.status}`}>{statusLabels[host.status]}</span>
       </div>
       <div className="host-row-meta">
-        <span>{fresh && host.status !== "healthy" ? host.summary : fresh ? "没有需要处理的问题" : "状态待更新"}</span>
+        <span>{fresh && host.status !== "healthy" ? host.summary : fresh ? [host.environment, host.role].filter(Boolean).join(" · ") : "状态待更新"}</span>
         <time>{fresh ? formatTime(host.lastCheckedAt) : "尚未检查"}</time>
         <span aria-hidden="true">›</span>
       </div>
@@ -403,6 +410,7 @@ export function App() {
   const [actionExecution, setActionExecution] = useState<{ receipt: ActionReceipt; steps: ActionExecutionStep[] } | null>(null);
   const [actionFlowError, setActionFlowError] = useState("");
   const [diagnosisResult, setDiagnosisResult] = useState<{ hostId: string; run: DiagnosisRun } | null>(null);
+  const [pendingPetDiagnosisHostId, setPendingPetDiagnosisHostId] = useState<string | null>(deskIntentAtLoad.source === "pet-alert" ? deskIntentAtLoad.hostId : null);
   const [diagnosisError, setDiagnosisError] = useState("");
   const [hostCheckError, setHostCheckError] = useState<{ hostId: string; message: string } | null>(null);
   const [report, setReport] = useState<string>("");
@@ -662,6 +670,7 @@ export function App() {
         detailTriggerRef.current = null;
         setSelectedHostId(intent.hostId);
         setDetailsOpen(true);
+        if (intent.source === "pet-alert") setPendingPetDiagnosisHostId(intent.hostId);
       } else {
         setDetailsOpen(false);
         if (intent.hostId && nextTab === "overview" && dashboard) setError("这台服务器已不在当前列表中。");
@@ -828,10 +837,17 @@ export function App() {
     () => dashboard ? evidenceReadiness(dashboard, selectedHost) : null,
     [dashboard, selectedHost]
   );
-  const selectedInternalSignal = useMemo(
-    () => selectedHost ? internalSignalSummary(selectedHost) : { status: "待重新检查", detail: "—" },
-    [selectedHost]
-  );
+
+  useEffect(() => {
+    if (petMode || !pendingPetDiagnosisHostId || !dashboard || pendingOperation || !detailsOpen) return;
+    if (!dashboard.hosts.some((host) => host.id === pendingPetDiagnosisHostId)) {
+      setPendingPetDiagnosisHostId(null);
+      return;
+    }
+    if (selectedHost?.id !== pendingPetDiagnosisHostId || !selectedReadiness) return;
+    setPendingPetDiagnosisHostId(null);
+    if (selectedHost.status !== "healthy" && selectedReadiness.canCollect) void runAutomaticDiagnosis();
+  }, [petMode, pendingPetDiagnosisHostId, dashboard, pendingOperation, detailsOpen, selectedHost, selectedReadiness]);
   const batchCoverage = useMemo(
     () => scheduler?.coverage ?? (dashboard ? collectionCoverage(dashboard.mode, dashboard.hosts, { practiceMode: dashboard.practiceMode }) : collectionCoverage("safe-simulated")),
     [scheduler, dashboard]
@@ -1476,41 +1492,46 @@ export function App() {
               </div>
               {hostCheckError?.hostId === selectedHost.id ? <div className="detail-check-error" role="alert"><AlertTriangle size={17} /><div><strong>这台服务器没有检查完</strong><p>{hostCheckError.message}</p></div><button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}>重试这台</button></div> : null}
               <dl className="server-facts">
-                <div><dt>网页 / API</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待重新检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
-                <div><dt>SSH / 服务</dt><dd><strong>{selectedEvidenceCurrent ? selectedInternalSignal.detail : "待重新检查"}</strong></dd></div>
-                <div className={selectedEvidenceCurrent ? resourceSignalStatus(selectedHost) : "unknown"}><dt>CPU / 内存 / 磁盘</dt><dd><strong>{selectedEvidenceCurrent ? resourceSignalSummary(selectedHost) : "待重新检查"}</strong><span>{selectedEvidenceCurrent ? `${selectedHost.cpuPercent == null ? "—" : `${selectedHost.cpuPercent}%`} / ${selectedHost.memoryPercent == null ? "—" : `${selectedHost.memoryPercent}%`} / ${selectedHost.diskPercent == null ? "—" : `${selectedHost.diskPercent}%`}` : "—"}</span></dd></div>
+                <div className={selectedEvidenceCurrent ? httpSignalStatus(selectedHost) : "unknown"}><dt>HTTP</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
+                <div className={selectedEvidenceCurrent ? sshSignalStatus(selectedHost) : "unknown"}><dt>SSH</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待检查"}</strong></dd></div>
+                <div className={selectedEvidenceCurrent ? runtimeSignalStatus(selectedHost) : "unknown"}><dt>Docker</dt><dd><strong>{selectedEvidenceCurrent ? containerValue(selectedHost) : "待检查"}</strong></dd></div>
               </dl>
+              <section className="resource-overview" aria-label="资源与负载">
+                <header><strong>资源与负载</strong><span>{selectedEvidenceCurrent && selectedHost.uptimeText ? `已运行 ${selectedHost.uptimeText}` : "运行时长未采集"}</span></header>
+                <dl>
+                  <div className={selectedEvidenceCurrent ? resourceSignalStatus({ cpuPercent: selectedHost.cpuPercent }) : "unknown"}><dt>CPU</dt><dd>{selectedEvidenceCurrent ? percentValue(selectedHost.cpuPercent) : "待检查"}</dd></div>
+                  <div className={selectedEvidenceCurrent && selectedHost.load1 != null ? "observed" : "unknown"}><dt>负载 1 / 5 / 15 分钟</dt><dd>{selectedEvidenceCurrent ? loadValue(selectedHost) : "待检查"}</dd></div>
+                  <div className={selectedEvidenceCurrent ? resourceSignalStatus({ memoryPercent: selectedHost.memoryPercent }) : "unknown"}><dt>内存</dt><dd>{selectedEvidenceCurrent ? percentValue(selectedHost.memoryPercent) : "待检查"}</dd></div>
+                  <div className={selectedEvidenceCurrent ? resourceSignalStatus({ diskPercent: selectedHost.diskPercent }) : "unknown"}><dt>系统盘</dt><dd>{selectedEvidenceCurrent ? percentValue(selectedHost.diskPercent) : "待检查"}</dd></div>
+                </dl>
+              </section>
               {diagnosing ? (
                 <section className="diagnosis-running" role="status">
                   <RefreshCcw className="spin" size={19} />
-                  <div><strong>正在查原因</strong><p>读取网页、SSH、服务和资源状态。</p></div>
+                  <strong>正在读取最新状态和只读证据…</strong>
                 </section>
               ) : selectedDiagnosis ? (
                 <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
-                  <span className="diagnosis-label">排查结果</span>
                   <h3>{selectedDiagnosis.diagnosis.headline}</h3>
-                  <dl><div><dt>依据</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>处理</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
+                  <dl><div><dt>事实</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>下一步</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
                   {selectedDiagnosis.diagnosis.layer === "none" ? null : (
-                    <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service", selectedHost.id)}><TerminalSquare size={16} />继续只读排查</button>
+                    <button className="diagnosis-next-action" disabled={operationBusy} onClick={() => runDryAction("inspect-service", selectedHost.id)}><TerminalSquare size={16} />继续排查</button>
                   )}
                 </section>
               ) : null}
               {diagnosisError ? <div className="diagnosis-error" role="alert"><AlertTriangle size={16} /><span><strong>没有查完</strong><p>{diagnosisError}</p></span></div> : null}
               <details className={`technical-details ${selectedEvidenceCurrent ? "" : "expired"}`}>
-                <summary>{selectedEvidenceCurrent ? "技术证据" : "上次技术证据（已过期）"}</summary>
+                <summary>{selectedEvidenceCurrent ? "原始检查" : "上次原始检查（已过期）"}</summary>
                 <div>
                   <dl className="technical-facts">
                     <div><dt>检查时间</dt><dd>{formatTime(selectedHost.lastCheckedAt)}</dd></div>
                     <div><dt>耗时</dt><dd>{selectedHost.durationMs == null ? "—" : `${selectedHost.durationMs} ms`}</dd></div>
-                    <div><dt>HTTP</dt><dd>{friendlyHttpStatus(selectedHost.httpStatus)}{selectedHost.httpLatencyMs == null ? "" : ` · ${selectedHost.httpLatencyMs} ms`}</dd></div>
-                    <div><dt>SSH</dt><dd>{friendlySshStatus(selectedHost.sshStatus)}</dd></div>
-                    <div><dt>服务</dt><dd>{friendlyDockerStatus(selectedHost.dockerStatus)}</dd></div>
                     <div><dt>来源</dt><dd>{selectedHost.isOfflineDemo ? "离线演示" : [selectedHost.healthUrl ? "HTTP" : "", selectedHost.sshAlias ? "SSH" : ""].filter(Boolean).join(" + ") || "未配置"}</dd></div>
+                    {selectedDiagnosis ? <><div><dt>检查 ID</dt><dd>{selectedDiagnosis.checkId}</dd></div><div><dt>安全边界</dt><dd>只读采集，未执行服务器变更</dd></div></> : null}
                   </dl>
                   {selectedHost.evidence.length ? <><h4>原始记录</h4><ul className="technical-evidence-list">{selectedHost.evidence.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul></> : null}
                   {selectedDiagnosis ? <div className={`diagnostic-proof-body ${selectedDiagnosis.deepEvidence.state}`}>
-                    {selectedDiagnosis.deepEvidence.state === "complete" ? null : <p>{selectedDiagnosis.deepEvidence.summary}</p>}
-                    {selectedDeepFindings.length ? <div className="diagnostic-proof-list">{selectedDeepFindings.map((finding) => <div className={finding.status} key={finding.key}><span>{finding.label}</span><strong>{finding.value}</strong><p>{finding.detail}</p></div>)}</div> : null}
+                    {selectedDeepFindings.length ? <><h4>只读深查</h4><div className="diagnostic-proof-list">{selectedDeepFindings.map((finding) => <div className={finding.status} key={finding.key}><span>{finding.label}</span><strong>{finding.value}</strong></div>)}</div></> : null}
                     {selectedDiagnosis.deepEvidence.excerpt.length ? <pre>{selectedDiagnosis.deepEvidence.excerpt.join("\n")}</pre> : null}
                   </div> : null}
                 </div>

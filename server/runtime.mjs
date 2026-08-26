@@ -75,8 +75,14 @@ const offlineDemoProfiles = {
     httpLatencyMs: 24,
     sshStatus: "simulated ok",
     cpuPercent: 18,
+    load1: 0.18,
+    load5: 0.24,
+    load15: 0.2,
     memoryPercent: 46,
     diskPercent: 52,
+    uptimeText: "12 天 4 小时",
+    containerCount: 4,
+    unhealthyContainerCount: 0,
     dockerStatus: "compose healthy",
     summary: "离线演示：服务正常，资源压力正常。",
     evidence: ["这是本机离线生成的演示证据。", "没有发起 HTTP、SSH 或其他网络请求。"]
@@ -87,8 +93,14 @@ const offlineDemoProfiles = {
     httpLatencyMs: 37,
     sshStatus: "simulated ok",
     cpuPercent: 31,
+    load1: 1.12,
+    load5: 0.98,
+    load15: 0.71,
     memoryPercent: 68,
     diskPercent: 76,
+    uptimeText: "28 天 7 小时",
+    containerCount: 6,
+    unhealthyContainerCount: 0,
     dockerStatus: "compose healthy",
     summary: "离线演示：服务可用，但磁盘接近关注阈值。",
     evidence: ["这是本机离线生成的演示证据。", "磁盘 76% 仅用于展示关注状态。"]
@@ -99,8 +111,14 @@ const offlineDemoProfiles = {
     httpLatencyMs: null,
     sshStatus: "simulated disabled",
     cpuPercent: null,
+    load1: null,
+    load5: null,
+    load15: null,
     memoryPercent: null,
     diskPercent: null,
+    uptimeText: null,
+    containerCount: null,
+    unhealthyContainerCount: null,
     dockerStatus: "not checked",
     summary: "离线演示：没有观测证据，状态保持未知。",
     evidence: ["这是本机离线生成的演示证据。", "未知状态不会被伪装成正常。"]
@@ -109,6 +127,7 @@ const offlineDemoProfiles = {
 
 export const readOnlySshCommands = Object.freeze({
   uptime: "uptime",
+  cpu: "LC_ALL=C top -bn1 | head -n 5",
   memory: "free -m",
   disk: "df -P /",
   docker: "docker ps --format '{{.Names}} {{.Status}}'",
@@ -120,7 +139,7 @@ export function readOnlySshPreview(sshAlias) {
     ? sshAlias
     : validateSshAlias(sshAlias, { allowEmpty: false });
   return Object.values(readOnlySshCommands).map((command) => {
-    const remoteCommand = command.includes("'") ? `"${command}"` : command;
+    const remoteCommand = /[|<>&;]/.test(command) || command.includes("'") ? `"${command}"` : command;
     return `ssh ${target} ${remoteCommand}`;
   });
 }
@@ -225,11 +244,39 @@ function parseDiskPercent(output) {
   return match ? Number(match[1]) : null;
 }
 
+export function parseCpuPercent(output) {
+  const idle = String(output || "").match(/%?Cpu(?:\(s\)|\d*)[^\n]*?(\d+(?:\.\d+)?)\s*id\b/i)?.[1];
+  if (idle == null) return null;
+  return Math.max(0, Math.min(100, Math.round((100 - Number(idle)) * 10) / 10));
+}
+
+export function parseUptimeLoad(output) {
+  const text = String(output || "").replace(/\r/g, "").split("\n")[0]?.trim() || "";
+  const load = text.match(/load averages?:\s*(\d+(?:\.\d+)?)[,\s]+\s*(\d+(?:\.\d+)?)[,\s]+\s*(\d+(?:\.\d+)?)/i);
+  const uptimeText = text.match(/\bup\s+(.+?),\s+\d+\s+users?,\s+load averages?:/i)?.[1]?.replace(/\s+/g, " ").trim() || null;
+  return {
+    load1: load ? Number(load[1]) : null,
+    load5: load ? Number(load[2]) : null,
+    load15: load ? Number(load[3]) : null,
+    uptimeText
+  };
+}
+
+function parseDockerInventory(output, available) {
+  if (!available) return { containerCount: null, unhealthyContainerCount: null };
+  const lines = String(output || "").split("\n").map((line) => line.trim()).filter(Boolean);
+  return {
+    containerCount: lines.length,
+    unhealthyContainerCount: lines.filter((line) => /unhealthy|restarting|exited|dead/i.test(line)).length
+  };
+}
+
 async function collectSshReadOnly(host) {
   const evidence = [];
   try {
-    const [uptime, memory, disk, dockerResult] = await Promise.all([
+    const [uptime, cpu, memory, disk, dockerResult] = await Promise.all([
       runSshReadOnly(host, "uptime", 5000),
+      runSshReadOnly(host, "cpu", 5000).catch(() => ""),
       runSshReadOnly(host, "memory", 5000),
       runSshReadOnly(host, "disk", 5000),
       runSshReadOnly(host, "docker", 5000)
@@ -239,7 +286,10 @@ async function collectSshReadOnly(host) {
         .catch((error) => ({ output: `docker unavailable: ${sanitizeError(error.message)}`, access: "unavailable" }))
     ]);
     const docker = dockerResult.output;
+    const load = parseUptimeLoad(uptime);
+    const containers = parseDockerInventory(docker, dockerResult.access !== "unavailable");
     evidence.push(`SSH uptime: ${uptime.split("\n")[0]}`);
+    if (cpu) evidence.push(`SSH CPU: ${cpu.split("\n").find((line) => /Cpu/i.test(line)) || "top returned no CPU row"}`);
     evidence.push(`SSH memory: ${memory.split("\n")[0]}; ${memory.split("\n")[1] || ""}`.trim());
     evidence.push(`SSH disk: ${disk.split("\n").slice(0, 2).join(" | ")}`);
     evidence.push(`SSH docker: ${docker.split("\n").slice(0, 4).join(" | ") || "no docker output"}`);
@@ -248,16 +298,26 @@ async function collectSshReadOnly(host) {
     }
     return {
       sshStatus: "ok",
+      cpuPercent: parseCpuPercent(cpu),
+      ...load,
       memoryPercent: parseMemoryPercent(memory),
       diskPercent: parseDiskPercent(disk),
-      dockerStatus: dockerResult.access === "unavailable" ? "docker unavailable" : "docker checked",
+      ...containers,
+      dockerStatus: dockerResult.access === "unavailable" ? "docker unavailable" : containers.unhealthyContainerCount ? "docker unhealthy containers" : "docker checked",
       evidence
     };
   } catch (error) {
     return {
       sshStatus: sanitizeError(error.message || "ssh failed"),
+      cpuPercent: null,
+      load1: null,
+      load5: null,
+      load15: null,
       memoryPercent: null,
       diskPercent: null,
+      uptimeText: null,
+      containerCount: null,
+      unhealthyContainerCount: null,
       dockerStatus: "not checked",
       evidence: [`SSH read-only collector failed: ${sanitizeError(error.message || "unknown error")}`]
     };
@@ -279,8 +339,14 @@ export async function collectHost(host, options) {
   const profile = {
     sshStatus: "simulated disabled",
     cpuPercent: null,
+    load1: null,
+    load5: null,
+    load15: null,
     memoryPercent: null,
     diskPercent: null,
+    uptimeText: null,
+    containerCount: null,
+    unhealthyContainerCount: null,
     dockerStatus: "not checked",
     summary: "真实 SSH 未启用，仅完成 HTTP 健康检查。",
     evidence: ["LOCALOPS_ENABLE_SSH 未开启。", "资源和 Docker 指标将在只读 SSH collector 阶段启用。"]
@@ -296,9 +362,15 @@ export async function collectHost(host, options) {
       httpStatus: http.httpStatus,
       httpLatencyMs: http.httpLatencyMs,
       sshStatus: ssh.sshStatus,
-      cpuPercent: null,
+      cpuPercent: ssh.cpuPercent,
+      load1: ssh.load1,
+      load5: ssh.load5,
+      load15: ssh.load15,
       memoryPercent: ssh.memoryPercent,
       diskPercent: ssh.diskPercent,
+      uptimeText: ssh.uptimeText,
+      containerCount: ssh.containerCount,
+      unhealthyContainerCount: ssh.unhealthyContainerCount,
       dockerStatus: ssh.dockerStatus,
       summary: host.healthUrl?.trim()
         ? collectedSummary(status, http.status, resourceStatus)
@@ -323,8 +395,14 @@ export async function collectHost(host, options) {
     httpLatencyMs: http.httpLatencyMs,
     sshStatus: sshEnabled ? "not configured" : profile.sshStatus,
     cpuPercent: profile.cpuPercent,
+    load1: profile.load1,
+    load5: profile.load5,
+    load15: profile.load15,
     memoryPercent: profile.memoryPercent,
     diskPercent: profile.diskPercent,
+    uptimeText: profile.uptimeText,
+    containerCount: profile.containerCount,
+    unhealthyContainerCount: profile.unhealthyContainerCount,
     dockerStatus: profile.dockerStatus,
     summary: uncollectedSshSummary(http.status, sshEnabled, hasSshAlias),
     evidence: [

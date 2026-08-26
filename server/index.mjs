@@ -69,8 +69,14 @@ db.exec(`
     httpLatencyMs INTEGER,
     sshStatus TEXT NOT NULL,
     cpuPercent INTEGER,
+    load1 REAL,
+    load5 REAL,
+    load15 REAL,
     memoryPercent INTEGER,
     diskPercent INTEGER,
+    uptimeText TEXT,
+    containerCount INTEGER,
+    unhealthyContainerCount INTEGER,
     dockerStatus TEXT NOT NULL,
     evidenceJson TEXT NOT NULL,
     sanitizedError TEXT,
@@ -120,6 +126,12 @@ ensureColumn("host_checks", "httpLatencyMs", "INTEGER");
 ensureColumn("host_checks", "hostName", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("host_checks", "hostEnvironment", "TEXT NOT NULL DEFAULT ''");
 ensureColumn("host_checks", "hostRole", "TEXT NOT NULL DEFAULT ''");
+ensureColumn("host_checks", "load1", "REAL");
+ensureColumn("host_checks", "load5", "REAL");
+ensureColumn("host_checks", "load15", "REAL");
+ensureColumn("host_checks", "uptimeText", "TEXT");
+ensureColumn("host_checks", "containerCount", "INTEGER");
+ensureColumn("host_checks", "unhealthyContainerCount", "INTEGER");
 ensureColumn("check_runs", "trigger", "TEXT NOT NULL DEFAULT 'manual'");
 ensureColumn("check_runs", "hostScope", "TEXT");
 
@@ -525,8 +537,14 @@ function latestHostChecks() {
     lastCheckedAt: row.lastCheckedAt || null,
     durationMs: row.durationMs ?? null,
     cpuPercent: row.cpuPercent ?? null,
+    load1: row.load1 ?? null,
+    load5: row.load5 ?? null,
+    load15: row.load15 ?? null,
     memoryPercent: row.memoryPercent ?? null,
     diskPercent: row.diskPercent ?? null,
+    uptimeText: row.uptimeText || null,
+    containerCount: row.containerCount ?? null,
+    unhealthyContainerCount: row.unhealthyContainerCount ?? null,
     httpStatus: row.httpStatus || "not checked",
     httpLatencyMs: row.httpLatencyMs ?? null,
     sshStatus: row.sshStatus || "not checked",
@@ -676,8 +694,8 @@ async function runLightCheck(options = {}, retainedLock = null) {
       `).run("light", trigger, hostScope, startedAt.toISOString(), finishedAt.toISOString(), durationMs, status, summary);
 
       const insertHostCheck = db.prepare(`
-        INSERT INTO host_checks (runId, hostId, hostName, hostEnvironment, hostRole, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, memoryPercent, diskPercent, dockerStatus, evidenceJson, sanitizedError)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO host_checks (runId, hostId, hostName, hostEnvironment, hostRole, status, httpStatus, httpLatencyMs, sshStatus, cpuPercent, load1, load5, load15, memoryPercent, diskPercent, uptimeText, containerCount, unhealthyContainerCount, dockerStatus, evidenceJson, sanitizedError)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const result of hostResults) {
         const hostSnapshot = hostSnapshots.get(result.hostId);
@@ -692,8 +710,14 @@ async function runLightCheck(options = {}, retainedLock = null) {
           result.httpLatencyMs,
           result.sshStatus,
           result.cpuPercent,
+          result.load1,
+          result.load5,
+          result.load15,
           result.memoryPercent,
           result.diskPercent,
+          result.uptimeText,
+          result.containerCount,
+          result.unhealthyContainerCount,
           result.dockerStatus,
           JSON.stringify(result.evidence),
           result.summary
@@ -787,7 +811,8 @@ function checkDetail(id) {
   }
   const rows = db.prepare(`
     SELECT hc.hostId, hc.hostName, hc.hostEnvironment, hc.hostRole, h.name, h.environment, h.role, hc.status, hc.httpStatus, hc.httpLatencyMs,
-      hc.sshStatus, hc.cpuPercent, hc.memoryPercent, hc.diskPercent, hc.dockerStatus,
+      hc.sshStatus, hc.cpuPercent, hc.load1, hc.load5, hc.load15, hc.memoryPercent, hc.diskPercent,
+      hc.uptimeText, hc.containerCount, hc.unhealthyContainerCount, hc.dockerStatus,
       hc.evidenceJson, hc.sanitizedError
     FROM host_checks hc
     LEFT JOIN hosts h ON h.id = hc.hostId
@@ -809,8 +834,14 @@ function checkDetail(id) {
       httpLatencyMs: row.httpLatencyMs ?? null,
       sshStatus: sanitizeError(row.sshStatus || "not checked"),
       cpuPercent: row.cpuPercent ?? null,
+      load1: row.load1 ?? null,
+      load5: row.load5 ?? null,
+      load15: row.load15 ?? null,
       memoryPercent: row.memoryPercent ?? null,
       diskPercent: row.diskPercent ?? null,
+      uptimeText: row.uptimeText || null,
+      containerCount: row.containerCount ?? null,
+      unhealthyContainerCount: row.unhealthyContainerCount ?? null,
       dockerStatus: sanitizeError(row.dockerStatus || "not checked"),
       evidence: safeEvidenceList(row.evidenceJson)
     }))
@@ -1065,7 +1096,8 @@ function currentReport(snapshot = statusSnapshot(latestHostChecks())) {
   for (const hostItem of hosts) {
     lines.push(`- ${hostItem.name} [${hostItem.status}]`);
     lines.push(`  HTTP: ${hostItem.httpStatus}${hostItem.httpLatencyMs == null ? "" : `, ${hostItem.httpLatencyMs}ms`}; SSH: ${hostItem.sshStatus}; Docker: ${hostItem.dockerStatus}`);
-    lines.push(`  资源: CPU ${reportPercent(hostItem.cpuPercent)}, 内存 ${reportPercent(hostItem.memoryPercent)}, 磁盘 ${reportPercent(hostItem.diskPercent)}`);
+    lines.push(`  资源: CPU ${reportPercent(hostItem.cpuPercent)}, 负载 ${hostItem.load1 == null ? "未采集" : `${hostItem.load1}/${hostItem.load5}/${hostItem.load15}`}, 内存 ${reportPercent(hostItem.memoryPercent)}, 磁盘 ${reportPercent(hostItem.diskPercent)}`);
+    lines.push(`  运行: ${hostItem.uptimeText || "时长未采集"}; 容器 ${hostItem.containerCount == null ? "未采集" : `${hostItem.containerCount} 个，其中 ${hostItem.unhealthyContainerCount ?? 0} 个异常`}`);
     lines.push(`  摘要: ${hostItem.summary}`);
   }
   lines.push("");

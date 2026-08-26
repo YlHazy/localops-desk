@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import test from "node:test";
-import { collectHost, collectedSummary, readOnlySshCommands, readOnlySshPreview, sshOnlyCollectedSummary } from "./runtime.mjs";
+import { collectHost, collectedSummary, parseCpuPercent, parseUptimeLoad, readOnlySshCommands, readOnlySshPreview, sshOnlyCollectedSummary } from "./runtime.mjs";
 
 async function closeTestServer(server) {
   if (!server.listening) return;
@@ -16,6 +16,7 @@ test("copyable SSH preview is generated from the executor's exact read-only allo
   const preview = readOnlySshPreview("safe-alias");
   assert.deepEqual(preview, [
     "ssh safe-alias uptime",
+    "ssh safe-alias \"LC_ALL=C top -bn1 | head -n 5\"",
     "ssh safe-alias free -m",
     "ssh safe-alias df -P /",
     "ssh safe-alias \"docker ps --format '{{.Names}} {{.Status}}'\"",
@@ -26,6 +27,18 @@ test("copyable SSH preview is generated from the executor's exact read-only allo
   assert.match(preview.at(-1), /sudo -n docker ps/);
   assert.doesNotMatch(preview.join("\n"), /compose|restart|systemctl/i);
   assert.throws(() => readOnlySshPreview("-oProxyCommand=bad"), /SSH alias/);
+});
+
+test("bounded SSH output exposes CPU, load averages, and uptime without inventing missing values", () => {
+  assert.equal(parseCpuPercent("%Cpu(s):  1.2 us,  0.8 sy,  0.0 ni, 97.5 id, 0.5 wa"), 2.5);
+  assert.equal(parseCpuPercent("top returned no cpu row"), null);
+  assert.deepEqual(parseUptimeLoad("10:36:11 up 12 days,  3:04,  1 user,  load average: 0.05, 0.12, 1.10"), {
+    load1: 0.05,
+    load5: 0.12,
+    load15: 1.1,
+    uptimeText: "12 days, 3:04"
+  });
+  assert.deepEqual(parseUptimeLoad("unexpected output"), { load1: null, load5: null, load15: null, uptimeText: null });
 });
 
 test("collected summary prioritizes entry failure over secondary resource pressure", () => {

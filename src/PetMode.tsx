@@ -417,7 +417,7 @@ export function PetMode({
     : dashboard.hosts.length === 0
       ? "还没添加服务器"
       : overallStatus === "healthy"
-        ? focusReadiness.state === "http" ? "入口正常" : `${visibleCounts.healthy ?? 0} 台都稳`
+        ? `${visibleCounts.healthy ?? 0} 台正常`
         : overallStatus === "critical"
           ? "发现明确故障"
           : overallStatus === "warning"
@@ -428,8 +428,38 @@ export function PetMode({
     : dashboard.hosts.length === 0
       ? "去添加服务器"
       : overallStatus === "warning" || overallStatus === "critical"
-        ? "查看原因"
+        ? "自动查原因"
         : "帮我看一下";
+  const speechTitle = syncError
+    ? "本地连接断开"
+    : actionError
+      ? "检查失败"
+      : dashboard.hosts.length === 0
+        ? "还没添加服务器"
+        : !priorityFresh
+          ? "状态需要更新"
+          : overallStatus === "healthy"
+            ? `${visibleCounts.healthy ?? 0} 台正常`
+            : priorityHost ? priorityHost.name : headline;
+  const speechDetail = syncError
+    ? "30 秒后重试"
+    : actionError
+      ? "上次结果仍保留"
+      : dashboard.hosts.length === 0
+        ? "添加后即可检查"
+        : !priorityFresh
+          ? `上次检查 ${latestTime(priorityHost?.lastCheckedAt ?? null)}`
+          : overallStatus === "healthy"
+            ? focusReadiness.state === "http" ? `仅检查 HTTP · ${latestTime(dashboard.observedAt)}` : `检查于 ${latestTime(dashboard.observedAt)}`
+            : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason).replace(/[。.]$/, "");
+  const attentionCount = (visibleCounts.warning ?? 0) + (visibleCounts.critical ?? 0) + (visibleCounts.unknown ?? 0);
+  const glanceLabel = snapshotTrust.state === "stale"
+    ? `${dashboard.hosts.length} 台 · 状态过期`
+    : snapshotTrust.state === "unknown"
+      ? `${dashboard.hosts.length} 台 · 未检查`
+      : attentionCount > 0
+        ? `${attentionCount} 台需关注`
+        : `${dashboard.hosts.length} 台正常`;
 
   function hidePet() {
     if (window.localOpsDesktop?.hidePet) {
@@ -451,22 +481,14 @@ export function PetMode({
       </div>
 
       <section className="pet-stage" aria-label={`LocalOps 守护宠物：${headline}`}>
-        <div className="pet-speech" aria-live="polite">
-          <strong>{headline}</strong>
-          <p>{syncError
-            ? "服务器没有被改动。"
-            : actionError
-              ? "结果没变，稍后再试。"
-            : dashboard.hosts.length === 0
-              ? "添加后即可一键检查。"
-              : priorityHost && !priorityFresh
-                ? "结果过期，请重新检查。"
-                : overallStatus === "healthy"
-                  ? focusReadiness.state === "http" ? "入口正常，资源未检查。" : "刚检查完，我继续盯着。"
-                  : petIssueLine(priorityHost, priorityFresh, priorityGuidance?.reason)}</p>
-        </div>
-        <div className={`pet-character ${loading ? "is-listening" : ""}`} aria-hidden="true">
-          <img src={sentryOtterUrl} alt="" />
+        <div className="pet-figure">
+          <div className="pet-speech" aria-live="polite">
+            <strong>{speechTitle}</strong>
+            <p>{speechDetail}</p>
+          </div>
+          <div className="pet-character" aria-hidden="true">
+            <img src={sentryOtterUrl} alt="" />
+          </div>
         </div>
       </section>
 
@@ -476,7 +498,7 @@ export function PetMode({
           : dashboard.hosts.length === 0
           ? onOpenDesk(undefined, "hosts")
           : (overallStatus === "warning" || overallStatus === "critical") && priorityHost
-            ? onOpenDesk(priorityHost.id, "overview")
+            ? onOpenDesk(priorityHost.id, "overview", "pet-alert")
           : onRefresh()} disabled={loading || syncing} title={syncError ? `${recovery.detail} ${recovery.boundary}` : actionError || undefined}>
           {loading || syncing ? <RefreshCcw className="spin" size={18} /> : syncError ? <RefreshCcw size={18} /> : overallStatus === "healthy" ? <Check size={18} /> : <Server size={18} />}
           {loading ? "我正在看" : syncing ? "正在连接" : primaryAction}
@@ -485,8 +507,8 @@ export function PetMode({
 
       {dashboard.hosts.length > 0 ? <button ref={glanceButtonRef} className="pet-glance" aria-label="快速查看服务器" aria-expanded={expanded} aria-controls="pet-quick-view" onClick={() => setExpanded((value) => !value)}>
         <span className={`pet-status-dot ${overallStatus}`} />
-        <strong>服务器列表</strong>
-        <span>{snapshotTrust.state === "offline" ? "旧结果" : snapshotTrust.state === "stale" ? "已过期" : snapshotTrust.state === "unknown" ? `${dashboard.hosts.length} 台 · 未检查` : `${dashboard.hosts.length} 台 · ${latestTime(dashboard.observedAt)}`}</span>
+        <strong>{snapshotTrust.state === "offline" ? `${dashboard.hosts.length} 台 · 旧结果` : glanceLabel}</strong>
+        <time>{latestTime(dashboard.observedAt)}</time>
         <ChevronDown className={expanded ? "is-expanded" : ""} size={17} />
       </button> : <span aria-hidden="true" />}
 
@@ -504,7 +526,7 @@ export function PetMode({
             })}
           </div>
           <div className="pet-sheet-actions">
-            <button className="pet-open-console" disabled={!expanded} onClick={() => onOpenDesk(focusHost?.id, "overview")}>打开控制台 <ArrowUpRight size={15} /></button>
+            <button className="pet-open-console" disabled={!expanded} onClick={() => onOpenDesk(focusHost?.id, "overview")}>查看服务器详情 <ArrowUpRight size={15} /></button>
           </div>
         </section>
       </div>

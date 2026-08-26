@@ -32,7 +32,8 @@ test("compact companion uses a bounded transparent Sentry Otter cutout", () => {
   assert.match(petSource, /localops-sentry-otter-2d\.png/);
   assert.match(petSource, /<img src=\{sentryOtterUrl\} alt=""/);
   assert.match(petSource, /data-has-hosts=\{dashboard\.hosts\.length > 0/);
-  assert.match(petStyles, /translateY\(calc\(-100% - clamp\(36px, 8vh, 44px\)\)\)/);
+  assert.match(petStyles, /\.pet-figure \{[^}]*bottom: 6px;[^}]*height: clamp\(232px, 55vh, 270px\)/);
+  assert.doesNotMatch(petStyles, /@keyframes pet-breathe/);
   assert.doesNotMatch(petStyles, /\.pet-character\.is-listening/);
   assert.doesNotMatch(petSource, /pet-ear|pet-eye|pet-mouth/);
 });
@@ -93,12 +94,12 @@ test("first watch uses beginner language for the recommended evidence source", (
 test("expired evidence stays out of the current overview and pet glance", () => {
   const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
-  assert.match(appSource, /fresh \? "没有需要处理的问题" : "状态待更新"/);
-  assert.match(appSource, /selectedEvidenceCurrent \? selectedInternalSignal\.detail : "待重新检查"/);
-  assert.match(appSource, /上次技术证据（已过期）/);
+  assert.doesNotMatch(appSource, /没有需要处理的问题/);
+  assert.match(appSource, /selectedEvidenceCurrent \? friendlySshStatus\(selectedHost\.sshStatus\) : "待检查"/);
+  assert.match(appSource, /上次原始检查（已过期）/);
   assert.match(petSource, /if \(!host \|\| !fresh\) return/);
   assert.match(petSource, /petIssueLine\(priorityHost, priorityFresh/);
-  assert.match(petSource, /snapshotTrust\.state === "stale" \? "已过期"/);
+  assert.match(petSource, /snapshotTrust\.state === "stale"/);
 });
 
 test("server detail keeps actions and facts primary while folding bounded diagnosis evidence", () => {
@@ -111,11 +112,11 @@ test("server detail keeps actions and facts primary while folding bounded diagno
   assert.match(appSource, /className="detail-primary-actions"/);
   assert.match(appSource, /<dl className="server-facts">/);
   assert.match(appSource, /<details className={`technical-details/);
-  assert.match(appSource, /selectedEvidenceCurrent \? "技术证据"/);
+  assert.match(appSource, /selectedEvidenceCurrent \? "原始检查"/);
   assert.match(appSource, /className="technical-facts"/);
   assert.doesNotMatch(appSource, /<details className={`diagnostic-proof/);
   assert.match(appSource, /selectedDiagnosis\.diagnosis\.layer === "none" \? null/);
-  assert.match(appSource, /继续只读排查/);
+  assert.match(appSource, /继续排查/);
   assert.match(appSource, /runDryAction\("inspect-service", selectedHost\.id\)/);
   assert.doesNotMatch(appSource, /runDryAction\("reload-nginx", selectedHost\.id\)/);
   assert.match(appSource, /setSelectedHostId\(hostId\)/);
@@ -209,7 +210,10 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   const preloadSource = readFileSync(new URL("../desktop/preload.cjs", import.meta.url), "utf8");
   assert.match(petSource, /setAlertReceipt\(\{ outcome: "suppressed"/);
   assert.match(petSource, /className={`pet-sheet-layer \$\{expanded \? "open" : ""\}`}/);
-  assert.match(petSource, /打开控制台/);
+  assert.match(petSource, /查看服务器详情/);
+  assert.match(petSource, /onOpenDesk\(priorityHost\.id, "overview", "pet-alert"\)/);
+  assert.match(appSource, /deskIntentAtLoad\.source === "pet-alert"/);
+  assert.match(appSource, /pendingPetDiagnosisHostId[\s\S]*runAutomaticDiagnosis\(\)/);
   assert.match(petSource, /snapshotTrust\.state === "unknown"/);
   assert.match(petSource, /permissionSurface: window\.localOpsDesktop \? "windows" : "browser"/);
   assert.match(petSource, /kind: "status"[\s\S]*critical: current\.critical[\s\S]*warning: current\.warning[\s\S]*unknown: current\.unknown/);
@@ -300,8 +304,14 @@ test("desk, pet, runtime, and portable build share one resource judgment contrac
   const petSource = readFileSync(new URL("../src/PetMode.tsx", import.meta.url), "utf8");
   const runtimeSource = readFileSync(new URL("./runtime.mjs", import.meta.url), "utf8");
   const portableSource = readFileSync(new URL("../scripts/package-portable.mjs", import.meta.url), "utf8");
-  assert.match(appSource, /resourceSignalStatus\(selectedHost\)/);
-  assert.match(appSource, /resourceSignalSummary\(selectedHost\)/);
+  assert.match(appSource, /httpSignalStatus\(selectedHost\)/);
+  assert.match(appSource, /sshSignalStatus\(selectedHost\)/);
+  assert.match(appSource, /runtimeSignalStatus\(selectedHost\)/);
+  assert.match(appSource, /resourceSignalStatus\(\{ cpuPercent: selectedHost\.cpuPercent \}\)/);
+  assert.match(appSource, /resourceSignalStatus\(\{ memoryPercent: selectedHost\.memoryPercent \}\)/);
+  assert.match(appSource, /resourceSignalStatus\(\{ diskPercent: selectedHost\.diskPercent \}\)/);
+  assert.match(appSource, /负载 1 \/ 5 \/ 15 分钟/);
+  assert.doesNotMatch(appSource, /resourceSignalSummary\(selectedHost\)/);
   assert.match(petSource, /hostGuidance\(priorityHost, priorityFresh\)/);
   assert.match(runtimeSource, /classifyCollectedStatus\(http\.status, ssh\)/);
   assert.match(portableSource, /shared\/evidence-judgment\.mjs/);
@@ -330,7 +340,7 @@ test("desk, pet, and runtime share host-scoped evidence readiness", () => {
   assert.match(appSource, /selectedReadiness\.canCollect/);
   assert.match(appSource, /资源状态尚未检查/);
   assert.match(petSource, /evidenceReadiness\(dashboard, focusHost\)/);
-  assert.match(petSource, /入口正常，资源未检查/);
+  assert.match(petSource, /仅检查 HTTP/);
   assert.match(runtimeSource, /options\.mode === "ssh-enabled" && host\.sshAlias\?\.trim\(\)/);
   assert.match(readinessSource, /state: "ssh-disabled"/);
   assert.doesNotMatch(appSource, /hosts\.some\(\(host\) => Boolean\(host\.healthUrl \|\| host\.sshAlias\)\)/);

@@ -129,7 +129,7 @@ test("offline demo hosts require explicit opt-in and contain no connection targe
   assert.match(result.hostResults[0].evidence.join(" "), /没有发起 HTTP、SSH/);
 
   const report = await fetch(`${api.base}/api/reports/current`).then((item) => item.json());
-  assert.match(report.report, /CPU 未采集, 内存 未采集, 磁盘 未采集/);
+  assert.match(report.report, /CPU 未采集, 负载 未采集, 内存 未采集, 磁盘 未采集/);
   assert.doesNotMatch(report.report, /N\/A%/);
 });
 

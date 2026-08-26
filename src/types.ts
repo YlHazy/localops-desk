@@ -16,8 +16,14 @@ export interface HostState {
   lastCheckedAt: string | null;
   durationMs: number | null;
   cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
   memoryPercent: number | null;
   diskPercent: number | null;
+  uptimeText: string | null;
+  containerCount: number | null;
+  unhealthyContainerCount: number | null;
   httpStatus: string;
   httpLatencyMs: number | null;
   sshStatus: string;
@@ -71,8 +77,14 @@ export interface CheckHostEvidence {
   httpLatencyMs: number | null;
   sshStatus: string;
   cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
   memoryPercent: number | null;
   diskPercent: number | null;
+  uptimeText: string | null;
+  containerCount: number | null;
+  unhealthyContainerCount: number | null;
   dockerStatus: string;
   evidence: string[];
 }
