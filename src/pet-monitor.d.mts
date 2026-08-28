@@ -1,0 +1,25 @@
+import type { DashboardStatus, HostState } from "./types";
+
+export interface MonitorSignal {
+  level: "healthy" | "unknown" | "warning" | "critical" | "offline";
+  score: number;
+  critical: number;
+  warning: number;
+  unknown: number;
+}
+
+export interface MonitorNotice {
+  title: string;
+  body: string;
+}
+
+export interface PetSnapshotTrust {
+  state: "offline" | "unknown" | "stale" | "current";
+  label: string;
+  current: boolean;
+}
+
+export function monitorSignal(dashboard: DashboardStatus, offline?: boolean): MonitorSignal;
+export function worseningNotice(previous: MonitorSignal | null, current: MonitorSignal): MonitorNotice | null;
+export function selectFocusHost(hosts: HostState[], selectedHostId: string | null): HostState | null;
+export function petSnapshotTrust(hasError: boolean, stale: boolean, hasObservation: boolean): PetSnapshotTrust;

@@ -1,0 +1,16 @@
+node_modules/
+.npm-cache/
+dist/
+.env
+.env.*
+!.env.example
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+data/local-api-token
+data/pet-browser-profile/
+*.log
+*.tsbuildinfo
+work/
+artifacts/
+release/

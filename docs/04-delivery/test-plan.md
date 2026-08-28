@@ -1,0 +1,42 @@
+# Test Plan
+
+- TypeScript typecheck.
+- Production build.
+- Portable package manifest, shared evidence-judgment module integrity, forbidden-file scan, packaged-runtime API/UI smoke, full zero-network practice lifecycle/cleanup, and legacy Windows Edge launcher check.
+- Electron desktop packaging verifies a four-size application icon, exact loopback renderer, native tray creation, close-to-tray persistence, explicit process exit, isolated smoke profile cleanup, and shutdown of only the API owned by the test run. Packaged smoke reserves its own loopback port so an already-running daily instance on `4317` neither satisfies nor blocks the ownership proof; the override is unavailable outside `--smoke-check`.
+- Desktop launcher tests cover identity-free aggregate presence, duplicate-window refusal, malformed presence responses, and session expiry.
+- Shared pet-path tests prove the launcher and full desk construct the same validated session route; source delivery checks require desk-opened pets to use a fresh UUID rather than an untracked pet URL.
+- Companion-asset validation checks genuine PNG alpha, bounded file size, expected portrait dimensions, production UI wiring, and removal of the former CSS cat-face parts; official files under `pets/` retain the stricter 1536 × 1872 gate.
+- API smoke:
+  - `GET /api/status`
+  - `POST /api/checks/light`
+  - `GET /api/reports/current`
+- UI smoke:
+  - Dashboard renders the zero-host onboarding state by default.
+  - First-run offline practice requires an explicit confirmation and renders generic offline-only examples without network targets.
+  - Practice blocks normal host mutation, fails closed on colliding rows, remains compatible with legacy demo rows, and removes only managed practice data.
+  - Exiting an empty-target practice stops local scheduling and removes orphaned practice runs.
+  - Manual light check updates UI.
+  - Dry-run actions reject unknown keys, allow copying only configured read-only commands, and keep practice/mutating plans placeholder-only and non-copyable.
+  - Safety-flow checks pin diagnosis, dry-run switching, approval, execution, verification, and return to one host id; priority changes never retarget the flow, and a missing host fails closed.
+  - Host-set mutations clear the previous completed-check receipt instead of showing counts for removed or newly added servers.
+  - Copyable SSH commands exactly match the runtime allowlist and contain no Compose, sudo, restart, or systemctl mutation path.
+  - Codex discussion deep links contain only fixed status/freshness categories and exclude injected identity, connection, command, summary, and evidence markers.
+  - Evidence-judgment tests keep HTTP, SSH, runtime, and resource classifications shared across backend and UI; null resource fields remain unknown, and disk 75%/90% plus CPU/memory 85%/95% boundaries cannot drift silently.
+  - Guardian guidance tests prove that a reachable-but-resource-warning host explains the yellow state, recommends refreshing/read-only diagnosis, and explicitly discourages restart or configuration mutation.
+  - The report surface separates the identity-bearing internal report from the tested minimal-disclosure summary and gates internal copy behind confirmation.
+  - Host tags survive the desk status/edit round trip but remain absent from Agent status.
+  - Empty host names return a typed 400 response; form copy distinguishes HTTP access, SSH opt-in, and metadata-only fields.
+  - Operation-state tests prove that only a real check renders check-busy UI and that each supported operation exposes one truthful purpose flag.
+  - Latest-request-gate tests prove that out-of-order and post-unmount responses cannot replace a newer desk or pet snapshot.
+  - Shared host-priority tests prove API row order cannot choose the default focus, priority sorting does not mutate fetched data, deliberate non-priority focus persists while present, and removed focus returns to automatic priority.
+  - Source delivery checks require both desk and pet to use the shared priority module, prohibit assigning the first API row as implicit focus, and keep the desk's manual-focus return action visible.
+  - Local-status recovery tests require desk and pet copy to retain the last successful read age, disclose the 30-second automatic retry, and state that immediate retry does not inspect or change a server.
+  - Evidence-trust tests prove that an expired snapshot atomically downgrades every host and aggregate count to unknown without mutating or discarding retained readings; source delivery checks keep that view wired into the desk headline and evidence-hold UI.
+  - Mixed-age evidence tests prove a fresh check on one host cannot revive another host's expired status or categorized signals; desk counts, selected guidance, pet priority/notification input, and minimal-disclosure discussion use each host's own timestamp.
+  - Pet-monitor tests cross the freshness boundary with the shared desk view and prove one identity-free unknown-state notification, stable-state deduplication, and source-level ownership of the single evidence clock. Discussion tests require the overall, HTTP, SSH, runtime, and resource categories to downgrade together and reject any expired healthy/failed wording.
+  - Value-watch readiness tests keep evidence, saved scheduling, and native confirmed-visible attention as three distinct ordered layers; an enabled-but-unconfirmed channel and browser preview cannot satisfy the native layer, and failed storage reads fail closed.
+- Security smoke:
+  - Search outputs for obvious secret placeholders.
+  - Ensure real SSH is disabled without `LOCALOPS_ENABLE_SSH=1`.
+

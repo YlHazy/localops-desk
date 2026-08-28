@@ -1,0 +1,40 @@
+{
+  "name": "localops-guardian",
+  "version": "0.1.0+codex.20260828064320",
+  "description": "Connect Codex to bounded LocalOps server status, checks, diagnostics, and dry-run recovery plans; the native pet remains a visual task-status entry point.",
+  "author": {
+    "name": "YlHazy",
+    "url": "https://github.com/YlHazy"
+  },
+  "homepage": "https://github.com/YlHazy/localops-desk",
+  "repository": "https://github.com/YlHazy/localops-desk",
+  "keywords": [
+    "codex",
+    "desktop-pet",
+    "server-monitoring",
+    "local-first",
+    "operations"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LocalOps Guardian",
+    "shortDescription": "Let Codex watch and explain your servers",
+    "longDescription": "Connects Codex tasks to the local-only LocalOps API. Codex can summarize current server health, run bounded single-host light checks, explain diagnostic evidence, and prepare non-executing recovery plans without arbitrary shell access. The native Codex pet only reflects the task lifecycle. Checks write local history but do not modify remote servers.",
+    "developerName": "YlHazy",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/YlHazy/localops-desk",
+    "defaultPrompt": [
+      "\u8ba9\u5ba0\u7269\u770b\u770b\u6211\u7684\u670d\u52a1\u5668\u73b0\u5728\u662f\u5426\u6b63\u5e38",
+      "\u8fd0\u884c\u4e00\u6b21\u8f7b\u91cf\u5de1\u68c0\u5e76\u7528\u5c0f\u767d\u80fd\u61c2\u7684\u8bdd\u603b\u7ed3",
+      "\u5206\u6790\u6700\u4e25\u91cd\u7684\u670d\u52a1\u5668\u95ee\u9898\uff0c\u4f46\u5148\u4e0d\u8981\u6267\u884c\u4fee\u590d"
+    ],
+    "brandColor": "#24796F",
+    "composerIcon": "./assets/guardian.svg"
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -1,0 +1,24 @@
+appId: com.localops.guardian
+productName: LocalOps Guardian
+asar: true
+directories:
+  output: release
+files:
+  - dist/**
+  - desktop/**
+  - build/icon.png
+  - build/icon.ico
+  - server/**
+  - shared/**
+  - src/pet-presence.mjs
+  - src/assets/localops-sentry-otter-2d.png
+  - package.json
+  - "!**/*.test.mjs"
+win:
+  icon: build/icon.ico
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: LocalOps-Guardian-${version}-${arch}.${ext}
+  signExecutable: false

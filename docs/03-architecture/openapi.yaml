@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: LocalOps Desk Local API
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:4317
+paths:
+  /api/pet-presence:
+    get:
+      summary: Read aggregate active desktop-pet presence
+      responses:
+        "200":
+          description: Presence boolean and active count without session IDs
+  /api/pet-presence/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Read one ephemeral desktop-pet presence session
+      responses:
+        "200":
+          description: Presence and last-seen time only
+        "400":
+          description: Invalid UUID session
+    put:
+      summary: Record open or closing state for one ephemeral pet session
+      responses:
+        "200":
+          description: Updated memory-only presence
+        "400":
+          description: Invalid UUID or state
+  /api/status:
+    get:
+      summary: Get latest dashboard status
+      responses:
+        "200":
+          description: Current status summary
+  /api/hosts:
+    get:
+      summary: List configured hosts
+      responses:
+        "200":
+          description: Host list
+    post:
+      summary: Create a local host configuration
+      responses:
+        "201":
+          description: Created host
+  /api/hosts/{id}:
+    put:
+      summary: Update a local host configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated host
+    delete:
+      summary: Delete a local host configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deletion result
+  /api/practice/offline:
+    post:
+      summary: Explicitly install the exclusive zero-network practice profile
+      responses:
+        "201":
+          description: Installed or already-present managed practice profile
+        "409":
+          description: Existing or colliding host data was preserved
+    delete:
+      summary: Remove only exact managed practice data and orphaned practice runs
+      responses:
+        "200":
+          description: Practice cleanup result
+        "409":
+          description: Colliding or modified data was preserved
+  /api/checks:
+    get:
+      summary: List recent check runs
+      responses:
+        "200":
+          description: Recent check runs
+  /api/checks/light:
+    post:
+      summary: Run light checks
+      responses:
+        "200":
+          description: Light check result
+  /api/checks/light/{hostId}:
+    post:
+      summary: Run a light check for one host
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Host-scoped light check result
+  /api/checks/deep:
+    post:
+      summary: Compatibility path for one bounded host diagnosis
+      responses:
+        "200":
+          description: Host diagnosis with bounded local-only internal evidence
+  /api/diagnostics/{hostId}:
+    post:
+      summary: Recheck and diagnose one host with bounded internal evidence
+      parameters:
+        - name: hostId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Categorized diagnosis plus sanitized bounded evidence for the local detail UI
+  /api/scheduler:
+    get:
+      summary: Get local scheduler state
+      responses:
+        "200":
+          description: Scheduler state
+    put:
+      summary: Configure local scheduler state
+      responses:
+        "200":
+          description: Updated scheduler state
+  /api/startup:
+    get:
+      summary: Get public LocalOps current-user login-start state
+      responses:
+        "200":
+          description: Startup support, readiness, enablement, conflict, and blocker state without local paths
+    put:
+      summary: Explicitly enable or disable the owned current-user login-start entry
+      responses:
+        "200":
+          description: Updated public startup state
+        "400":
+          description: Unsupported platform or invalid enabled value
+        "409":
+          description: Missing readiness prerequisite or conflicting same-name entry
+  /api/maintenance/retention:
+    post:
+      summary: Apply local SQLite retention cleanup
+      responses:
+        "200":
+          description: Check cleanup plus expired finished action receipts; running receipts are preserved
+  /api/actions/dry-run:
+    post:
+      summary: Generate a safe action plan
+      responses:
+        "200":
+          description: Dry-run action plan
+  /api/actions/capability:
+    get:
+      summary: Read UI-only fixed-action capability and blockers
+      responses:
+        "200":
+          description: Capability state without opening an arbitrary command surface
+  /api/actions/receipts:
+    get:
+      summary: List bounded local action receipts
+      responses:
+        "200":
+          description: Recent durable action receipts
+  /api/actions/prepare:
+    post:
+      summary: Prepare a short-lived single-use Nginx reload approval
+      responses:
+        "200":
+          description: Approval bound to a fresh entry-layer diagnosis, target configuration, and fixed commands
+        "409":
+          description: Capability, evidence, diagnosis layer, target, or action prerequisite failed closed
+  /api/actions/execute:
+    post:
+      summary: Execute one approved fixed Nginx reload with preflight and verification
+      responses:
+        "200":
+          description: Durable receipt with preflight, reload, and verification steps
+        "409":
+          description: Approval expired, reused, changed, or confirmation failed before mutation
+  /api/reports/current:
+    get:
+      summary: Get current diagnostic report
+      responses:
+        "200":
+          description: Diagnostic report
+  /api/agent/manifest:
+    get:
+      summary: Get local agent API manifest
+      responses:
+        "200":
+          description: Local agent API manifest
+  /api/agent/status:
+    get:
+      summary: Get agent-friendly status payload
+      responses:
+        "200":
+          description: Status, recent checks, and diagnostic report

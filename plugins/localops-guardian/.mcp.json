@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "localops-guardian": {
+      "command": "node",
+      "args": ["./scripts/mcp-server.mjs"],
+      "cwd": ".",
+      "env_vars": [
+        "LOCALOPS_URL",
+        "LOCALOPS_API_TOKEN",
+        "LOCALOPS_API_TOKEN_FILE"
+      ],
+      "tool_timeout_sec": 20
+    }
+  }
+}
