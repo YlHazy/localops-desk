@@ -130,6 +130,29 @@ test("empty status exposes explicit freshness metadata", async (t) => {
   assert.deepEqual(status.hosts, []);
 });
 
+test("one shared unhealthy Health URL is reported as one entry problem, not duplicated into host outages", async (t) => {
+  const probe = createServer((_req, res) => res.writeHead(503).end("unavailable"));
+  probe.listen(0, "127.0.0.1");
+  await once(probe, "listening");
+  t.after(() => closeTestServer(probe));
+  const api = await startApi(t);
+  const healthUrl = `http://127.0.0.1:${probe.address().port}/ready`;
+  for (const name of ["node-a", "node-b"]) {
+    const response = await fetch(`${api.base}/api/hosts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, healthUrl })
+    });
+    assert.equal(response.status, 201);
+  }
+  const check = await fetch(`${api.base}/api/checks/light`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  assert.equal(check.status, 200);
+  const snapshot = await fetch(`${api.base}/api/status`).then((response) => response.json());
+  assert.deepEqual(snapshot.sharedHealthAlerts, [{ status: "critical", hostCount: 2 }]);
+  assert.deepEqual(snapshot.counts, { healthy: 0, warning: 0, critical: 0, unknown: 2 });
+  assert.ok(snapshot.hosts.every((host) => host.healthEvidenceScope === "shared-entry" && host.sharedHealthHostCount === 2 && host.status === "unknown"));
+});
+
 test("offline demo hosts require explicit opt-in and contain no connection targets", async (t) => {
   const api = await startApi(t, { LOCALOPS_SEED_DEMO: "1" });
   const response = await fetch(`${api.base}/api/status`);

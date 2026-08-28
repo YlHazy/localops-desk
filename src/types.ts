@@ -30,6 +30,8 @@ export interface HostState {
   dockerStatus: string;
   summary: string;
   evidence: string[];
+  healthEvidenceScope: "host-entry" | "shared-entry";
+  sharedHealthHostCount: number;
 }
 
 export interface HostConfigInput {
@@ -50,6 +52,7 @@ export interface DashboardStatus {
   mode: "safe-simulated" | "ssh-enabled";
   practiceMode: boolean;
   counts: Record<Status, number>;
+  sharedHealthAlerts: Array<{ status: Status; hostCount: number }>;
   hosts: HostState[];
 }
 

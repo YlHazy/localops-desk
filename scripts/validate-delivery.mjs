@@ -86,6 +86,9 @@ function validatePlugin(root, errors) {
     const allowedEnv = new Set(["LOCALOPS_URL", "LOCALOPS_API_TOKEN", "LOCALOPS_API_TOKEN_FILE"]);
     const unexpectedEnv = (server.env_vars ?? []).filter((value) => !allowedEnv.has(value));
     if (unexpectedEnv.length > 0) errors.push(`MCP server ${name} has unexpected env vars: ${unexpectedEnv.join(", ")}`);
+    for (const requiredEnv of ["LOCALOPS_API_TOKEN", "LOCALOPS_API_TOKEN_FILE"]) {
+      if (!server.env_vars?.includes(requiredEnv)) errors.push(`MCP server ${name} must declare ${requiredEnv} to avoid unauthenticated cached installs`);
+    }
   }
 }
 

@@ -122,6 +122,20 @@ test("HTTP probe permits remain bounded until response bodies are cancelled", as
   assert.equal(active, 0);
 });
 
+test("a local HTTP probe transport failure stays unknown instead of declaring the remote host down", async () => {
+  const result = await collectHost({
+    id: "probe-transport-failure",
+    tags: [],
+    healthUrl: "http://127.0.0.1:9/health",
+    sshAlias: ""
+  }, { mode: "safe-simulated", httpTimeoutMs: 500 });
+
+  assert.equal(result.status, "unknown");
+  assert.match(result.httpStatus, /^probe /);
+  assert.match(result.summary, /不能据此判定服务器故障/);
+  assert.match(result.evidence.join("\n"), /不能单独证明远端服务故障/);
+});
+
 test("safe mode reports a saved SSH alias as disabled instead of usable evidence", async () => {
   const result = await collectHost({
     id: "ssh-disabled",

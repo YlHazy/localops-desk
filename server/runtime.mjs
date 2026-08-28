@@ -13,6 +13,7 @@ export function collectedSummary(status, httpStatus, resourceStatus) {
   if (status === "healthy") return "HTTP 与 SSH 只读检查正常。";
   if (httpStatus === "critical") return "HTTP 健康检查明确失败，需要先定位入口或上游依赖。";
   if (httpStatus === "warning") return "HTTP 健康检查返回非成功状态，需要先复核入口证据。";
+  if (httpStatus === "unknown") return "本机 HTTP 探针没有取得响应，不能据此判定服务器故障。";
   if (resourceStatus === "critical") return "HTTP 可用，但资源使用率进入高风险区间。";
   if (resourceStatus === "warning") return "HTTP 可用，但资源使用率接近关注阈值。";
   if (status === "warning") return "HTTP 正常但 SSH 管理通道或资源检查需要关注。";
@@ -26,6 +27,10 @@ function uncollectedSshSummary(httpStatus, sshEnabled, hasSshAlias) {
   }
   if (httpStatus === "critical") return "HTTP 健康检查失败，优先确认公网服务链路。";
   if (httpStatus === "warning") return "HTTP 健康检查返回非成功状态，需要先复核入口证据。";
+  if (httpStatus === "unknown") {
+    if (hasSshAlias && !sshEnabled) return "本机 HTTP 探针没有取得响应；SSH alias 已保存但当前未启用，不能据此判定服务器故障。";
+    return "本机 HTTP 探针没有取得响应，不能据此判定服务器故障。";
+  }
   if (hasSshAlias && !sshEnabled) return "SSH alias 已保存但当前未启用；未配置 Health URL，状态保持未知。";
   return "尚无可用证据来源，状态保持未知。";
 }
@@ -153,6 +158,15 @@ function statusFromHttp(ok, statusCode) {
   return "warning";
 }
 
+function probeFailureStatus(error) {
+  if (error?.name === "AbortError") return "probe timeout";
+  const code = String(error?.cause?.code || error?.code || "").toUpperCase();
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "probe DNS failure";
+  if (code.includes("CERT") || code === "DEPTH_ZERO_SELF_SIGNED_CERT") return "probe TLS failure";
+  if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "ETIMEDOUT" || code.includes("TIMEOUT")) return "probe connection failure";
+  return "probe network failure";
+}
+
 async function collectHttp(host, timeoutMs = 5000) {
   if (!host.healthUrl) {
     return {
@@ -188,12 +202,12 @@ async function collectHttp(host, timeoutMs = 5000) {
   } catch (error) {
     clearTimeout(timer);
     const latency = Date.now() - startedAt;
-    const message = error?.name === "AbortError" ? "timeout" : sanitizeError(error?.message || "request failed");
+    const message = probeFailureStatus(error);
     return {
-      status: "critical",
+      status: "unknown",
       httpStatus: message,
       httpLatencyMs: latency,
-      evidence: [`HTTP probe failed for the configured health endpoint: ${message} after ${latency}ms.`]
+      evidence: [`本机 HTTP 探针未取得响应（${message}，${latency}ms）；该结果不能单独证明远端服务故障。`]
     };
   }
 }
@@ -311,8 +325,16 @@ async function collectSshReadOnly(host) {
       evidence
     };
   } catch (error) {
+    const raw = `${error?.message || ""}\n${error?.stderr || ""}`;
+    const sshStatus = /Could not resolve hostname|Name or service not known/i.test(raw)
+      ? "ssh alias unresolved"
+      : /Permission denied|publickey/i.test(raw)
+        ? "ssh authentication failed"
+        : /timed out|timeout/i.test(raw)
+          ? "ssh connection timeout"
+          : "ssh collector failed";
     return {
-      sshStatus: sanitizeError(error.message || "ssh failed"),
+      sshStatus,
       cpuPercent: null,
       load1: null,
       load5: null,
@@ -323,7 +345,7 @@ async function collectSshReadOnly(host) {
       containerCount: null,
       unhealthyContainerCount: null,
       dockerStatus: "not checked",
-      evidence: [`SSH read-only collector failed: ${sanitizeError(error.message || "unknown error")}`]
+      evidence: [`SSH 只读采集未完成：${sshStatus}。请先核对本机 SSH alias、网络和权限。`]
     };
   }
 }

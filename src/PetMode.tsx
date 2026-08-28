@@ -100,7 +100,8 @@ function petIssueLine(host: HostState | null, fresh: boolean, guidanceReason = "
   const http = host.httpStatus.toLowerCase();
   const ssh = host.sshStatus.toLowerCase();
   const docker = host.dockerStatus.toLowerCase();
-  if (/down|fail|timeout|refused|unreachable|error/.test(http)) return "网页或 API 无法访问。";
+  if (/^(?:probe|monitor) (?:timeout|dns|tls|network|connection)|fetch failed|request failed/.test(http)) return "本机探针未取得响应，先复核监控环境。";
+  if (/down|fail|timeout|refused|unreachable|error/.test(http)) return host.healthEvidenceScope === "shared-entry" ? "共享入口返回异常，节点状态仍需单独确认。" : "网页或 API 无法访问。";
   if (/fail|timeout|refused|unreachable|error/.test(ssh)) return "SSH 现在无法连接。";
   if (/down|fail|unhealthy|exited|error/.test(docker)) return "有服务没有运行。";
   if (/资源(?:占用|使用)|磁盘|内存/.test(guidanceReason)) {

@@ -119,12 +119,22 @@ function formatTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function overallMessage(counts: Record<Status, number>, evidenceExpired = false, partialEvidenceCount = 0) {
+function overallMessage(counts: Record<Status, number>, evidenceExpired = false, partialEvidenceCount = 0, sharedHealthAlerts: DashboardStatus["sharedHealthAlerts"] = []) {
   if (evidenceExpired) {
     return {
       title: `${counts.unknown ?? 0} 台状态待更新`,
       description: "上次检查已过期"
     };
+  }
+  const sharedCritical = sharedHealthAlerts.filter((item) => item.status === "critical");
+  if (sharedCritical.length > 0) {
+    const affected = sharedCritical.reduce((sum, item) => sum + item.hostCount, 0);
+    return { title: `${sharedCritical.length} 个共享入口异常`, description: `影响 ${affected} 台配置的入口检查；不能直接当作 ${affected} 台服务器故障` };
+  }
+  const sharedUnknown = sharedHealthAlerts.filter((item) => item.status === "unknown");
+  if (sharedUnknown.length > 0) {
+    const affected = sharedUnknown.reduce((sum, item) => sum + item.hostCount, 0);
+    return { title: `${sharedUnknown.length} 个共享入口待复核`, description: `影响 ${affected} 台配置；本机探针没有取得有效响应` };
   }
   if ((counts.critical ?? 0) > 0) {
     return {
@@ -168,6 +178,7 @@ function friendlyHttpStatus(value: string) {
   if (value === "simulated 200 ready") return "模拟正常";
   if (value === "simulated not observed") return "模拟未观测";
   if (/timeout|timed out/i.test(value)) return "连接超时";
+  if (/^(?:probe|monitor) (?:dns|tls|network|connection)/i.test(value)) return "本机探针未收到响应";
   return shortSignal(value);
 }
 
@@ -213,7 +224,8 @@ function containerValue(host: HostState) {
 function friendlyEvidence(value: string) {
   if (/HTTP 200/i.test(value)) return value.replace(/^HTTP 200 from /, "网页/API 正常：");
   if (/Could not resolve hostname|alias not found|DNS unresolved/i.test(value)) return "SSH 检查失败：本机 SSH alias 不存在或无法解析。";
-  if (/SSH read-only collector failed/i.test(value)) return "SSH 只读检查失败：请先确认本机 SSH 配置。";
+  if (/SSH read-only collector failed|SSH 只读采集未完成/i.test(value)) return "SSH 只读检查失败：请先确认本机 SSH 配置。";
+  if (/本机 HTTP 探针未取得响应/i.test(value)) return "本机探针未取得 HTTP 响应，不能据此判定服务器故障。";
   if (/allowlist/i.test(value)) return "安全边界：只执行固定只读命令，输出会脱敏。";
   return shortSignal(value);
 }
@@ -246,7 +258,7 @@ function HostPanel({ host, fresh, selected, onSelect }: { host: HostState; fresh
   return (
     <button className={`host-panel ${selected ? "selected" : ""}`} aria-expanded={selected} aria-controls={selected ? "server-detail" : undefined} onClick={(event) => onSelect(event.currentTarget)}>
       <span className="host-monitor-name"><span className="host-name"><i className={`host-dot ${host.status}`} aria-hidden="true" />{host.name}</span><small>{host.environment || "未分类"}</small></span>
-      <span className="host-monitor-cell" data-label="HTTP"><strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待检查"}</strong>{fresh && host.httpLatencyMs != null ? <small>{host.httpLatencyMs} ms</small> : null}</span>
+      <span className="host-monitor-cell" data-label="HTTP"><strong>{fresh ? friendlyHttpStatus(host.httpStatus) : "待检查"}</strong>{fresh && host.healthEvidenceScope === "shared-entry" ? <small>共享入口 · {host.sharedHealthHostCount} 台</small> : fresh && host.httpLatencyMs != null ? <small>{host.httpLatencyMs} ms</small> : null}</span>
       <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ cpuPercent: host.cpuPercent }) : "unknown"}`} data-label="CPU"><strong>{fresh ? percentValue(host.cpuPercent) : "—"}</strong></span>
       <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ memoryPercent: host.memoryPercent }) : "unknown"}`} data-label="内存"><strong>{fresh ? percentValue(host.memoryPercent) : "—"}</strong></span>
       <span className={`host-monitor-cell ${fresh ? resourceSignalStatus({ diskPercent: host.diskPercent }) : "unknown"}`} data-label="磁盘"><strong>{fresh ? percentValue(host.diskPercent) : "—"}</strong></span>
@@ -849,7 +861,8 @@ export function App() {
     () => overallMessage(
       displayDashboard?.counts ?? { healthy: 0, warning: 0, critical: 0, unknown: 0 },
       freshness.state === "unknown" && Boolean(dashboard?.observedAt),
-      partialEvidenceCount
+      partialEvidenceCount,
+      displayDashboard?.sharedHealthAlerts ?? []
     ),
     [displayDashboard, freshness.state, dashboard?.observedAt, partialEvidenceCount]
   );

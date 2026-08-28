@@ -16,7 +16,9 @@ test("HTTP judgment preserves unknown, warning, and critical distinctions", () =
   assert.equal(httpSignalStatus({ httpStatus: "200 OK" }), "healthy");
   assert.equal(httpSignalStatus({ httpStatus: "404 Not Found" }), "warning");
   assert.equal(httpSignalStatus({ httpStatus: "503 Service Unavailable" }), "critical");
-  assert.equal(httpSignalStatus({ httpStatus: "timeout" }), "critical");
+  assert.equal(httpSignalStatus({ httpStatus: "timeout" }), "unknown");
+  assert.equal(httpSignalStatus({ httpStatus: "fetch failed" }), "unknown");
+  assert.equal(httpSignalStatus({ httpStatus: "probe DNS failure" }), "unknown");
 });
 
 test("an intentionally unconfigured SSH source stays unknown instead of becoming a warning", () => {

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "2024-11-05";
-const SERVER_INFO = { name: "localops-guardian", version: "0.1.0" };
+const SERVER_INFO = { name: "localops-guardian", version: "0.2.2" };
 const DEFAULT_LOCALOPS_URL = "http://127.0.0.1:4317";
 const READ_TIMEOUT_MS = 3000;
 const CHECK_TIMEOUT_MS = 15000;

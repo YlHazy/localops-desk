@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { collectionCoverage, hostCollectionPlan } from "../shared/collection-coverage.mjs";
+import { httpSignalStatus, resourceSignalStatus } from "../shared/evidence-judgment.mjs";
 import { diagnoseHost } from "../shared/host-diagnosis.mjs";
 import { collectDeepEvidence } from "./deep-diagnostics.mjs";
 import { actionCapability, createNginxReloadApproval, executeNginxReload, publicApproval, validateNginxApproval } from "./safe-actions.mjs";
@@ -588,13 +589,67 @@ function statusCounts(hosts) {
   }, { healthy: 0, warning: 0, critical: 0, unknown: 0 });
 }
 
+function endpointStatusRank(status) {
+  return { healthy: 0, unknown: 1, warning: 2, critical: 3 }[status] ?? 1;
+}
+
+function sharedHealthGroups(hosts) {
+  const grouped = new Map();
+  for (const hostItem of hosts) {
+    const endpoint = String(hostItem.healthUrl || "").trim();
+    if (!endpoint) continue;
+    const group = grouped.get(endpoint) || [];
+    group.push(hostItem);
+    grouped.set(endpoint, group);
+  }
+  return [...grouped.values()].filter((group) => group.length > 1);
+}
+
+function applyEvidenceScope(hosts) {
+  const sharedGroups = sharedHealthGroups(hosts);
+  const sharedByHostId = new Map(sharedGroups.flatMap((group) => group.map((hostItem) => [hostItem.id, group.length])));
+  const alerts = [];
+  const scopedHosts = hosts.map((hostItem) => {
+    const sharedHealthHostCount = sharedByHostId.get(hostItem.id) || 0;
+    const healthEvidenceScope = sharedHealthHostCount > 1 ? "shared-entry" : "host-entry";
+    const httpStatus = httpSignalStatus(hostItem);
+    if (sharedHealthHostCount <= 1 || httpStatus === "healthy") return { ...hostItem, healthEvidenceScope, sharedHealthHostCount };
+    const hasIndependentCriticalEvidence = resourceSignalStatus(hostItem) === "critical";
+    return {
+      ...hostItem,
+      healthEvidenceScope,
+      sharedHealthHostCount,
+      status: hasIndependentCriticalEvidence ? hostItem.status : "unknown",
+      summary: hasIndependentCriticalEvidence
+        ? hostItem.summary
+        : `共享 Health URL ${httpStatus === "unknown" ? "未取得响应" : "返回异常"}；这只能说明入口需要复核，不能判定该节点故障。`
+    };
+  });
+  for (const group of sharedGroups) {
+    const statuses = group.map((hostItem) => httpSignalStatus(hostItem));
+    const status = statuses.reduce((worst, item) => endpointStatusRank(item) > endpointStatusRank(worst) ? item : worst, "healthy");
+    if (status !== "healthy") alerts.push({ status, hostCount: group.length });
+  }
+  return { hosts: scopedHosts, sharedHealthAlerts: alerts };
+}
+
+function normalizeLegacyProbeFailure(hostItem) {
+  const probeStatus = httpSignalStatus(hostItem);
+  if (hostItem.status !== "critical" || probeStatus !== "unknown" || resourceSignalStatus(hostItem) === "critical") return hostItem;
+  return {
+    ...hostItem,
+    status: "unknown",
+    summary: "本机 HTTP 探针没有取得有效响应；不能据此把服务器标记为故障。"
+  };
+}
+
 function statusSnapshot(hosts) {
   const staleAfterMs = Math.max(settingNumber("lightIntervalMinutes", 15, { min: 1, max: 1440 }) * 2 * 60 * 1000, 10 * 60 * 1000);
   const now = Date.now();
-  const effectiveHosts = hosts.map((hostItem) => {
+  const timeScopedHosts = hosts.map((hostItem) => {
     const checkedAt = hostItem.lastCheckedAt ? new Date(hostItem.lastCheckedAt).getTime() : Number.NaN;
     const stale = !Number.isFinite(checkedAt) || now - checkedAt > staleAfterMs;
-    if (!stale) return hostItem;
+    if (!stale) return normalizeLegacyProbeFailure(hostItem);
     return {
       ...hostItem,
       status: "unknown",
@@ -603,6 +658,8 @@ function statusSnapshot(hosts) {
         : "尚未运行过检查。"
     };
   });
+  const scopedEvidence = applyEvidenceScope(timeScopedHosts);
+  const effectiveHosts = scopedEvidence.hosts;
   const observedAt = hosts
     .map((hostItem) => hostItem.lastCheckedAt)
     .filter(Boolean)
@@ -615,6 +672,7 @@ function statusSnapshot(hosts) {
     mode,
     practiceMode: effectiveHosts.length > 0 && effectiveHosts.every((hostItem) => hostItem.isOfflineDemo),
     counts: statusCounts(effectiveHosts),
+    sharedHealthAlerts: scopedEvidence.sharedHealthAlerts,
     hosts: effectiveHosts
   };
 }

@@ -25,7 +25,7 @@ test("diagnosis separates an entry failure from a combined connectivity failure"
   assert.equal(entry.layer, "entry");
   assert.match(entry.detail, /代理、应用或依赖服务/);
 
-  const combined = diagnoseHost({ ...healthy, httpStatus: "timeout", sshStatus: "Permission denied" });
+  const combined = diagnoseHost({ ...healthy, httpStatus: "503 Service Unavailable", sshStatus: "Permission denied" });
   assert.equal(combined.layer, "connectivity");
   assert.match(combined.next, /不要直接重启/);
 });

@@ -9,6 +9,10 @@ const statusRank = Object.freeze({ unknown: 0, healthy: 1, warning: 2, critical:
 export function httpSignalStatus(host) {
   const value = String(host?.httpStatus || "");
   if (!value || /not checked|not observed|no health url|未检查/i.test(value)) return "unknown";
+  // A rejected probe says the LocalOps process did not receive a response. It
+  // is not proof that the remote server is down: local DNS, proxy, TLS and
+  // runtime egress failures look the same from this collector.
+  if (/^(?:probe|monitor) (?:timeout|dns|tls|network|connection)|fetch failed|request failed|network error|^timeout$/i.test(value)) return "unknown";
   const statusCode = Number(value.match(/(?:^|HTTP\s+)(\d{3})\b/i)?.[1]);
   if (Number.isFinite(statusCode)) {
     if (statusCode >= 200 && statusCode < 300) return "healthy";
