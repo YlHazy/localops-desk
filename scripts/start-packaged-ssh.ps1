@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param()
 
-$taskExecutable = Join-Path $PSScriptRoot '..\release\LocalOps-Guardian-0.1.0-x64.exe'
+$taskExecutable = Join-Path $PSScriptRoot '..\release\LocalOps-Guardian-0.2.0-x64.exe'
 $taskExecutable = [System.IO.Path]::GetFullPath($taskExecutable)
 
 if (-not (Test-Path -LiteralPath $taskExecutable -PathType Leaf)) {

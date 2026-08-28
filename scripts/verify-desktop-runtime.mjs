@@ -57,7 +57,9 @@ if (!report?.ok || !Number.isInteger(report.pid) || report.pid <= 0 || report.ap
 }
 
 let processExited = false;
-for (let attempt = 0; attempt < 40; attempt += 1) {
+// Portable Electron builds may need extra time to release the extracted runtime
+// after the renderer has already produced a successful smoke report.
+for (let attempt = 0; attempt < 120; attempt += 1) {
   try {
     process.kill(report.pid, 0);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
