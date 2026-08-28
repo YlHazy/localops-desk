@@ -62,18 +62,32 @@ test("exposes bounded LocalOps tools and calls only expected API routes", async 
   const initialized = await mcp.call(1, "initialize", { protocolVersion: "2024-11-05" });
   assert.equal(initialized.result.serverInfo.name, "localops-guardian");
   assert.match(initialized.result.instructions, /dry-run plans only/);
+  assert.deepEqual(initialized.result.capabilities.resources, { listChanged: false });
 
   const listed = await mcp.call(2, "tools/list", {});
   assert.deepEqual(listed.result.tools.map((tool) => tool.name), [
     "localops_get_status",
+    "localops_show_status_card",
     "localops_run_light_check",
     "localops_get_diagnostic_report",
     "localops_plan_recovery_action"
   ]);
   assert.deepEqual(listed.result.tools.find((tool) => tool.name === "localops_run_light_check").inputSchema.required, ["hostId"]);
+  assert.equal(listed.result.tools.find((tool) => tool.name === "localops_show_status_card")._meta.ui.resourceUri, "ui://localops-guardian/status-card.html");
+
+  const resources = await mcp.call(8, "resources/list", {});
+  assert.deepEqual(resources.result.resources.map((resource) => resource.uri), ["ui://localops-guardian/status-card.html"]);
+  assert.equal(resources.result.resources[0].mimeType, "text/html;profile=mcp-app");
+  const resource = await mcp.call(9, "resources/read", { uri: "ui://localops-guardian/status-card.html" });
+  assert.equal(resource.result.contents[0].mimeType, "text/html;profile=mcp-app");
+  assert.match(resource.result.contents[0].text, /ui\/notifications\/tool-result/);
+  const unknownResource = await mcp.call(10, "resources/read", { uri: "ui://localops-guardian/missing.html" });
+  assert.equal(unknownResource.error.code, -32602);
 
   const status = await mcp.call(3, "tools/call", { name: "localops_get_status", arguments: {} });
   assert.match(status.result.content[0].text, /故障 0 \/ 关注 1/);
+  const card = await mcp.call(11, "tools/call", { name: "localops_show_status_card", arguments: {} });
+  assert.equal(card.result.structuredContent.hosts[0].name, "demo-01");
 
   await mcp.call(4, "tools/call", { name: "localops_run_light_check", arguments: { hostId: "demo-01" } });
   const missingHost = await mcp.call(7, "tools/call", { name: "localops_run_light_check", arguments: {} });
@@ -83,7 +97,7 @@ test("exposes bounded LocalOps tools and calls only expected API routes", async 
   const plan = await mcp.call(6, "tools/call", { name: "localops_plan_recovery_action", arguments: { hostId: "demo-01", actionKey: "inspect-service" } });
   assert.match(plan.result.content[0].text, /DRY-RUN/);
   assert.ok(mock.requests.some((request) => request.method === "POST" && request.url === "/api/checks/light/demo-01"));
-  assert.equal(mock.requests.filter((request) => request.url === "/api/agent/status").length, 1);
+  assert.equal(mock.requests.filter((request) => request.url === "/api/agent/status").length, 2);
   assert.ok(mock.requests.some((request) => request.method === "POST" && request.url === "/api/actions/dry-run"));
 });
 

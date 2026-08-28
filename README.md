@@ -67,7 +67,7 @@ For frontend-only iteration, `npm run dev:web` runs Vite at `http://127.0.0.1:51
 
 ## Codex Pet Integration
 
-`plugins/localops-guardian` packages LocalOps as a local Codex plugin, and `.agents/plugins/marketplace.json` exposes it as a repo-local marketplace entry. It lets a Codex task represented by the native Codex pet read and explain server status, run a bounded single-host light check, fetch diagnostic evidence, and prepare dry-run recovery plans through the LocalOps API. It does not modify Codex, drive native pet animations, or expose arbitrary shell/restart tools.
+`plugins/localops-guardian` packages LocalOps as a local Codex plugin, and `.agents/plugins/marketplace.json` exposes it as a repo-local marketplace entry. It lets a Codex task represented by the native Codex pet read and explain server status, open a compact interactive MCP Apps status card, run a bounded single-host light check, fetch diagnostic evidence, and prepare dry-run recovery plans through the LocalOps API. The status card is optional: every data tool remains useful when a client cannot render UI. The plugin does not modify Codex, drive native pet animations, or expose arbitrary shell/restart tools.
 
 The plugin expects LocalOps at `http://127.0.0.1:4317` by default. See `docs/03-architecture/codex-pet-integration.md` for the trust model and supported boundary.
 

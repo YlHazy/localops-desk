@@ -10,10 +10,11 @@ Use the LocalOps Guardian MCP tools as the evidence source. The visual Codex pet
 ## Interaction contract
 
 1. For “how are my servers” or equivalent, call `localops_get_status` first.
-2. Run `localops_run_light_check` only when the user asks to check, refresh, inspect now, or when current evidence is absent or stale and a bounded read-only refresh is clearly needed. Pass exactly one `hostId` selected from the status result; do not fan out across every host.
-3. Use `localops_get_diagnostic_report` when the status is warning/critical or the user asks why.
-4. Use `localops_plan_recovery_action` only to prepare a dry-run plan. Never execute its displayed commands as a consequence of this skill.
-5. Treat a missing local API as unavailable evidence, not as proof that every server is down. Tell the user to start LocalOps Desk on `127.0.0.1:4317`.
+2. When the user asks to see, show, or open the server status, call `localops_show_status_card`. The card is an optional compact view; do not require it for analysis or for clients that cannot render MCP Apps UI.
+3. Run `localops_run_light_check` only when the user asks to check, refresh, inspect now, or when current evidence is absent or stale and a bounded read-only refresh is clearly needed. Pass exactly one `hostId` selected from the status result; do not fan out across every host.
+4. Use `localops_get_diagnostic_report` when the status is warning/critical or the user asks why.
+5. Use `localops_plan_recovery_action` only to prepare a dry-run plan. Never execute its displayed commands as a consequence of this skill.
+6. Treat a missing local API as unavailable evidence, not as proof that every server is down. Tell the user to start LocalOps Desk on `127.0.0.1:4317`.
 
 ## Pet response style
 

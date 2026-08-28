@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: light-dark(#f7f8f6, #171a18);
+        --surface: light-dark(#ffffff, #202421);
+        --ink: light-dark(#18201c, #edf2ee);
+        --muted: light-dark(#667069, #a9b3ac);
+        --line: light-dark(#dfe4e0, #343a36);
+        --healthy: #23856f;
+        --warning: #b57920;
+        --critical: #b84b45;
+        --unknown: #7d8580;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; color: var(--ink); background: transparent; font: 14px/1.45 ui-sans-serif, "Segoe UI", sans-serif; }
+      button { font: inherit; }
+      .shell { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }
+      .mast { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 18px 14px; }
+      .verdict { display: flex; min-width: 0; align-items: center; gap: 11px; }
+      .lamp { width: 11px; height: 34px; border-radius: 999px; background: var(--unknown); box-shadow: 0 0 0 5px color-mix(in srgb, var(--unknown) 12%, transparent); }
+      .lamp.healthy { background: var(--healthy); box-shadow: 0 0 0 5px color-mix(in srgb, var(--healthy) 12%, transparent); }
+      .lamp.warning { background: var(--warning); box-shadow: 0 0 0 5px color-mix(in srgb, var(--warning) 12%, transparent); }
+      .lamp.critical { background: var(--critical); box-shadow: 0 0 0 5px color-mix(in srgb, var(--critical) 12%, transparent); }
+      h1 { margin: 0; font-size: 19px; line-height: 1.15; letter-spacing: -.025em; }
+      .observed { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+      .refresh { flex: none; min-width: 88px; min-height: 42px; padding: 0 14px; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+      .refresh:hover { border-color: color-mix(in srgb, var(--healthy) 55%, var(--line)); }
+      .refresh:disabled { cursor: wait; opacity: .55; }
+      .hosts { display: grid; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+      .host { padding: 15px 18px 16px; background: var(--surface); }
+      .host-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+      .host h2 { overflow: hidden; margin: 0; font-size: 14px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+      .state { flex: none; color: var(--healthy); font-size: 12px; font-weight: 700; }
+      .state.warning { color: var(--warning); }
+      .state.critical { color: var(--critical); }
+      .state.unknown { color: var(--unknown); }
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+      .metric { min-width: 0; }
+      .metric span { display: block; color: var(--muted); font-size: 10px; letter-spacing: .04em; }
+      .metric strong { display: block; overflow: hidden; margin-top: 2px; font-size: 14px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+      .track { height: 3px; margin-top: 6px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--line) 72%, transparent); }
+      .track i { display: block; height: 100%; border-radius: inherit; background: var(--healthy); }
+      .track i.hot { background: var(--warning); }
+      .track i.danger { background: var(--critical); }
+      .host-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; }
+      .summary { overflow: hidden; margin: 0; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+      .check { flex: none; min-width: 78px; min-height: 40px; padding: 0 10px; color: var(--healthy); border: 1px solid color-mix(in srgb, var(--healthy) 26%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--healthy) 7%, transparent); font-size: 13px; font-weight: 700; cursor: pointer; }
+      .check:hover { background: color-mix(in srgb, var(--healthy) 12%, transparent); }
+      .check:disabled { cursor: wait; color: var(--muted); }
+      .empty { padding: 26px 18px; border-top: 1px solid var(--line); background: var(--surface); }
+      .empty strong, .empty span { display: block; }
+      .empty span { margin-top: 5px; color: var(--muted); }
+      .message { min-height: 20px; padding: 8px 18px; color: var(--muted); font-size: 11px; }
+      button:focus-visible { outline: 3px solid color-mix(in srgb, var(--healthy) 35%, transparent); outline-offset: 2px; }
+      @media (max-width: 520px) {
+        .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .host-foot { align-items: flex-start; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+    </style>
+  </head>
+  <body>
+    <main class="shell" aria-label="LocalOps 服务器状态">
+      <header class="mast">
+        <div class="verdict">
+          <span id="lamp" class="lamp" aria-hidden="true"></span>
+          <div><h1 id="verdict">等待服务器状态</h1><p id="observed" class="observed">尚未取得本地证据</p></div>
+        </div>
+        <button id="refresh" class="refresh" type="button">刷新状态</button>
+      </header>
+      <section id="hosts" class="hosts"></section>
+      <div id="message" class="message" aria-live="polite"></div>
+    </main>
+    <script>
+      (() => {
+        const pending = new Map();
+        let nextRequestId = 1;
+        let latest = null;
+        const hostsEl = document.getElementById("hosts");
+        const verdictEl = document.getElementById("verdict");
+        const observedEl = document.getElementById("observed");
+        const lampEl = document.getElementById("lamp");
+        const messageEl = document.getElementById("message");
+        const refreshEl = document.getElementById("refresh");
+
+        function request(method, params) {
+          const id = nextRequestId++;
+          window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+          return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+        }
+
+        function number(value) { return Number.isFinite(Number(value)) ? Number(value) : null; }
+        function percent(value) { const n = number(value); return n == null ? "—" : `${Math.round(n)}%`; }
+        function statusLabel(status) { return ({ healthy: "正常", warning: "关注", critical: "异常", unknown: "未知" })[status] || "未知"; }
+        function metric(label, value, rawPercent) {
+          const cell = document.createElement("div");
+          cell.className = "metric";
+          const name = document.createElement("span"); name.textContent = label;
+          const strong = document.createElement("strong"); strong.textContent = value;
+          cell.append(name, strong);
+          if (rawPercent != null) {
+            const track = document.createElement("div"); track.className = "track";
+            const fill = document.createElement("i");
+            fill.style.width = `${Math.max(0, Math.min(100, rawPercent))}%`;
+            if (rawPercent >= 90) fill.className = "danger"; else if (rawPercent >= 75) fill.className = "hot";
+            track.append(fill); cell.append(track);
+          }
+          return cell;
+        }
+
+        function render(data) {
+          if (!data || typeof data !== "object") return;
+          latest = data;
+          const counts = data.counts || {};
+          const status = (counts.critical || 0) > 0 ? "critical" : (counts.warning || 0) > 0 ? "warning" : (counts.healthy || 0) > 0 ? "healthy" : "unknown";
+          const total = (data.hosts || []).length;
+          verdictEl.textContent = status === "healthy" ? `${total} 台平稳` : status === "critical" ? `${counts.critical || 0} 台异常` : status === "warning" ? `${counts.warning || 0} 台需关注` : "状态待确认";
+          lampEl.className = `lamp ${status}`;
+          const observed = data.observedAt ? new Date(data.observedAt) : null;
+          observedEl.textContent = observed && !Number.isNaN(observed.getTime()) ? `最近观测 ${new Intl.DateTimeFormat(document.documentElement.lang || "zh-CN", { hour: "2-digit", minute: "2-digit" }).format(observed)}` : "尚未取得本地证据";
+          hostsEl.replaceChildren();
+          if (!total) {
+            const empty = document.createElement("div"); empty.className = "empty";
+            const title = document.createElement("strong"); title.textContent = "还没有服务器证据";
+            const detail = document.createElement("span"); detail.textContent = "请先在 LocalOps Desk 配置服务器并完成一次检查。";
+            empty.append(title, detail); hostsEl.append(empty); return;
+          }
+          for (const host of data.hosts.slice(0, 6)) {
+            const article = document.createElement("article"); article.className = "host";
+            const head = document.createElement("div"); head.className = "host-head";
+            const title = document.createElement("h2"); title.textContent = host.name || host.id || "未命名服务器";
+            const state = document.createElement("span"); state.className = `state ${host.status || "unknown"}`; state.textContent = statusLabel(host.status);
+            head.append(title, state);
+            const metrics = document.createElement("div"); metrics.className = "metrics";
+            const cpu = number(host.cpuPercent), memory = number(host.memoryPercent), disk = number(host.diskPercent);
+            metrics.append(metric("CPU", percent(cpu), cpu), metric("内存", percent(memory), memory), metric("磁盘", percent(disk), disk), metric("1m 负载", number(host.load1) == null ? "—" : number(host.load1).toFixed(2), null));
+            const foot = document.createElement("div"); foot.className = "host-foot";
+            const summary = document.createElement("p"); summary.className = "summary"; summary.textContent = host.summary || "暂无摘要";
+            const check = document.createElement("button"); check.className = "check"; check.type = "button"; check.textContent = "检查这台";
+            check.addEventListener("click", () => runCheck(host.id, check));
+            foot.append(summary, check); article.append(head, metrics, foot); hostsEl.append(article);
+          }
+        }
+
+        async function refresh() {
+          refreshEl.disabled = true; messageEl.textContent = "正在读取 LocalOps…";
+          try {
+            const result = await request("tools/call", { name: "localops_get_status", arguments: {} });
+            if (result?.isError) throw new Error(result.content?.[0]?.text || "刷新失败");
+            render(result?.structuredContent); messageEl.textContent = "状态已刷新";
+          } catch (error) { messageEl.textContent = error?.message || "无法连接 LocalOps"; }
+          finally { refreshEl.disabled = false; }
+        }
+
+        async function runCheck(hostId, button) {
+          if (!hostId) return;
+          button.disabled = true; messageEl.textContent = "正在执行一次只读轻量检查…";
+          try {
+            const result = await request("tools/call", { name: "localops_run_light_check", arguments: { hostId } });
+            if (result?.isError) throw new Error(result.content?.[0]?.text || "检查失败");
+            await refresh();
+          } catch (error) { messageEl.textContent = error?.message || "检查没有完成"; }
+          finally { button.disabled = false; }
+        }
+
+        refreshEl.addEventListener("click", refresh);
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent) return;
+          const message = event.data;
+          if (!message || message.jsonrpc !== "2.0") return;
+          if (message.id !== undefined && pending.has(message.id)) {
+            const entry = pending.get(message.id); pending.delete(message.id);
+            if (message.error) entry.reject(message.error); else entry.resolve(message.result);
+            return;
+          }
+          if (message.method === "ui/notifications/tool-result") render(message.params?.structuredContent);
+        }, { passive: true });
+      })();
+    </script>
+  </body>
+</html>

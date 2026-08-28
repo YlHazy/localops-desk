@@ -17,6 +17,8 @@ localops-guardian skill (plain-language policy)
         v
 localops-guardian MCP server (stdio, no dependencies)
         |
+        +-- optional MCP Apps status card
+        |
         v
 LocalOps API on 127.0.0.1:4317
         |
@@ -29,6 +31,7 @@ LocalOps API on 127.0.0.1:4317
 ## Trust boundaries
 
 - The plugin accepts only loopback LocalOps URLs and rejects embedded credentials. Remote transport has no escape hatch in this MVP.
+- The compact status card is a standard MCP Apps resource (`text/html;profile=mcp-app`) linked by `_meta.ui.resourceUri`. It renders authoritative `structuredContent`, while the underlying tools stay usable without UI.
 - Codex-triggered checks require one `hostId`, have a 15-second HTTP budget, and a 20-second plugin timeout. The full dashboard may still run an explicit all-host check.
 - It does not expose host CRUD, arbitrary shell, real restart/reload, secrets, scheduler or login-start mutation, or deletion.
 - A light check may call configured HTTP endpoints and allowlisted read-only SSH collectors through LocalOps; it records local check history.

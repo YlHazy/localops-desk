@@ -330,7 +330,11 @@ test("desk and pet share automatic priority focus instead of trusting API row or
   assert.match(appSource, /prioritizeHosts\(displayDashboard\?\.hosts \?\? \[\]\)/);
   assert.match(appSource, /selectFocusHost\(priorityHosts, selectedHostId\)/);
   assert.match(appSource, /setDetailsOpen\(true\)/);
-  assert.match(appSource, /className={`home-grid \$\{detailsOpen \? "details-open" : ""\}`}/);
+  assert.match(appSource, /className={`home-grid \$\{detailsOpen \? "details-open" : ""\} \$\{petFocusMode \? "pet-focus-grid" : ""\}`}/);
+  assert.match(appSource, /const petFocusMode = Boolean\(deskSource && \(/);
+  assert.match(appSource, /selectedTab === "actions" && actionHost/);
+  assert.match(appSource, /petFocusMode \? "pet-focus-action" : ""/);
+  assert.match(appSource, /selectedTab === "actions" \? "服务器状态" : "全部服务器"/);
   assert.match(petSource, /prioritizeHosts\(trustedDashboard\.hosts\)/);
   assert.match(prioritySource, /critical: 0, warning: 1, unknown: 2, healthy: 3/);
   assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);

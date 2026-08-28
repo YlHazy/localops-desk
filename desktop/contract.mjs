@@ -50,6 +50,19 @@ export function desktopPetUrl(sessionId = randomUUID(), port = 4317) {
   return `${desktopLoopbackOrigin(port)}/?mode=pet&session=${encodeURIComponent(sessionId)}&runtime=desktop`;
 }
 
+export function desktopCodexPetUrl(port = 4317) {
+  return `${desktopLoopbackOrigin(port)}/?mode=codex-pet&runtime=desktop`;
+}
+
+export function desktopCodexPanelUrl(port = 4317) {
+  return `${desktopLoopbackOrigin(port)}/?mode=codex-panel&runtime=desktop`;
+}
+
+export function codexPanelSize(detail = false) {
+  if (typeof detail !== "boolean") throw new TypeError("Codex panel detail state must be boolean");
+  return detail ? { width: 568, height: 468 } : { width: 388, height: 276 };
+}
+
 export function desktopDeskUrl(path = "/", port = 4317) {
   const origin = desktopLoopbackOrigin(port);
   const target = new URL(path, origin);
@@ -67,6 +80,38 @@ export function safeWindowBounds(value, fallback = { width: 360, height: 420 }) 
   if (![x, y, width, height].every(Number.isFinite)) return fallback;
   if (width < 320 || width > 420 || height < 400 || height > 560) return fallback;
   return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+}
+
+export function safeCodexPetBounds(value, fallback = { width: 208, height: 248 }) {
+  if (!value || typeof value !== "object") return fallback;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const width = Number(value.width);
+  const height = Number(value.height);
+  if (![x, y, width, height].every(Number.isFinite)) return fallback;
+  if (width < 168 || width > 260 || height < 200 || height > 310) return fallback;
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+}
+
+const codexPetSizes = Object.freeze([
+  Object.freeze({ width: 168, height: 200 }),
+  Object.freeze({ width: 208, height: 248 }),
+  Object.freeze({ width: 260, height: 310 })
+]);
+
+export function steppedCodexPetBounds(bounds, direction) {
+  if (direction !== -1 && direction !== 1) throw new TypeError("Codex pet resize direction must be -1 or 1");
+  const current = safeCodexPetBounds(bounds);
+  let nearestIndex = 0;
+  for (let index = 1; index < codexPetSizes.length; index += 1) {
+    if (Math.abs(codexPetSizes[index].width - current.width) < Math.abs(codexPetSizes[nearestIndex].width - current.width)) nearestIndex = index;
+  }
+  const next = codexPetSizes[Math.max(0, Math.min(codexPetSizes.length - 1, nearestIndex + direction))];
+  return {
+    x: current.x == null ? undefined : current.x + current.width - next.width,
+    y: current.y == null ? undefined : current.y + current.height - next.height,
+    ...next
+  };
 }
 
 export function navigationAction(rawUrl, port = 4317) {

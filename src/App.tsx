@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   Bell,
   Bot,
   CheckCircle2,
@@ -36,6 +37,7 @@ import { validateHostForm } from "./host-form-validation.mjs";
 import type { HostFormErrors, HostFormField } from "./host-form-validation.mjs";
 import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
 import { PetMode } from "./PetMode";
+import { CodexPetMode } from "./CodexPetMode";
 import { createLatestRequestGate, resolveLatestRequest } from "./latest-request-gate.mjs";
 import { operationUiState } from "./operation-state.mjs";
 import type { PendingOperation } from "./operation-state.mjs";
@@ -373,7 +375,10 @@ function HostForm({
 }
 
 export function App() {
-  const petMode = new URLSearchParams(window.location.search).get("mode") === "pet";
+  const surfaceMode = new URLSearchParams(window.location.search).get("mode");
+  const codexPetMode = surfaceMode === "codex-pet";
+  const codexPanelMode = surfaceMode === "codex-panel";
+  const petMode = surfaceMode === "pet" || codexPetMode || codexPanelMode;
   const desktopRuntime = Boolean(window.localOpsDesktop);
   const [dashboard, setDashboard] = useState<DashboardStatus | null>(null);
   const [checks, setChecks] = useState<CheckRun[]>([]);
@@ -383,6 +388,7 @@ export function App() {
   const [checkDetailState, setCheckDetailState] = useState<"idle" | "loading" | "current" | "error">("idle");
   const [checkDetailError, setCheckDetailError] = useState("");
   const [selectedHostId, setSelectedHostId] = useState<string | null>(deskIntentAtLoad.hostId);
+  const [deskSource, setDeskSource] = useState<"pet" | "pet-alert" | null>(deskIntentAtLoad.source);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(deskIntentAtLoad.hostId && (deskIntentAtLoad.tab ?? "overview") === "overview"));
   const [wideDetail, setWideDetail] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
   const detailPanelRef = useRef<HTMLElement>(null);
@@ -659,6 +665,7 @@ export function App() {
     const applyPetDeskIntent = () => {
       const intent = petDeskIntent(window.location.hash);
       const nextTab = intent.tab ?? "overview";
+      setDeskSource(intent.source);
       if (intent.tab) setSelectedTab(intent.tab);
       if (intent.hostId && nextTab === "overview" && dashboard?.hosts.some((host) => host.id === intent.hostId)) {
         detailTriggerRef.current = null;
@@ -802,6 +809,11 @@ export function App() {
     () => actionHostId ? priorityHosts.find((host) => host.id === actionHostId) ?? null : selectedHost,
     [priorityHosts, actionHostId, selectedHost]
   );
+  const petFocusMode = Boolean(deskSource && (
+    (selectedTab === "overview" && detailsOpen && selectedHost)
+    || (selectedTab === "actions" && actionHost)
+  ));
+  const petFocusHost = selectedTab === "actions" ? actionHost : selectedHost;
   const freshness = useMemo(() => dashboard ? evidenceFreshness(dashboard, now) : { state: "unknown", label: "没有观测证据" }, [dashboard, now]);
   const selectedFreshness = useMemo(
     () => dashboard && selectedHost
@@ -1312,6 +1324,23 @@ export function App() {
     }
   }
 
+  if (codexPetMode || codexPanelMode) {
+    return (
+      <CodexPetMode
+        surface={codexPetMode ? "pet" : "panel"}
+        dashboard={currentDashboard}
+        now={now}
+        loading={checking}
+        syncing={petSyncing}
+        syncError={petSyncError}
+        actionError={error}
+        onRefresh={(hostId) => runLightCheck(hostId)}
+        onRetrySync={retryPetSync}
+        onOpenDesk={openDeskFromPet}
+      />
+    );
+  }
+
   if (petMode) {
     return (
       <PetMode
@@ -1366,8 +1395,8 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className={`app-shell ${petFocusMode ? "pet-focus-shell" : ""}`}>
+      {!petFocusMode ? <aside className="sidebar">
         <a className="skip-link" href="#localops-main">跳到主要内容</a>
         <div className="brand">
           <div className="brand-mark"><ShieldCheck size={21} /></div>
@@ -1391,10 +1420,28 @@ export function App() {
             </button>
           ))}
         </nav>
-      </aside>
+      </aside> : null}
 
       <main className={`main ${selectedTab === "overview" ? "overview-tab" : "work-tab"}`} id="localops-main" tabIndex={-1}>
-        <header className={`topbar ${selectedTab === "overview" ? "" : "compact"}`}>
+        {petFocusMode && petFocusHost ? <header className="pet-focus-topbar">
+          <button className="pet-focus-back" type="button" onClick={() => {
+            if (selectedTab === "actions") {
+              returnToActionHost();
+              return;
+            }
+            setDeskSource(null);
+            setDetailsOpen(false);
+            window.history.replaceState(null, "", "/#tab=overview");
+          }}><ArrowLeft size={18} /><span>{selectedTab === "actions" ? "服务器状态" : "全部服务器"}</span></button>
+          <div className="pet-focus-identity">
+            <div><i className={`host-dot ${petFocusHost.status}`} aria-hidden="true" /><h1>{petFocusHost.name}</h1></div>
+            <p>{statusLabels[petFocusHost.status]} · {selectedFreshness.label}</p>
+          </div>
+          <div className="pet-focus-actions">
+            {petFocusHost.status !== "healthy" && selectedReadiness?.canCollect ? <button className="primary" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={17} /> : <CheckCircle2 size={17} />}{diagnosing ? "正在查找" : "查找原因"}</button> : <button className="primary" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={17} /> : <Pencil size={17} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button>}
+            <button className="secondary" type="button" disabled={operationBusy} onClick={() => startEditHost(petFocusHost)}><Pencil size={16} />配置</button>
+          </div>
+        </header> : <header className={`topbar ${selectedTab === "overview" ? "" : "compact"}`}>
           <div>
             <h1>{currentMessage.title}</h1>
             <p>{currentMessage.description} · {freshness.label}</p>
@@ -1423,7 +1470,7 @@ export function App() {
               <span>打开桌宠</span>
             </button>
           </div> : null}
-        </header>
+        </header>}
 
         {error ? <div className="error-line" role="alert"><AlertTriangle size={16} />{error}</div> : null}
         {lastCheckOutcome && selectedTab === "overview" ? (
@@ -1453,8 +1500,8 @@ export function App() {
         ) : null}
 
         {selectedTab === "overview" && (
-          <section className={`home-grid ${detailsOpen ? "details-open" : ""}`}>
-            <div className="all-hosts-panel">
+          <section className={`home-grid ${detailsOpen ? "details-open" : ""} ${petFocusMode ? "pet-focus-grid" : ""}`}>
+            {!petFocusMode ? <div className="all-hosts-panel">
               <div className="panel-head">
                 <div><h2>服务器</h2><span>{priorityHosts.length} 台</span></div>
                 {!dashboard.practiceMode ? <button className="quiet-action" onClick={startCreateHost} disabled={operationBusy}><Plus size={16} />添加</button> : null}
@@ -1471,21 +1518,22 @@ export function App() {
                   />
                 ))}
               </div>
-            </div>
+            </div> : null}
 
-            {detailsOpen ? <>{!wideDetail ? <button className="detail-backdrop" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭服务器详情" /> : null}<aside ref={detailPanelRef} className={`detail-panel main-detail server-detail-drawer ${wideDetail ? "inline" : "modal"}`} id="server-detail" role={wideDetail ? "region" : "dialog"} aria-modal={wideDetail ? undefined : true} aria-label={`${selectedHost.name} 详情`}>
-              <div className="detail-head">
+            {detailsOpen ? <>{!wideDetail && !petFocusMode ? <button className="detail-backdrop" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭服务器详情" /> : null}<aside ref={detailPanelRef} className={`detail-panel main-detail server-detail-drawer ${petFocusMode ? "pet-focus-detail" : wideDetail ? "inline" : "modal"}`} id="server-detail" role={wideDetail || petFocusMode ? "region" : "dialog"} aria-modal={wideDetail || petFocusMode ? undefined : true} aria-label={`${selectedHost.name} 详情`}>
+              {!petFocusMode ? <div className="detail-head">
                 <div className="detail-title"><i className={`host-dot ${selectedHost.status}`} aria-hidden="true" /><div><h2>{selectedHost.name}</h2><p>{statusLabels[selectedHost.status]} · {selectedFreshness.label}</p></div></div>
                 <div className="detail-head-tools">
                   <button className="detail-config" onClick={() => startEditHost(selectedHost)} aria-label="配置服务器" title="配置服务器"><Pencil size={17} /></button>
                   <button ref={detailCloseRef} className="detail-close" onClick={() => { setDetailsOpen(false); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }} aria-label="关闭详情"><X size={18} /></button>
                 </div>
-              </div>
-              <div className="detail-primary-actions">
+              </div> : null}
+              {!petFocusMode ? <div className="detail-primary-actions">
                 {selectedHost.status !== "healthy" && selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runAutomaticDiagnosis}>{diagnosing ? <RefreshCcw className="spin" size={16} /> : <CheckCircle2 size={16} />}{diagnosing ? "正在查原因" : diagnosisError ? "重试查原因" : selectedDiagnosis ? "重新查原因" : "自动查原因"}</button> : null}
                 {selectedHost.status === "healthy" || !selectedReadiness?.canCollect ? <button className="primary slim" disabled={operationBusy} onClick={runOrConfigureSelected}>{selectedReadiness?.canCollect ? <RefreshCcw className={checking ? "spin" : undefined} size={16} /> : <Pencil size={16} />}{checking ? "检查中" : selectedReadiness?.canCollect ? "重新检查" : "补充监控来源"}</button> : null}
-              </div>
+              </div> : null}
               {hostCheckError?.hostId === selectedHost.id ? <div className="detail-check-error" role="alert"><AlertTriangle size={17} /><div><strong>这台服务器没有检查完</strong><p>{hostCheckError.message}</p></div><button disabled={operationBusy} onClick={() => runLightCheck(selectedHost.id)}>重试这台</button></div> : null}
+              {petFocusMode ? <h2 className="pet-focus-section-title">连接与运行</h2> : null}
               <dl className="server-facts">
                 <div className={selectedEvidenceCurrent ? httpSignalStatus(selectedHost) : "unknown"}><dt>HTTP</dt><dd><strong>{selectedEvidenceCurrent ? friendlyHttpStatus(selectedHost.httpStatus) : "待检查"}</strong>{selectedEvidenceCurrent && selectedHost.httpLatencyMs != null ? <span>{selectedHost.httpLatencyMs} ms</span> : null}</dd></div>
                 <div className={selectedEvidenceCurrent ? sshSignalStatus(selectedHost) : "unknown"}><dt>SSH</dt><dd><strong>{selectedEvidenceCurrent ? friendlySshStatus(selectedHost.sshStatus) : "待检查"}</strong></dd></div>
@@ -1506,7 +1554,7 @@ export function App() {
                   <strong>正在读取最新状态和只读证据…</strong>
                 </section>
               ) : selectedDiagnosis ? (
-                <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="自动排查结果">
+                <section className={`automatic-diagnosis ${selectedDiagnosis.status}`} aria-label="排查结果">
                   <h3>{selectedDiagnosis.diagnosis.headline}</h3>
                   <dl><div><dt>事实</dt><dd>{selectedDiagnosis.diagnosis.detail}</dd></div><div><dt>下一步</dt><dd>{selectedDiagnosis.diagnosis.next}</dd></div></dl>
                   {selectedDiagnosis.diagnosis.layer === "none" ? null : (
@@ -1833,12 +1881,12 @@ export function App() {
         )}
 
         {selectedTab === "actions" && (
-          <section className="action-layout">
-            <header className="action-intro">
+          <section className={`action-layout ${petFocusMode ? "pet-focus-action" : ""}`}>
+            {!petFocusMode ? <header className="action-intro">
               <div><button className="action-back" onClick={returnToActionHost}>← 返回 {actionHost?.name ?? "原服务器"}</button><h2>安全操作</h2></div>
               <p>先核对排查结论，再决定是否执行。没有对应证据的变更会被拒绝。</p>
-            </header>
-            <div className="action-menu">
+            </header> : null}
+            <div className="action-menu" aria-label="选择操作">
               <button className={dryRun?.actionKey === "inspect-service" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("inspect-service", actionHost?.id)}><CheckCircle2 size={17} />{operationState.preparingAction ? "生成中" : "只读检查"}</button>
               <button className={dryRun?.actionKey === "reload-nginx" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("reload-nginx", actionHost?.id)}><RefreshCcw size={17} />Nginx 重载</button>
               <button className={dryRun?.actionKey === "restart-compose-service" ? "selected" : ""} disabled={operationBusy || !actionHost} onClick={() => runDryAction("restart-compose-service", actionHost?.id)}><AlertTriangle size={17} />重启服务</button>
@@ -1916,12 +1964,12 @@ export function App() {
                   ) : null}
                 </>
               ) : actionHost ? (
-                <p className="action-empty">先从服务器详情运行“自动查原因”，或者在左侧选择只读检查。变更操作不会在没有对应证据时开放。</p>
+                <p className="action-empty">先选择要查看的操作。变更操作只有在存在对应异常证据时才会开放。</p>
               ) : (
                 <p className="action-empty" role="alert">原服务器已不在当前列表中；这条操作流程已停止，不会自动切换到其他服务器。</p>
               )}
             </div>
-            {actionReceipts.length ? (
+            {!petFocusMode && actionReceipts.length ? (
               <details className="action-receipts">
                 <summary>最近变更回执 · {actionReceipts.length}</summary>
                 <div>{actionReceipts.map((receipt) => <article key={receipt.id}><span className={receipt.status}>{actionReceiptLabels[receipt.status]}</span><strong>{receipt.hostName}</strong><p>{receipt.summary}</p><time>{formatTime(receipt.finishedAt || receipt.startedAt)}</time></article>)}</div>
