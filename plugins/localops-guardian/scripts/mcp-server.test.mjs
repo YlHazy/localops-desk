@@ -80,6 +80,8 @@ test("exposes bounded LocalOps tools and calls only expected API routes", async 
   assert.equal(resources.result.resources[0].mimeType, "text/html;profile=mcp-app");
   const resource = await mcp.call(9, "resources/read", { uri: "ui://localops-guardian/status-card.html" });
   assert.equal(resource.result.contents[0].mimeType, "text/html;profile=mcp-app");
+  assert.match(resource.result.contents[0].text, /prioritizedHosts\.slice\(0, 6\)/);
+  assert.match(resource.result.contents[0].text, /另有 \$\{hiddenHosts\.length\} 台/);
   assert.match(resource.result.contents[0].text, /ui\/notifications\/tool-result/);
   const unknownResource = await mcp.call(10, "resources/read", { uri: "ui://localops-guardian/missing.html" });
   assert.equal(unknownResource.error.code, -32602);

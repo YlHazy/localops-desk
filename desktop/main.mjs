@@ -23,6 +23,7 @@ let codexPanelHideTimer = null;
 let codexPanelSide = null;
 let deskWindow = null;
 let tray = null;
+let trayBalloonPath = "";
 let ownedApi = null;
 let quitting = false;
 let alwaysOnTop = true;
@@ -420,7 +421,7 @@ function createTray() {
     else showPet();
     rebuildTrayMenu();
   });
-  tray.on("balloon-click", () => showDesk());
+  tray.on("balloon-click", () => showDesk(trayBalloonPath));
   rebuildTrayMenu();
 }
 
@@ -428,6 +429,7 @@ function showDesktopNotification(request) {
   const copy = desktopAlertCopy(request);
   if (process.platform !== "win32") return { accepted: false, channel: "unsupported", message: "当前系统不支持 LocalOps 托盘提醒。" };
   if (!tray || tray.isDestroyed()) return { accepted: false, channel: "windows-tray", message: "LocalOps 托盘尚未就绪，提醒没有发出。" };
+  trayBalloonPath = request.kind === "status" ? `/#tab=overview&source=pet-alert&revision=${Date.now()}` : "";
   tray.displayBalloon({ ...copy, largeIcon: false, respectQuietTime: true });
   return { accepted: true, channel: "windows-tray", message: "已交给 Windows 托盘提醒；专注助手可能延后显示。" };
 }

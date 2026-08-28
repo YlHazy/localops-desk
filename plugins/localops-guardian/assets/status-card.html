@@ -40,6 +40,11 @@
       .state.warning { color: var(--warning); }
       .state.critical { color: var(--critical); }
       .state.unknown { color: var(--unknown); }
+      .signals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+      .signal { padding: 3px 7px; color: var(--muted); border-radius: 999px; background: color-mix(in srgb, var(--unknown) 8%, transparent); font-size: 11px; }
+      .signal.healthy { color: var(--healthy); background: color-mix(in srgb, var(--healthy) 9%, transparent); }
+      .signal.warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+      .signal.critical { color: var(--critical); background: color-mix(in srgb, var(--critical) 9%, transparent); }
       .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
       .metric { min-width: 0; }
       .metric span { display: block; color: var(--muted); font-size: 10px; letter-spacing: .04em; }
@@ -56,6 +61,7 @@
       .empty { padding: 26px 18px; border-top: 1px solid var(--line); background: var(--surface); }
       .empty strong, .empty span { display: block; }
       .empty span { margin-top: 5px; color: var(--muted); }
+      .more { padding: 11px 18px; color: var(--muted); background: var(--surface); font-size: 12px; }
       .message { min-height: 20px; padding: 8px 18px; color: var(--muted); font-size: 11px; }
       button:focus-visible { outline: 3px solid color-mix(in srgb, var(--healthy) 35%, transparent); outline-offset: 2px; }
       @media (max-width: 520px) {
@@ -98,6 +104,26 @@
         function number(value) { return Number.isFinite(Number(value)) ? Number(value) : null; }
         function percent(value) { const n = number(value); return n == null ? "—" : `${Math.round(n)}%`; }
         function statusLabel(status) { return ({ healthy: "正常", warning: "关注", critical: "异常", unknown: "未知" })[status] || "未知"; }
+        function httpState(host) {
+          const value = String(host?.httpStatus || "");
+          if (!value || /not checked|not observed|no health url|未检查/i.test(value)) return "unknown";
+          const code = Number(value.match(/(?:^|HTTP\s+)(\d{3})\b/i)?.[1]);
+          if (Number.isFinite(code)) return code >= 200 && code < 300 ? "healthy" : code >= 500 ? "critical" : "warning";
+          return /\bok\b|ready/i.test(value) ? "healthy" : "critical";
+        }
+        function sshState(host) {
+          const value = String(host?.sshStatus || "");
+          if (!value || /^(not checked|not configured|simulated disabled)$/.test(value)) return "unknown";
+          return /^(ok|simulated ok)$/.test(value) ? "healthy" : "warning";
+        }
+        function dockerState(host) {
+          const value = String(host?.dockerStatus || "");
+          if (!value || value === "not checked") return "unknown";
+          return /^(docker checked|compose healthy)$/.test(value) ? "healthy" : "warning";
+        }
+        function signal(label, state) {
+          const item = document.createElement("span"); item.className = `signal ${state}`; item.textContent = `${label} ${statusLabel(state)}`; return item;
+        }
         function metric(label, value, rawPercent) {
           const cell = document.createElement("div");
           cell.className = "metric";
@@ -131,20 +157,38 @@
             const detail = document.createElement("span"); detail.textContent = "请先在 LocalOps Desk 配置服务器并完成一次检查。";
             empty.append(title, detail); hostsEl.append(empty); return;
           }
-          for (const host of data.hosts.slice(0, 6)) {
+          const severity = { critical: 0, warning: 1, unknown: 2, healthy: 3 };
+          const prioritizedHosts = data.hosts
+            .map((host, index) => ({ host, index }))
+            .sort((left, right) => (severity[left.host.status] ?? 2) - (severity[right.host.status] ?? 2) || String(left.host.name || "").localeCompare(String(right.host.name || ""), "zh-CN") || left.index - right.index)
+            .map((entry) => entry.host);
+          const displayedHosts = prioritizedHosts.slice(0, 6);
+          for (const host of displayedHosts) {
             const article = document.createElement("article"); article.className = "host";
             const head = document.createElement("div"); head.className = "host-head";
             const title = document.createElement("h2"); title.textContent = host.name || host.id || "未命名服务器";
             const state = document.createElement("span"); state.className = `state ${host.status || "unknown"}`; state.textContent = statusLabel(host.status);
             head.append(title, state);
+            const signals = document.createElement("div"); signals.className = "signals";
+            signals.append(signal("HTTP", httpState(host)), signal("SSH", sshState(host)), signal("Docker", dockerState(host)));
             const metrics = document.createElement("div"); metrics.className = "metrics";
             const cpu = number(host.cpuPercent), memory = number(host.memoryPercent), disk = number(host.diskPercent);
             metrics.append(metric("CPU", percent(cpu), cpu), metric("内存", percent(memory), memory), metric("磁盘", percent(disk), disk), metric("1m 负载", number(host.load1) == null ? "—" : number(host.load1).toFixed(2), null));
             const foot = document.createElement("div"); foot.className = "host-foot";
-            const summary = document.createElement("p"); summary.className = "summary"; summary.textContent = host.summary || "暂无摘要";
+            const summary = document.createElement("p"); summary.className = "summary";
+            const checked = host.lastCheckedAt ? new Date(host.lastCheckedAt) : null;
+            const checkedLabel = checked && !Number.isNaN(checked.getTime()) ? new Intl.DateTimeFormat(document.documentElement.lang || "zh-CN", { hour: "2-digit", minute: "2-digit" }).format(checked) : "未检查";
+            summary.textContent = `${checkedLabel} · ${host.summary || "暂无摘要"}`;
             const check = document.createElement("button"); check.className = "check"; check.type = "button"; check.textContent = "检查这台";
             check.addEventListener("click", () => runCheck(host.id, check));
-            foot.append(summary, check); article.append(head, metrics, foot); hostsEl.append(article);
+            foot.append(summary, check); article.append(head, signals, metrics, foot); hostsEl.append(article);
+          }
+          if (prioritizedHosts.length > displayedHosts.length) {
+            const hiddenHosts = prioritizedHosts.slice(displayedHosts.length);
+            const hiddenAttention = hiddenHosts.filter((host) => host.status !== "healthy").length;
+            const more = document.createElement("div"); more.className = "more";
+            more.textContent = `另有 ${hiddenHosts.length} 台${hiddenAttention ? `，其中 ${hiddenAttention} 台需关注` : "，当前无异常"}`;
+            hostsEl.append(more);
           }
         }
 

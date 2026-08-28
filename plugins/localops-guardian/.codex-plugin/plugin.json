@@ -1,6 +1,6 @@
 {
   "name": "localops-guardian",
-  "version": "0.1.0+codex.20260828052405",
+  "version": "0.1.0+codex.20260828064320",
   "description": "Connect Codex to bounded LocalOps server status, checks, diagnostics, and dry-run recovery plans; the native pet remains a visual task-status entry point.",
   "author": {
     "name": "YlHazy",

@@ -228,7 +228,8 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   assert.match(preloadSource, /showNotification: \(request\) => ipcRenderer\.invoke\("desktop:show-notification", request\)/);
   assert.match(desktopSource, /desktopAlertCopy\(request\)/);
   assert.match(desktopSource, /tray\.displayBalloon\(\{ \.\.\.copy, largeIcon: false, respectQuietTime: true \}\)/);
-  assert.match(desktopSource, /tray\.on\("balloon-click", \(\) => showDesk\(\)\)/);
+  assert.match(desktopSource, /tray\.on\("balloon-click", \(\) => showDesk\(trayBalloonPath\)\)/);
+  assert.match(desktopSource, /request\.kind === "status" \? `\/#tab=overview&source=pet-alert/);
   assert.match(desktopSource, /rejectsUnsafeNotification/);
   assert.match(watchSource, /outcome: "suppressed"/);
   assert.doesNotMatch(watchSource, /Edge 站点权限/);

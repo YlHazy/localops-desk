@@ -31,6 +31,7 @@ import { deskSyncCopy, fetchDeskSnapshot, fetchPetSnapshot, hostEvidenceIsFresh,
 import type { DeskSyncState } from "./desk-sync.mjs";
 import { checkDecisionCopy, checkHistoryFilters, checkKindCopy, checkScopeCopy, checkTriggerCopy, filterChecks, friendlyCheckSummary, retainCheckSelection } from "./check-history.mjs";
 import type { CheckHistoryFilter } from "./check-history.mjs";
+import { batchCheckTimeoutMs } from "./check-timeout.mjs";
 import { codexDiscussionLink, discussionBrief } from "./discussion-brief.mjs";
 import { evidenceReadiness } from "./evidence-readiness.mjs";
 import { validateHostForm } from "./host-form-validation.mjs";
@@ -411,6 +412,7 @@ export function App() {
   const [actionFlowError, setActionFlowError] = useState("");
   const [diagnosisResult, setDiagnosisResult] = useState<{ hostId: string; run: DiagnosisRun } | null>(null);
   const [pendingPetDiagnosisHostId, setPendingPetDiagnosisHostId] = useState<string | null>(deskIntentAtLoad.source === "pet-alert" ? deskIntentAtLoad.hostId : null);
+  const [pendingPetAlertPriority, setPendingPetAlertPriority] = useState(deskIntentAtLoad.source === "pet-alert" && !deskIntentAtLoad.hostId);
   const [diagnosisError, setDiagnosisError] = useState("");
   const [hostCheckError, setHostCheckError] = useState<{ hostId: string; message: string } | null>(null);
   const [report, setReport] = useState<string>("");
@@ -545,8 +547,19 @@ export function App() {
   useEffect(() => {
     if (!petMode) return;
     let stopped = false;
-    let timer = window.setTimeout(poll, 30_000);
+    let timer = 0;
+    function schedule(delay: number) {
+      window.clearTimeout(timer);
+      if (!stopped) timer = window.setTimeout(poll, delay);
+    }
+    function handleVisibilityChange() {
+      if (codexPanelMode && !document.hidden) schedule(0);
+    }
     async function poll() {
+      if (codexPanelMode && document.hidden) {
+        schedule(30_000);
+        return;
+      }
       try {
         const applied = await load();
         if (!stopped && applied) {
@@ -556,14 +569,17 @@ export function App() {
       } catch (err) {
         if (!stopped) setPetSyncError(err instanceof Error ? err.message : "本地监控没有响应");
       } finally {
-        if (!stopped) timer = window.setTimeout(poll, 30_000);
+        schedule(30_000);
       }
     }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    schedule(30_000);
     return () => {
       stopped = true;
       window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [petMode]);
+  }, [petMode, codexPanelMode]);
 
   useEffect(() => {
     if (petMode) return;
@@ -845,6 +861,16 @@ export function App() {
   );
 
   useEffect(() => {
+    if (petMode || !pendingPetAlertPriority || !dashboard || pendingOperation) return;
+    setPendingPetAlertPriority(false);
+    const target = priorityHosts[0];
+    if (!target) return;
+    setSelectedHostId(target.id);
+    setDetailsOpen(true);
+    setPendingPetDiagnosisHostId(target.id);
+  }, [petMode, pendingPetAlertPriority, dashboard, pendingOperation, priorityHosts]);
+
+  useEffect(() => {
     if (petMode || !pendingPetDiagnosisHostId || !dashboard || pendingOperation || !detailsOpen) return;
     if (!dashboard.hosts.some((host) => host.id === pendingPetDiagnosisHostId)) {
       setPendingPetDiagnosisHostId(null);
@@ -945,7 +971,11 @@ export function App() {
     setError("");
     setLastCheckOutcome(null);
     try {
-      const result = await api<{ status: Status; summary: string; coverage: CollectionCoverage }>(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", { method: "POST", body: "{}" });
+      const result = await api<{ status: Status; summary: string; coverage: CollectionCoverage }>(hostId ? `/api/checks/light/${encodeURIComponent(hostId)}` : "/api/checks/light", {
+        method: "POST",
+        body: "{}",
+        signal: hostId ? undefined : AbortSignal.timeout(batchCheckTimeoutMs(batchCoverage.collectible))
+      });
       setLastCheckOutcome(result);
       if (hostId) setHostCheckError((current) => current?.hostId === hostId ? null : current);
       try {

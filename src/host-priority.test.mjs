@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost } from "./host-priority.mjs";
+import { manualFocusSelection, prioritizeHosts, retainFocusSelection, selectFocusHost, selectVisibleHost } from "./host-priority.mjs";
 
 const apiOrder = [
   { id: "unknown", name: "C", status: "unknown" },
@@ -23,6 +23,14 @@ test("automatic focus follows priority while deliberate focus remains explicit",
   assert.equal(manualFocusSelection(prioritized, "healthy"), "healthy");
   assert.equal(selectFocusHost(prioritized, "healthy").id, "healthy");
   assert.equal(selectFocusHost(prioritized, "missing").id, "critical");
+});
+
+test("compact actions never target a host outside the visible priority list", () => {
+  const prioritized = prioritizeHosts(apiOrder);
+  assert.equal(selectVisibleHost(prioritized, "warning-a", 2).selectedHost.id, "warning-a");
+  assert.equal(selectVisibleHost(prioritized, "healthy", 2).selectedHost.id, "critical");
+  assert.deepEqual(selectVisibleHost(prioritized, null, 2).visibleHosts.map((host) => host.id), ["critical", "warning-a"]);
+  assert.throws(() => selectVisibleHost(prioritized, null, 0), /positive integer/);
 });
 
 test("refresh retains only a manual selection that still exists", () => {
