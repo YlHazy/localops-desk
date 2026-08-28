@@ -9,6 +9,7 @@ import { diagnoseHost } from "../shared/host-diagnosis.mjs";
 import { collectDeepEvidence } from "./deep-diagnostics.mjs";
 import { actionCapability, createNginxReloadApproval, executeNginxReload, publicApproval, validateNginxApproval } from "./safe-actions.mjs";
 import { collectHost, demoHosts, readOnlySshPreview, runDeepSshReadOnly, runNginxActionStep, sanitizeError } from "./runtime.mjs";
+import { mapWithConcurrency } from "./bounded-concurrency.mjs";
 import { InputValidationError, validateSshAlias } from "./input-validation.mjs";
 import { createPetPresenceTracker } from "./pet-presence.mjs";
 import { petWindowCapability, setPetWindowTopmost } from "./pet-window.mjs";
@@ -670,10 +671,7 @@ async function runLightCheck(options = {}, retainedLock = null) {
     const coverage = collectionCoverage(mode, requestedHosts);
     if (coverage.collectible === 0) throw new NoCollectibleEvidenceError(coverage, scope);
     const hosts = requestedHosts.filter((hostItem) => hostCollectionPlan(mode, hostItem).canCollect);
-    const hostResults = [];
-    for (const hostItem of hosts) {
-      hostResults.push(await collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
-    }
+    const hostResults = await mapWithConcurrency(hosts, 4, (hostItem) => collectHost(hostItem, { mode, httpTimeoutMs: 5000 }));
     const finishedAt = new Date();
     const durationMs = finishedAt.getTime() - startedAt.getTime();
     const status = overallStatus(hostResults);

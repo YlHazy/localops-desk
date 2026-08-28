@@ -1,11 +1,17 @@
 import { createInterface } from "node:readline";
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_INFO = { name: "localops-guardian", version: "0.1.0" };
 const DEFAULT_LOCALOPS_URL = "http://127.0.0.1:4317";
 const READ_TIMEOUT_MS = 3000;
 const CHECK_TIMEOUT_MS = 15000;
+const STATUS_CARD_URI = "ui://localops-guardian/status-card.html";
+const STATUS_CARD_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "assets", "status-card.html");
 const SERVER_INSTRUCTIONS = "Read current status before diagnosing. Run a single-host light check only when the user asks to refresh/check or current evidence is absent. Recovery tools return dry-run plans only: never execute their commands without separate explicit authorization. If the local API is unavailable, report missing evidence rather than a server outage.";
+const statusCardHtml = await readFile(STATUS_CARD_PATH, "utf8");
 
 const tools = [
   {
@@ -13,6 +19,18 @@ const tools = [
     description: "Read the latest LocalOps server status and recent evidence without starting a new check.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { title: "Read LocalOps status", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  {
+    name: "localops_show_status_card",
+    description: "Show the current LocalOps status as a compact interactive server card. Use this only when the user asks to see or open the status view; use localops_get_status for analysis without UI.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    _meta: {
+      ui: { resourceUri: STATUS_CARD_URI },
+      "openai/outputTemplate": STATUS_CARD_URI,
+      "openai/toolInvocation/invoking": "读取服务器状态…",
+      "openai/toolInvocation/invoked": "服务器状态已显示"
+    },
+    annotations: { title: "Show LocalOps status", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
   },
   {
     name: "localops_run_light_check",
@@ -110,6 +128,10 @@ async function callTool(name, args = {}) {
     const payload = await request("/api/agent/status");
     return textResult(statusText(payload), payload);
   }
+  if (name === "localops_show_status_card") {
+    const payload = await request("/api/agent/status");
+    return textResult(statusText(payload), payload);
+  }
   if (name === "localops_run_light_check") {
     const hostId = typeof args.hostId === "string" ? args.hostId.trim() : "";
     if (!hostId) throw new Error("hostId is required; read LocalOps status first and select one host.");
@@ -145,10 +167,41 @@ async function handle(message) {
   const { id, method, params = {} } = message;
   if (method === "notifications/initialized" || method === "notifications/cancelled") return;
   if (method === "initialize") {
-    return send({ jsonrpc: "2.0", id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS } });
+    return send({ jsonrpc: "2.0", id, result: { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: { listChanged: false }, resources: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS } });
   }
   if (method === "ping") return send({ jsonrpc: "2.0", id, result: {} });
   if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools } });
+  if (method === "resources/list") {
+    return send({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        resources: [{
+          uri: STATUS_CARD_URI,
+          name: "LocalOps server status card",
+          description: "Compact interactive status for the most important configured servers.",
+          mimeType: "text/html;profile=mcp-app"
+        }]
+      }
+    });
+  }
+  if (method === "resources/read") {
+    if (params.uri !== STATUS_CARD_URI) {
+      return send({ jsonrpc: "2.0", id, error: { code: -32602, message: "Unknown LocalOps UI resource." } });
+    }
+    return send({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        contents: [{
+          uri: STATUS_CARD_URI,
+          mimeType: "text/html;profile=mcp-app",
+          text: statusCardHtml,
+          _meta: { ui: { prefersBorder: false } }
+        }]
+      }
+    });
+  }
   if (method === "tools/call") {
     try {
       const result = await callTool(params.name, params.arguments || {});

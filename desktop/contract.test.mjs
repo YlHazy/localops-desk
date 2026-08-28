@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { desktopAlertCopy, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { codexPanelSize, desktopAlertCopy, desktopCodexPanelUrl, desktopCodexPetUrl, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, navigationAction, safeCodexPetBounds, safeWindowBounds, steppedCodexPetBounds } from "./contract.mjs";
 
 const sessionId = "7dc0de3a-345d-4e34-a61c-c30c693bea66";
 
@@ -10,8 +10,29 @@ test("desktop URLs stay on the fixed loopback origin and identify the tray runti
   assert.throws(() => desktopDeskUrl("https://example.com"), /loopback/);
   assert.equal(desktopLoopbackOrigin(54321), "http://127.0.0.1:54321");
   assert.equal(desktopPetUrl(sessionId, 54321), `http://127.0.0.1:54321/?mode=pet&session=${sessionId}&runtime=desktop`);
+  assert.equal(desktopCodexPetUrl(54321), "http://127.0.0.1:54321/?mode=codex-pet&runtime=desktop");
+  assert.equal(desktopCodexPanelUrl(54321), "http://127.0.0.1:54321/?mode=codex-panel&runtime=desktop");
   assert.equal(desktopDeskUrl("/#tab=checks", 54321), "http://127.0.0.1:54321/#tab=checks");
   assert.throws(() => desktopLoopbackOrigin(0), /between 1 and 65535/);
+});
+
+test("Codex companion keeps a fixed compact silhouette while preserving its position", () => {
+  assert.deepEqual(safeCodexPetBounds({ x: 12.2, y: 24.8, width: 168, height: 200 }), { x: 12, y: 25, width: 168, height: 200 });
+  assert.deepEqual(safeCodexPetBounds({ x: 12.2, y: 24.8, width: 900, height: 900 }), { width: 208, height: 248 });
+  assert.deepEqual(safeCodexPetBounds(null), { width: 208, height: 248 });
+  assert.deepEqual(steppedCodexPetBounds({ x: 100, y: 100, width: 208, height: 248 }, -1), { x: 140, y: 148, width: 168, height: 200 });
+  assert.deepEqual(steppedCodexPetBounds({ x: 100, y: 100, width: 208, height: 248 }, 1), { x: 48, y: 38, width: 260, height: 310 });
+  const before = { x: 100, y: 100, width: 208, height: 248 };
+  const after = steppedCodexPetBounds(before, -1);
+  assert.equal(after.x + after.width, before.x + before.width);
+  assert.equal(after.y + after.height, before.y + before.height);
+  assert.throws(() => steppedCodexPetBounds({ width: 208, height: 248 }, 0), /direction/);
+});
+
+test("Codex panel expands only for readable command detail", () => {
+  assert.deepEqual(codexPanelSize(false), { width: 388, height: 276 });
+  assert.deepEqual(codexPanelSize(true), { width: 568, height: 468 });
+  assert.throws(() => codexPanelSize("yes"), /boolean/);
 });
 
 test("persisted pet bounds stay within the compact companion window", () => {

@@ -11,6 +11,16 @@ export function selectFocusHost(prioritizedHosts, selectedHostId) {
   return prioritizedHosts.find((host) => host.id === selectedHostId) ?? prioritizedHosts[0];
 }
 
+export function selectVisibleHost(prioritizedHosts, selectedHostId, limit = 2) {
+  if (!Array.isArray(prioritizedHosts)) throw new TypeError("hosts must be an array");
+  if (!Number.isInteger(limit) || limit < 1) throw new TypeError("visible host limit must be a positive integer");
+  const visibleHosts = prioritizedHosts.slice(0, limit);
+  return {
+    visibleHosts,
+    selectedHost: visibleHosts.find((host) => host.id === selectedHostId) ?? visibleHosts[0] ?? null
+  };
+}
+
 export function retainFocusSelection(hosts, selectedHostId) {
   if (!selectedHostId || !Array.isArray(hosts)) return null;
   return hosts.some((host) => host.id === selectedHostId) ? selectedHostId : null;

@@ -14,9 +14,18 @@ test("pet desk links keep local focus in a fragment and preserve the requested d
   });
 });
 
+test("pet command previews can open the full safety action tab for the same host", () => {
+  const path = petDeskPath({ hostId: "host-123", tab: "actions", source: "pet" });
+  assert.deepEqual(petDeskIntent(new URL(path, "http://127.0.0.1:4317").hash), {
+    hostId: "host-123",
+    tab: "actions",
+    source: "pet"
+  });
+});
+
 test("pet desk intent rejects unsafe or unknown navigation values", () => {
   assert.throws(() => petDeskPath({ hostId: "../secret" }), /Invalid LocalOps focus host/);
-  assert.deepEqual(petDeskIntent("#focusHost=..%2Fsecret&tab=actions&source=outside"), {
+  assert.deepEqual(petDeskIntent("#focusHost=..%2Fsecret&tab=secrets&source=outside"), {
     hostId: null,
     tab: null,
     source: null

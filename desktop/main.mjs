@@ -1,10 +1,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray, utilityProcess } from "electron";
-import { desktopAlertCopy, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeWindowBounds } from "./contract.mjs";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell, Tray, utilityProcess } from "electron";
+import { codexPanelSize, desktopAlertCopy, desktopCodexPanelUrl, desktopCodexPetUrl, desktopDeskUrl, desktopLoopbackOrigin, desktopPetUrl, firstTrayNotice, localOpsReady, navigationAction, safeCodexPetBounds, safeWindowBounds, steppedCodexPetBounds } from "./contract.mjs";
 
 const smokeCheck = process.argv.includes("--smoke-check");
+const codexPetStartup = process.argv.includes("--codex-pet");
 const smokeReportPath = smokeCheck ? process.env.LOCALOPS_SMOKE_REPORT : null;
 const runtimePort = smokeCheck && process.env.LOCALOPS_SMOKE_API_PORT ? Number(process.env.LOCALOPS_SMOKE_API_PORT) : 4317;
 const runtimeOrigin = desktopLoopbackOrigin(runtimePort);
@@ -16,8 +17,13 @@ if (!gotSingleInstanceLock) app.quit();
 
 let petWindow = null;
 let petLoadPromise = Promise.resolve();
+let codexPetWindow = null;
+let codexPanelWindow = null;
+let codexPanelHideTimer = null;
+let codexPanelSide = null;
 let deskWindow = null;
 let tray = null;
+let trayBalloonPath = "";
 let ownedApi = null;
 let quitting = false;
 let alwaysOnTop = true;
@@ -60,6 +66,8 @@ function finishSmoke(exitCode) {
   tray = null;
   if (deskWindow && !deskWindow.isDestroyed()) deskWindow.destroy();
   if (petWindow && !petWindow.isDestroyed()) petWindow.destroy();
+  if (codexPanelWindow && !codexPanelWindow.isDestroyed()) codexPanelWindow.destroy();
+  if (codexPetWindow && !codexPetWindow.isDestroyed()) codexPetWindow.destroy();
   if (ownedApi) ownedApi.kill();
   app.exit(exitCode);
 }
@@ -71,6 +79,15 @@ function readPetBounds() {
 function persistPetBounds() {
   if (!petWindow || petWindow.isDestroyed()) return;
   writeDesktopState({ petBounds: petWindow.getBounds() });
+}
+
+function readCodexPetBounds() {
+  return safeCodexPetBounds(readDesktopState().codexPetBounds);
+}
+
+function persistCodexPetBounds() {
+  if (!codexPetWindow || codexPetWindow.isDestroyed()) return;
+  writeDesktopState({ codexPetBounds: codexPetWindow.getBounds() });
 }
 
 function secureWindowOptions(extra = {}) {
@@ -169,6 +186,145 @@ function showPet() {
   rebuildTrayMenu();
 }
 
+function clearCodexPanelHide() {
+  if (codexPanelHideTimer) clearTimeout(codexPanelHideTimer);
+  codexPanelHideTimer = null;
+}
+
+function positionCodexPanel() {
+  if (!codexPetWindow || codexPetWindow.isDestroyed() || !codexPanelWindow || codexPanelWindow.isDestroyed()) return;
+  const petBounds = codexPetWindow.getBounds();
+  const panelBounds = codexPanelWindow.getBounds();
+  const workArea = screen.getDisplayMatching(petBounds).workArea;
+  const gap = 8;
+  const fitsLeft = petBounds.x - panelBounds.width - gap >= workArea.x;
+  if (codexPanelSide == null) codexPanelSide = fitsLeft ? "left" : "right";
+  const desiredX = codexPanelSide === "left" ? petBounds.x - panelBounds.width - gap : petBounds.x + petBounds.width + gap;
+  const x = Math.max(workArea.x, Math.min(desiredX, workArea.x + workArea.width - panelBounds.width));
+  const preferredY = petBounds.y + petBounds.height - panelBounds.height;
+  const y = Math.max(workArea.y, Math.min(preferredY, workArea.y + workArea.height - panelBounds.height));
+  codexPanelWindow.setPosition(Math.round(x), Math.round(y), false);
+}
+
+function createCodexPanelWindow() {
+  if (codexPanelWindow && !codexPanelWindow.isDestroyed()) return codexPanelWindow;
+  const panelSize = codexPanelSize(false);
+  codexPanelWindow = new BrowserWindow(secureWindowOptions({
+    ...panelSize,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    skipTaskbar: true,
+    title: "LocalOps 服务器值守",
+    autoHideMenuBar: true,
+    alwaysOnTop,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false
+  }));
+  attachNavigationGuard(codexPanelWindow);
+  codexPanelWindow.on("closed", () => { codexPanelWindow = null; });
+  void codexPanelWindow.loadURL(desktopCodexPanelUrl(runtimePort)).catch((error) => {
+    if (!quitting) dialog.showErrorBox("LocalOps 状态浮层加载失败", error instanceof Error ? error.message : String(error));
+  });
+  return codexPanelWindow;
+}
+
+function setCodexPanelDetail(detail) {
+  if (typeof detail !== "boolean") throw new TypeError("Codex panel detail state must be boolean");
+  const panel = createCodexPanelWindow();
+  const size = codexPanelSize(detail);
+  panel.setBounds({ ...panel.getBounds(), ...size }, true);
+  positionCodexPanel();
+  return { detail, bounds: panel.getBounds() };
+}
+
+function setCodexCompanionHover(active) {
+  if (typeof active !== "boolean") throw new TypeError("Codex companion hover state must be boolean");
+  clearCodexPanelHide();
+  if (active) {
+    if (!codexPanelWindow?.isVisible()) codexPanelSide = null;
+    const panel = createCodexPanelWindow();
+    positionCodexPanel();
+    if (panel.webContents.isLoading()) panel.webContents.once("did-finish-load", () => { positionCodexPanel(); panel.showInactive(); });
+    else panel.showInactive();
+  } else {
+    codexPanelHideTimer = setTimeout(() => {
+      codexPanelHideTimer = null;
+      codexPanelWindow?.hide();
+      codexPanelSide = null;
+    }, 700);
+  }
+  return { visible: Boolean(codexPanelWindow && !codexPanelWindow.isDestroyed() && codexPanelWindow.isVisible()) };
+}
+
+function createCodexPetWindow() {
+  if (codexPetWindow && !codexPetWindow.isDestroyed()) return codexPetWindow;
+  codexPetWindow = new BrowserWindow(secureWindowOptions({
+    ...readCodexPetBounds(),
+    minWidth: 168,
+    minHeight: 200,
+    maxWidth: 260,
+    maxHeight: 310,
+    resizable: true,
+    skipTaskbar: true,
+    title: "LocalOps Codex Pet",
+    autoHideMenuBar: true,
+    alwaysOnTop,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false
+  }));
+  codexPetWindow.setAspectRatio(208 / 248);
+  attachNavigationGuard(codexPetWindow);
+  codexPetWindow.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    persistCodexPetBounds();
+    clearCodexPanelHide();
+    codexPanelWindow?.hide();
+    codexPetWindow.hide();
+    rebuildTrayMenu();
+  });
+  codexPetWindow.on("move", () => {
+    persistCodexPetBounds();
+    if (codexPanelWindow?.isVisible()) positionCodexPanel();
+  });
+  codexPetWindow.on("closed", () => { codexPetWindow = null; });
+  void codexPetWindow.loadURL(desktopCodexPetUrl(runtimePort)).then(() => codexPetWindow?.show()).catch((error) => {
+    if (!quitting) dialog.showErrorBox("LocalOps Codex 宠物加载失败", error instanceof Error ? error.message : String(error));
+  });
+  return codexPetWindow;
+}
+
+function showCodexPet() {
+  const window = createCodexPetWindow();
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+  rebuildTrayMenu();
+}
+
+function hideCodexPet() {
+  clearCodexPanelHide();
+  codexPanelWindow?.hide();
+  codexPanelSide = null;
+  codexPetWindow?.hide();
+  rebuildTrayMenu();
+}
+
+function resizeCodexPet(direction) {
+  if (!codexPetWindow || codexPetWindow.isDestroyed()) throw new Error("Codex pet window is not available");
+  const next = steppedCodexPetBounds(codexPetWindow.getBounds(), direction);
+  codexPetWindow.setBounds(next, true);
+  persistCodexPetBounds();
+  if (codexPanelWindow?.isVisible()) positionCodexPanel();
+  return { bounds: codexPetWindow.getBounds() };
+}
+
 function showDesk(path = "") {
   const url = desktopDeskUrl(path || "/", runtimePort);
   if (!deskWindow || deskWindow.isDestroyed()) {
@@ -194,6 +350,8 @@ function setAlwaysOnTop(enabled) {
   if (typeof enabled !== "boolean") throw new TypeError("always-on-top must be a boolean");
   alwaysOnTop = enabled;
   if (petWindow && !petWindow.isDestroyed()) petWindow.setAlwaysOnTop(enabled);
+  if (codexPetWindow && !codexPetWindow.isDestroyed()) codexPetWindow.setAlwaysOnTop(enabled);
+  if (codexPanelWindow && !codexPanelWindow.isDestroyed()) codexPanelWindow.setAlwaysOnTop(enabled);
   rebuildTrayMenu();
   return {
     supported: true,
@@ -237,10 +395,12 @@ function setLoginStartup(enabled) {
 function rebuildTrayMenu() {
   if (!tray) return;
   const visible = Boolean(petWindow && !petWindow.isDestroyed() && petWindow.isVisible());
+  const codexVisible = Boolean(codexPetWindow && !codexPetWindow.isDestroyed() && codexPetWindow.isVisible());
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "● 本地值守运行中", enabled: false },
     { type: "separator" },
     { label: visible ? "隐藏小哨" : "显示小哨", click: () => visible ? petWindow?.hide() : showPet() },
+    { label: codexVisible ? "隐藏 Codex 宠物版" : "显示 Codex 宠物版", click: () => codexVisible ? hideCodexPet() : showCodexPet() },
     { label: "打开完整控制台", click: () => showDesk() },
     { type: "separator" },
     { label: "桌宠置顶", type: "checkbox", checked: alwaysOnTop, click: (item) => setAlwaysOnTop(item.checked) },
@@ -254,11 +414,14 @@ function createTray() {
   tray = new Tray(source.resize({ width: 20, height: 20 }));
   tray.setToolTip("LocalOps Guardian · 本地值守中");
   tray.on("click", () => {
-    if (petWindow?.isVisible()) petWindow.hide();
+    if (codexPetStartup || codexPetWindow?.isVisible()) {
+      if (codexPetWindow?.isVisible()) hideCodexPet();
+      else showCodexPet();
+    } else if (petWindow?.isVisible()) petWindow.hide();
     else showPet();
     rebuildTrayMenu();
   });
-  tray.on("balloon-click", () => showDesk());
+  tray.on("balloon-click", () => showDesk(trayBalloonPath));
   rebuildTrayMenu();
 }
 
@@ -266,6 +429,7 @@ function showDesktopNotification(request) {
   const copy = desktopAlertCopy(request);
   if (process.platform !== "win32") return { accepted: false, channel: "unsupported", message: "当前系统不支持 LocalOps 托盘提醒。" };
   if (!tray || tray.isDestroyed()) return { accepted: false, channel: "windows-tray", message: "LocalOps 托盘尚未就绪，提醒没有发出。" };
+  trayBalloonPath = request.kind === "status" ? `/#tab=overview&source=pet-alert&revision=${Date.now()}` : "";
   tray.displayBalloon({ ...copy, largeIcon: false, respectQuietTime: true });
   return { accepted: true, channel: "windows-tray", message: "已交给 Windows 托盘提醒；专注助手可能延后显示。" };
 }
@@ -329,6 +493,28 @@ ipcMain.handle("desktop:show-pet", (event) => {
   showPet();
   return { opened: true };
 });
+ipcMain.handle("desktop:show-codex-pet", (event) => {
+  assertTrustedIpc(event);
+  showCodexPet();
+  return { opened: true };
+});
+ipcMain.handle("desktop:hide-codex-pet", (event) => {
+  assertTrustedIpc(event);
+  hideCodexPet();
+  return { hidden: true };
+});
+ipcMain.handle("desktop:set-codex-companion-hover", (event, active) => {
+  assertTrustedIpc(event);
+  return setCodexCompanionHover(active);
+});
+ipcMain.handle("desktop:set-codex-panel-detail", (event, detail) => {
+  assertTrustedIpc(event);
+  return setCodexPanelDetail(detail);
+});
+ipcMain.handle("desktop:resize-codex-pet", (event, direction) => {
+  assertTrustedIpc(event);
+  return resizeCodexPet(direction);
+});
 ipcMain.handle("desktop:show-notification", (event, request) => {
   assertTrustedIpc(event);
   try {
@@ -347,6 +533,8 @@ app.on("second-instance", () => showPet());
 app.on("before-quit", () => {
   quitting = true;
   persistPetBounds();
+  persistCodexPetBounds();
+  clearCodexPanelHide();
   if (ownedApi) ownedApi.kill();
 });
 app.on("window-all-closed", () => {
@@ -359,7 +547,8 @@ if (gotSingleInstanceLock) {
       app.setAppUserModelId("com.localops.guardian");
       firstCloseNoticeShown = readDesktopState().trayCloseExplained === true;
       const apiOwnership = await ensureApi();
-      createPetWindow();
+      if (codexPetStartup && !smokeCheck) createCodexPetWindow();
+      else createPetWindow();
       createTray();
       if (smokeCheck) {
         await Promise.race([

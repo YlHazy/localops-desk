@@ -228,7 +228,8 @@ test("pet alerts support a quiet receipt and open the focused desk without sendi
   assert.match(preloadSource, /showNotification: \(request\) => ipcRenderer\.invoke\("desktop:show-notification", request\)/);
   assert.match(desktopSource, /desktopAlertCopy\(request\)/);
   assert.match(desktopSource, /tray\.displayBalloon\(\{ \.\.\.copy, largeIcon: false, respectQuietTime: true \}\)/);
-  assert.match(desktopSource, /tray\.on\("balloon-click", \(\) => showDesk\(\)\)/);
+  assert.match(desktopSource, /tray\.on\("balloon-click", \(\) => showDesk\(trayBalloonPath\)\)/);
+  assert.match(desktopSource, /request\.kind === "status" \? `\/#tab=overview&source=pet-alert/);
   assert.match(desktopSource, /rejectsUnsafeNotification/);
   assert.match(watchSource, /outcome: "suppressed"/);
   assert.doesNotMatch(watchSource, /Edge 站点权限/);
@@ -330,7 +331,11 @@ test("desk and pet share automatic priority focus instead of trusting API row or
   assert.match(appSource, /prioritizeHosts\(displayDashboard\?\.hosts \?\? \[\]\)/);
   assert.match(appSource, /selectFocusHost\(priorityHosts, selectedHostId\)/);
   assert.match(appSource, /setDetailsOpen\(true\)/);
-  assert.match(appSource, /className={`home-grid \$\{detailsOpen \? "details-open" : ""\}`}/);
+  assert.match(appSource, /className={`home-grid \$\{detailsOpen \? "details-open" : ""\} \$\{petFocusMode \? "pet-focus-grid" : ""\}`}/);
+  assert.match(appSource, /const petFocusMode = Boolean\(deskSource && \(/);
+  assert.match(appSource, /selectedTab === "actions" && actionHost/);
+  assert.match(appSource, /petFocusMode \? "pet-focus-action" : ""/);
+  assert.match(appSource, /selectedTab === "actions" \? "服务器状态" : "全部服务器"/);
   assert.match(petSource, /prioritizeHosts\(trustedDashboard\.hosts\)/);
   assert.match(prioritySource, /critical: 0, warning: 1, unknown: 2, healthy: 3/);
   assert.doesNotMatch(appSource, /prev \?\? (?:status|snapshot\.status)\.hosts\[0\]/);

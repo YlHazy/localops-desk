@@ -1,4 +1,4 @@
-const allowedTabs = new Set(["overview", "hosts", "checks", "scheduler"]);
+const allowedTabs = new Set(["overview", "hosts", "checks", "scheduler", "actions"]);
 
 function safeHostId(value) {
   return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value) ? value : null;
